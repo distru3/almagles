@@ -15,10 +15,8 @@ interface Props {
 
 export default function PostFormModal({ categories, post, onClose, onSaved }: Props) {
   const { user } = useAuth();
-  const isSuper = user?.role === 'admin';
-  const scoped = isSuper
-    ? categories
-    : categories.filter((c) => user?.managedCategoryIds.includes(c.id));
+  const mine = user?.managedCategoryIds ?? [];
+  const scoped = user?.role === 'admin' ? categories : categories.filter((c) => mine.includes(c.id));
   const options =
     post && !scoped.some((c) => c.id === post.category.id) ? [post.category, ...scoped] : scoped;
 
@@ -64,6 +62,11 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     e.preventDefault();
     if (busy) return;
     setError(null);
+
+    if (!categoryId) {
+      setError('لم تُوكَّل لك أي أقسام للنشر بعد — تواصل مع المشرف العام');
+      return;
+    }
 
     const form = new FormData();
     form.append('title', title.trim());
@@ -133,21 +136,27 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="label">القسم</label>
-              <select
-                className="input"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                required
-              >
-                <option value="" disabled>
-                  اختر القسم
-                </option>
-                {options.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+              {options.length === 0 ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  لم تُوكَّل لك أي أقسام للنشر بعد — تواصل مع المشرف العام.
+                </p>
+              ) : (
+                <select
+                  className="input"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>
+                    اختر القسم
                   </option>
-                ))}
-              </select>
+                  {options.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="label">تاريخ المنشور (يوم العرض)</label>
