@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: almagles
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm ci && npx prisma generate --schema=server/prisma/schema.prisma && npm run build -w server && npm run build -w client
+    startCommand: npm run start -w server
+    healthCheckPath: /api/categories
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+databases:
+  - name: almagles-db
+    plan: free

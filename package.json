@@ -1,0 +1,26 @@
+{
+  "name": "almagles",
+  "version": "1.0.0",
+  "private": true,
+  "description": "رجال الأمة — موقع عربي كامل للتفاعل والنشر",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c green,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run start -w server",
+    "db:generate": "npm run prisma:generate -w server",
+    "db:migrate": "npm run prisma:migrate -w server",
+    "db:deploy": "npm run prisma:deploy -w server",
+    "db:seed": "npm run seed -w server",
+    "promote": "npm run promote -w server --"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
