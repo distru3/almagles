@@ -3,6 +3,7 @@ import { X, Image as ImageIcon, Loader as LoaderIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { compressImage } from '../../lib/image';
 import { todayISO } from '../../lib/dates';
+import { useAuth } from '../../context/AuthContext';
 import type { Category, Post } from '../../lib/types';
 
 interface Props {
@@ -13,9 +14,17 @@ interface Props {
 }
 
 export default function PostFormModal({ categories, post, onClose, onSaved }: Props) {
+  const { user } = useAuth();
+  const isSuper = user?.role === 'admin';
+  const scoped = isSuper
+    ? categories
+    : categories.filter((c) => user?.managedCategoryIds.includes(c.id));
+  const options =
+    post && !scoped.some((c) => c.id === post.category.id) ? [post.category, ...scoped] : scoped;
+
   const [title, setTitle] = useState(post?.title ?? '');
   const [description, setDescription] = useState(post?.description ?? '');
-  const [categoryId, setCategoryId] = useState(post?.category.id ?? categories[0]?.id ?? '');
+  const [categoryId, setCategoryId] = useState(post?.category.id ?? options[0]?.id ?? '');
   const [postDate, setPostDate] = useState(post?.postDate ?? todayISO());
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(post?.imageUrl ?? null);
@@ -133,7 +142,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
                 <option value="" disabled>
                   اختر القسم
                 </option>
-                {categories.map((c) => (
+                {options.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

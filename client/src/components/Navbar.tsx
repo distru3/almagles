@@ -9,6 +9,10 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-brand-700 text-white' : 'text-brand-900 hover:bg-brand-100'
   }`;
 
+function isManager(user: { role: string; canManageSchedule: boolean; managedCategoryIds: string[] }) {
+  return user.role === 'admin' || user.canManageSchedule || user.managedCategoryIds.length > 0;
+}
+
 export default function Navbar() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
@@ -37,7 +41,7 @@ export default function Navbar() {
             <NavLink to="/" className={navLinkClass} end>
               الرئيسية
             </NavLink>
-            {user?.role === 'admin' && (
+            {user && isManager(user) && (
               <NavLink to="/admin" className={navLinkClass}>
                 <span className="inline-flex items-center gap-1.5">
                   <Shield className="h-4 w-4" />
@@ -86,7 +90,7 @@ export default function Navbar() {
             <NavLink to="/" className={navLinkClass} end onClick={() => setOpen(false)}>
               الرئيسية
             </NavLink>
-            {user?.role === 'admin' && (
+            {user && isManager(user) && (
               <NavLink to="/admin" className={navLinkClass} onClick={() => setOpen(false)}>
                 <span className="inline-flex items-center gap-1.5">
                   <LayoutDashboard className="h-4 w-4" />

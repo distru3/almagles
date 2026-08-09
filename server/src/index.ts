@@ -15,6 +15,7 @@ import postRoutes from './routes/posts.js';
 import commentRoutes from './routes/comments.js';
 import reactionRoutes from './routes/reactions.js';
 import scheduleRoutes from './routes/schedule.js';
+import userRoutes from './routes/users.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -68,6 +69,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/schedule', scheduleRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/posts/:postId/reactions', reactionRoutes);
 app.use('/api/comments', commentRoutes);
 

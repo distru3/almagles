@@ -152,7 +152,12 @@ export default function PostPage() {
         </div>
 
         <div className="mx-auto mt-8 max-w-3xl">
-          <CommentSection postId={post.id} comments={comments} onChanged={loadComments} />
+          <CommentSection
+            postId={post.id}
+            postCategoryId={post.category.id}
+            comments={comments}
+            onChanged={loadComments}
+          />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
+import { useAuth } from '../../context/AuthContext';
 import type { Category, Post } from '../../lib/types';
 import { hijriDate, gregorianLong } from '../../lib/dates';
 import Spinner from '../../components/Spinner';
@@ -8,6 +9,8 @@ import EmptyState from '../../components/EmptyState';
 import PostFormModal from './PostFormModal';
 
 export default function AdminPosts({ categories }: { categories: Category[] }) {
+  const { user } = useAuth();
+  const isSuper = user?.role === 'admin';
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +19,9 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api<{ items: Post[]; total: number }>(`/posts?limit=200`);
+      const res = await api<{ items: Post[]; total: number }>(
+        `/posts?limit=200${isSuper ? '' : '&managed=1'}`
+      );
       setPosts(res.items);
       setError(null);
     } catch (err) {

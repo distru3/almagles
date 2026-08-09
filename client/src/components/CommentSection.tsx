@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface Props {
   postId: string;
+  postCategoryId?: string;
   comments: CommentItem[];
   onChanged: () => void;
 }
@@ -23,7 +24,7 @@ function timeAgo(iso: string): string {
   return new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 }
 
-export default function CommentSection({ postId, comments, onChanged }: Props) {
+export default function CommentSection({ postId, postCategoryId, comments, onChanged }: Props) {
   const { user } = useAuth();
   const [newContent, setNewContent] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -98,7 +99,12 @@ export default function CommentSection({ postId, comments, onChanged }: Props) {
     }
   };
 
-  const canModify = (c: CommentItem) => user && (user.id === c.authorId || user.role === 'admin');
+  const canEdit = (c: CommentItem) => user && user.id === c.authorId;
+  const canDelete = (c: CommentItem) =>
+    user &&
+    (user.id === c.authorId ||
+      user.role === 'admin' ||
+      (!!postCategoryId && user.managedCategoryIds.includes(postCategoryId)));
 
   const renderComment = (c: CommentItem, isReply: boolean) => (
     <div key={c.id} className={isReply ? 'mr-8 border-r-2 border-brand-100 pr-3 sm:mr-12' : ''}>
@@ -113,8 +119,8 @@ export default function CommentSection({ postId, comments, onChanged }: Props) {
               <p className="text-[11px] text-stone-400">{timeAgo(c.createdAt)}</p>
             </div>
           </div>
-          {canModify(c) && (
-            <div className="flex gap-1.5">
+          <div className="flex gap-1.5">
+            {canEdit(c) && (
               <button
                 onClick={() => startEdit(c)}
                 className="rounded-lg p-1.5 text-stone-400 transition hover:bg-brand-50 hover:text-brand-700"
@@ -122,6 +128,8 @@ export default function CommentSection({ postId, comments, onChanged }: Props) {
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
+            )}
+            {canDelete(c) && (
               <button
                 onClick={() => remove(c.id)}
                 className="rounded-lg p-1.5 text-stone-400 transition hover:bg-red-50 hover:text-red-600"
@@ -129,8 +137,8 @@ export default function CommentSection({ postId, comments, onChanged }: Props) {
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {editingId === c.id ? (

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { prisma } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAuth, canManageCategory } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { optimizeImage, ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
 import { uploadPostImage, deletePostImage } from '../lib/cloudinary.js';
@@ -26,6 +26,10 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const listQuerySchema = z.object({
   date: z.string().regex(DATE_REGEX, 'التاريخ غير صالح').optional(),
   category: z.string().min(1).optional(),
+  managed: z
+    .string()
+    .refine((v) => v === '1' || v === '0', 'قيمة غير صالحة')
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(10),
 });
@@ -58,11 +62,19 @@ async function reactionData(postIds: string[], userId?: string) {
 
 router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   try {
-    const { date, category, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
-    const userId = req.user?.id;
+    const { date, category, managed, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
+    const user = req.user;
+    let userId = user?.id;
+
+    if (managed === '1') {
+      if (user?.role !== 'admin' && !(user?.managedCategoryIds.length ?? 0)) {
+        return res.status(403).json({ message: 'هذا الإجراء متاح للمشرفين فقط' });
+      }
+    }
 
     const where: any = {};
     if (date) where.postDate = date;
+    if (managed === '1' && user && user.role !== 'admin') where.categoryId = { in: user.managedCategoryIds };
     if (category) {
       const cat = await prisma.category.findUnique({ where: { slug: category } });
       if (!cat) return res.json({ items: [], total: 0, page, limit });
@@ -175,11 +187,15 @@ function parsePostFields(raw: any) {
   return parsed.data;
 }
 
-router.post('/', requireAdmin, upload.single('image'), async (req, res, next) => {
+router.post('/', requireAuth, upload.single('image'), async (req, res, next) => {
   try {
+    const user = req.user!;
     const data = parsePostFields(req.body);
     const category = await prisma.category.findUnique({ where: { id: data.categoryId } });
     if (!category) throw new HttpError(400, 'القسم المختار غير موجود');
+    if (!canManageCategory(user, data.categoryId)) {
+      return res.status(403).json({ message: 'لا يمكنك النشر في هذا القسم' });
+    }
 
     let imagePublicId: string | null = null;
     let imageUrl: string | null = null;
@@ -196,7 +212,7 @@ router.post('/', requireAdmin, upload.single('image'), async (req, res, next) =>
         description: data.description,
         postDate: data.postDate,
         categoryId: data.categoryId,
-        authorId: req.user!.id,
+        authorId: user.id,
         imagePublicId,
         imageUrl,
       },
@@ -211,8 +227,9 @@ router.post('/', requireAdmin, upload.single('image'), async (req, res, next) =>
   }
 });
 
-router.put('/:id', requireAdmin, upload.single('image'), async (req, res, next) => {
+router.put('/:id', requireAuth, upload.single('image'), async (req, res, next) => {
   try {
+    const user = req.user!;
     const existing = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ message: 'المنشور غير موجود' });
 
@@ -221,6 +238,11 @@ router.put('/:id', requireAdmin, upload.single('image'), async (req, res, next) 
       data = parsePostFields(req.body);
       const cat = await prisma.category.findUnique({ where: { id: data.categoryId } });
       if (!cat) throw new HttpError(400, 'القسم المختار غير موجود');
+    } else {
+      data.categoryId = existing.categoryId;
+    }
+    if (!canManageCategory(user, data.categoryId) || !canManageCategory(user, existing.categoryId)) {
+      return res.status(403).json({ message: 'لا يمكنك إدارة هذا المنشور' });
     }
 
     let removedOld: string | null = null;
@@ -253,10 +275,13 @@ router.put('/:id', requireAdmin, upload.single('image'), async (req, res, next) 
   }
 });
 
-router.delete('/:id', requireAdmin, async (req, res, next) => {
+router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
     const existing = await prisma.post.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ message: 'المنشور غير موجود' });
+    if (!canManageCategory(req.user!, existing.categoryId)) {
+      return res.status(403).json({ message: 'لا يمكنك إدارة هذا المنشور' });
+    }
     if (existing.imagePublicId) await deletePostImage(existing.imagePublicId);
     await prisma.post.delete({ where: { id: existing.id } });
     return res.json({ ok: true });

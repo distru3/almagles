@@ -55,6 +55,18 @@ export interface User {
   name: string;
   email: string;
   role: 'admin' | 'visitor';
+  canManageSchedule: boolean;
+  managedCategoryIds: string[];
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'visitor';
+  canManageSchedule: boolean;
+  createdAt: string;
+  managedCategories: { id: string; name: string }[];
 }
 
 export interface PostsResponse {

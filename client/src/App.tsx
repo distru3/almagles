@@ -10,6 +10,7 @@ import PostPage from './pages/PostPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AccessDenied from './pages/AccessDenied';
 import NotFound from './pages/NotFound';
 
 function ScrollToTop() {
@@ -20,11 +21,15 @@ function ScrollToTop() {
   return null;
 }
 
+function isManager(user: { role: string; canManageSchedule: boolean; managedCategoryIds: string[] }) {
+  return user.role === 'admin' || user.canManageSchedule || user.managedCategoryIds.length > 0;
+}
+
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <Spinner full />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin') return <Navigate to="/" replace />;
+  if (!isManager(user)) return <Navigate to="/access-denied" replace />;
   return <>{children}</>;
 }
 
@@ -39,6 +44,7 @@ export default function App() {
           <Route path="/post/:id" element={<PostPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/access-denied" element={<AccessDenied />} />
           <Route
             path="/admin"
             element={

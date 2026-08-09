@@ -16,9 +16,25 @@ export async function resolveUser(req: Request, res: Response, next: NextFunctio
   try {
     const user = await prisma.user.findUnique({
       where: { id: payload.uid },
-      select: { id: true, name: true, email: true, role: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        canManageSchedule: true,
+        managedCategories: { select: { id: true } },
+      },
     });
-    if (user) req.user = user;
+    if (user) {
+      req.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        canManageSchedule: user.canManageSchedule,
+        managedCategoryIds: user.managedCategories.map((c) => c.id),
+      };
+    }
   } catch {
     // Fall through as unauthenticated on DB errors; routes that require auth
     // will respond with 401/403 appropriately.

@@ -14,8 +14,7 @@
     "db:generate": "npm run prisma:generate -w server",
     "db:migrate": "npm run prisma:migrate -w server",
     "db:deploy": "npm run prisma:deploy -w server",
-    "db:seed": "npm run seed -w server",
-    "promote": "npm run promote -w server --"
+    "db:seed": "npm run seed -w server"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

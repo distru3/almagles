@@ -27,8 +27,22 @@ const loginSchema = z.object({
   password: z.string().min(1, 'كلمة المرور مطلوبة').max(72),
 });
 
-function publicUser(user: { id: string; name: string; email: string; role: string }) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role };
+function publicUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  canManageSchedule?: boolean;
+  managedCategories?: { id: string }[];
+}) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    canManageSchedule: user.canManageSchedule ?? false,
+    managedCategoryIds: user.managedCategories?.map((c) => c.id) ?? [],
+  };
 }
 
 async function attachSession(user: { id: string; role: string; email: string; name: string }, req: Request, res: Response) {
@@ -73,7 +87,10 @@ router.post('/signup', validate(signupSchema), async (req, res, next) => {
 router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body as z.infer<typeof loginSchema>;
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { managedCategories: { select: { id: true } } },
+    });
     const ok = await verifyPassword(user ? user.passwordHash : await dummyPasswordHash(), password);
     if (!user || !ok) {
       return res.status(401).json({ message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
@@ -120,7 +137,15 @@ router.post('/refresh', async (req, res, next) => {
     const hash = hashRefreshToken(raw);
     const user = await prisma.user.findFirst({
       where: { refreshTokens: { has: hash } },
-      select: { id: true, name: true, email: true, role: true, refreshTokens: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        canManageSchedule: true,
+        refreshTokens: true,
+        managedCategories: { select: { id: true } },
+      },
     });
     if (!user) {
       return res.status(401).json({ message: 'انتهت الجلسة، الرجاء تسجيل الدخول مجدداً' });

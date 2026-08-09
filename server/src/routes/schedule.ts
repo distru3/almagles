@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requireScheduleManager } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -31,7 +31,7 @@ const createSchema = z.object({
   linkUrl: z.string().trim().url('الرابط غير صالح').max(500).nullish(),
 });
 
-router.post('/', requireAdmin, validate(createSchema), async (req, res, next) => {
+router.post('/', requireAuth, requireScheduleManager, validate(createSchema), async (req, res, next) => {
   try {
     const data = req.body as z.infer<typeof createSchema>;
     const item = await prisma.scheduleItem.create({ data });
@@ -43,7 +43,7 @@ router.post('/', requireAdmin, validate(createSchema), async (req, res, next) =>
 
 const updateSchema = createSchema.partial();
 
-router.put('/:id', requireAdmin, validate(updateSchema), async (req, res, next) => {
+router.put('/:id', requireAuth, requireScheduleManager, validate(updateSchema), async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await prisma.scheduleItem.findUnique({ where: { id } });
@@ -57,7 +57,7 @@ router.put('/:id', requireAdmin, validate(updateSchema), async (req, res, next) 
   }
 });
 
-router.delete('/:id', requireAdmin, async (req, res, next) => {
+router.delete('/:id', requireAuth, requireScheduleManager, async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await prisma.scheduleItem.findUnique({ where: { id } });

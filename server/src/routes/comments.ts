@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requireAnyManager, canManageCategory } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -11,9 +11,14 @@ const createSchema = z.object({
   parentId: z.string().min(1).max(64).optional(),
 });
 
-router.get('/', requireAdmin, async (_req, res, next) => {
+router.get('/', requireAnyManager, async (req, res, next) => {
   try {
+    const user = req.user!;
     const comments = await prisma.comment.findMany({
+      where:
+        user.role === 'admin'
+          ? {}
+          : { post: { categoryId: { in: user.managedCategoryIds } } },
       orderBy: { createdAt: 'desc' },
       take: 300,
       include: {
@@ -126,9 +131,7 @@ router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) =
     const comment = await prisma.comment.findUnique({ where: { id } });
     if (!comment) return res.status(404).json({ message: 'التعليق غير موجود' });
 
-    const isOwner = comment.authorId === req.user!.id;
-    const isAdmin = req.user!.role === 'admin';
-    if (!isOwner && !isAdmin) {
+    if (comment.authorId !== req.user!.id) {
       return res.status(403).json({ message: 'لا يمكنك تعديل هذا التعليق' });
     }
 
@@ -146,12 +149,14 @@ router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) =
 router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const comment = await prisma.comment.findUnique({ where: { id } });
+    const comment = await prisma.comment.findUnique({
+      where: { id },
+      include: { post: { select: { categoryId: true } } },
+    });
     if (!comment) return res.status(404).json({ message: 'التعليق غير موجود' });
 
     const isOwner = comment.authorId === req.user!.id;
-    const isAdmin = req.user!.role === 'admin';
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !canManageCategory(req.user!, comment.post.categoryId)) {
       return res.status(403).json({ message: 'لا يمكنك حذف هذا التعليق' });
     }
 
