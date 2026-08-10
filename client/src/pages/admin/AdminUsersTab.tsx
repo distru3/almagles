@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, UserPlus, Save, Loader as LoaderIcon, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Search, UserPlus, Loader as LoaderIcon, ShieldCheck, AlertTriangle, Check } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { AdminUser, Category } from '../../lib/types';
 import Spinner from '../../components/Spinner';
@@ -22,7 +22,7 @@ export default function AdminUsersTab({ categories }: Props) {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -71,7 +71,6 @@ export default function AdminUsersTab({ categories }: Props) {
 
   const saveUser = async (u: AdminUser, role: Role, cats: string[], sched: boolean) => {
     if (!requireCatsForWriter(role, cats)) return;
-    setBusyId(u.id);
     setError(null);
     try {
       const res = await api<{ user: AdminUser }>(`/users/${u.id}`, {
@@ -79,10 +78,10 @@ export default function AdminUsersTab({ categories }: Props) {
         body: { role, categoryIds: cats, canManageSchedule: sched },
       });
       setUsers((prev) => prev.map((x) => (x.id === u.id ? res.user : x)));
+      setSavedId(u.id);
+      window.setTimeout(() => setSavedId((cur) => (cur === u.id ? null : cur)), 1600);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر الحفظ');
-    } finally {
-      setBusyId(null);
     }
   };
 
@@ -298,18 +297,12 @@ export default function AdminUsersTab({ categories }: Props) {
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={() => saveUser(u, role, cats, sched)}
-                    className="btn-primary !px-3 !py-1.5 text-xs"
-                    disabled={busyId === u.id}
-                  >
-                    {busyId === u.id ? (
-                      <LoaderIcon className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="h-3.5 w-3.5" />
-                    )}
-                    حفظ الصلاحيات
-                  </button>
+                  {savedId === u.id && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                      <Check className="h-3.5 w-3.5" />
+                      تم الحفظ
+                    </span>
+                  )}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex items-center gap-3">
