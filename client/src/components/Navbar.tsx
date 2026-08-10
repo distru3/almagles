@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, LogIn, UserPlus, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { Menu, X, LogIn, UserPlus, LogOut, LayoutDashboard, Shield, PenLine, CalendarDays } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 
@@ -8,10 +8,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-lg px-3 py-2 text-sm font-bold transition ${
     isActive ? 'bg-brand-700 text-white' : 'text-brand-900 hover:bg-brand-100'
   }`;
-
-function isManager(user: { role: string; canManageSchedule: boolean; managedCategoryIds: string[] }) {
-  return user.role === 'admin' || user.canManageSchedule || user.managedCategoryIds.length > 0;
-}
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -41,11 +37,27 @@ export default function Navbar() {
             <NavLink to="/" className={navLinkClass} end>
               الرئيسية
             </NavLink>
-            {user && isManager(user) && (
+            {user && user.role === 'admin' && (
               <NavLink to="/admin" className={navLinkClass}>
                 <span className="inline-flex items-center gap-1.5">
                   <Shield className="h-4 w-4" />
                   لوحة التحكم
+                </span>
+              </NavLink>
+            )}
+            {user && user.role === 'writer' && (
+              <NavLink to="/write" className={navLinkClass}>
+                <span className="inline-flex items-center gap-1.5">
+                  <PenLine className="h-4 w-4" />
+                  النشر
+                </span>
+              </NavLink>
+            )}
+            {user && user.role !== 'admin' && user.canManageSchedule && (
+              <NavLink to="/manage/schedule" className={navLinkClass}>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4" />
+                  الجدول
                 </span>
               </NavLink>
             )}
@@ -90,11 +102,27 @@ export default function Navbar() {
             <NavLink to="/" className={navLinkClass} end onClick={() => setOpen(false)}>
               الرئيسية
             </NavLink>
-            {user && isManager(user) && (
+            {user && user.role === 'admin' && (
               <NavLink to="/admin" className={navLinkClass} onClick={() => setOpen(false)}>
                 <span className="inline-flex items-center gap-1.5">
                   <LayoutDashboard className="h-4 w-4" />
                   لوحة التحكم
+                </span>
+              </NavLink>
+            )}
+            {user && user.role === 'writer' && (
+              <NavLink to="/write" className={navLinkClass} onClick={() => setOpen(false)}>
+                <span className="inline-flex items-center gap-1.5">
+                  <PenLine className="h-4 w-4" />
+                  النشر
+                </span>
+              </NavLink>
+            )}
+            {user && user.role !== 'admin' && user.canManageSchedule && (
+              <NavLink to="/manage/schedule" className={navLinkClass} onClick={() => setOpen(false)}>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4" />
+                  الجدول
                 </span>
               </NavLink>
             )}

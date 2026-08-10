@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, UserPlus, Save, Loader as LoaderIcon, ShieldCheck } from 'lucide-react';
+import { Search, UserPlus, Save, Loader as LoaderIcon, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { AdminUser, Category } from '../../lib/types';
 import Spinner from '../../components/Spinner';
@@ -8,6 +8,14 @@ import EmptyState from '../../components/EmptyState';
 interface Props {
   categories: Category[];
 }
+
+type Role = 'visitor' | 'writer' | 'admin';
+
+const ROLE_LABELS: Record<Role, string> = {
+  visitor: 'حساب عادي — تصفح وتفاعل فقط',
+  writer: 'كاتب — نشر عبر صفحة مخصصة',
+  admin: 'مشرف عام — كل الصلاحيات',
+};
 
 export default function AdminUsersTab({ categories }: Props) {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -20,11 +28,13 @@ export default function AdminUsersTab({ categories }: Props) {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'visitor' | 'admin'>('visitor');
+  const [newRole, setNewRole] = useState<Role>('visitor');
   const [newCats, setNewCats] = useState<string[]>([]);
   const [newSched, setNewSched] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const [popup, setPopup] = useState<{ title: string; message: string } | null>(null);
 
   const load = async (query = q) => {
     setLoading(true);
@@ -47,7 +57,20 @@ export default function AdminUsersTab({ categories }: Props) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   };
 
-  const saveUser = async (u: AdminUser, role: typeof u.role, cats: string[], sched: boolean) => {
+  const requireCatsForWriter = (role: Role, cats: string[]) => {
+    if (role === 'writer' && cats.length === 0) {
+      setPopup({
+        title: 'تحديد قسم مطلوب',
+        message:
+          'حساب الكاتب يتطلب تحديد قسم واحد على الأقل ليتمكن من النشر فيه. اختر الأقسام الموكلة ثم احفظ مرة أخرى.',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const saveUser = async (u: AdminUser, role: Role, cats: string[], sched: boolean) => {
+    if (!requireCatsForWriter(role, cats)) return;
     setBusyId(u.id);
     setError(null);
     try {
@@ -66,6 +89,7 @@ export default function AdminUsersTab({ categories }: Props) {
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (createBusy) return;
+    if (!requireCatsForWriter(newRole, newCats)) return;
     setCreateBusy(true);
     setCreateError(null);
     try {
@@ -76,8 +100,8 @@ export default function AdminUsersTab({ categories }: Props) {
           email: newEmail.trim(),
           password: newPassword,
           role: newRole,
-          categoryIds: newCats,
-          canManageSchedule: newSched,
+          categoryIds: newRole === 'writer' ? newCats : [],
+          canManageSchedule: newRole === 'writer' ? newSched : false,
         },
       });
       setUsers((prev) => [res.user, ...prev]);
@@ -124,7 +148,7 @@ export default function AdminUsersTab({ categories }: Props) {
         <div>
           <h2 className="font-display text-xl font-black text-brand-950">المستخدمون والصلاحيات</h2>
           <p className="text-sm text-stone-500">
-            صلاحيات «إدارة الجدول» و«أقسام النشر» تُطبَّق فورًا عند الحفظ
+            «الكاتب» ينشر من صفحة مخصصة بأقسام محددة — الصلاحيات تُطبَّق فورًا عند الحفظ
           </p>
         </div>
         <div className="flex gap-2">
@@ -189,31 +213,41 @@ export default function AdminUsersTab({ categories }: Props) {
               />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label">الدور</label>
-              <select className="input" value={newRole} onChange={(e) => setNewRole(e.target.value as 'visitor' | 'admin')}>
-                <option value="visitor">مشرف أقسام — صلاحيات محددة</option>
-                <option value="admin">مشرف عام — كل الصلاحيات</option>
-              </select>
-            </div>
-            <div>
-              <label className="label flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={newSched}
-                  onChange={(e) => setNewSched(e.target.checked)}
-                  className="h-4 w-4 accent-brand-700"
-                />
-                إدارة الجدول الأسبوعي
-              </label>
-            </div>
+          <div>
+            <label className="label">الدور</label>
+            <select
+              className="input"
+              value={newRole}
+              onChange={(e) => setNewRole(e.target.value as Role)}
+            >
+              <option value="visitor">{ROLE_LABELS.visitor}</option>
+              <option value="writer">{ROLE_LABELS.writer}</option>
+              <option value="admin">{ROLE_LABELS.admin}</option>
+            </select>
+            {newRole === 'writer' && (
+              <p className="mt-1 text-[11px] text-amber-700">
+                تنبيه: يجب تحديد قسم واحد على الأقل ليتم إنشاء حساب كاتب.
+              </p>
+            )}
           </div>
-          {newRole === 'visitor' && (
-            <div>
-              <label className="label">الأقسام الموكلة</label>
-              <GrantCheckboxes checked={newCats} onChange={setNewCats} />
-            </div>
+          {newRole === 'writer' && (
+            <>
+              <div>
+                <label className="label">الأقسام الموكلة (مطلوب)</label>
+                <GrantCheckboxes checked={newCats} onChange={setNewCats} />
+              </div>
+              <div>
+                <label className="label flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newSched}
+                    onChange={(e) => setNewSched(e.target.checked)}
+                    className="h-4 w-4 accent-brand-700"
+                  />
+                  صلاحية إضافية: إدارة الجدول الأسبوعي (صفحة مخصصة)
+                </label>
+              </div>
+            </>
           )}
           <div className="flex gap-3">
             <button type="submit" className="btn-primary" disabled={createBusy}>
@@ -237,6 +271,7 @@ export default function AdminUsersTab({ categories }: Props) {
         <div className="space-y-3">
           {users.map((u) => {
             const role = u.role;
+            const isWriter = role === 'writer';
             const cats = u.managedCategories.map((c) => c.id);
             const sched = u.canManageSchedule;
             return (
@@ -255,6 +290,11 @@ export default function AdminUsersTab({ categories }: Props) {
                     {role === 'admin' && (
                       <span className="rounded-full bg-gold-400/30 px-2.5 py-0.5 text-xs font-bold text-gold-700">
                         مشرف عام
+                      </span>
+                    )}
+                    {role === 'writer' && (
+                      <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-bold text-brand-700">
+                        كاتب
                       </span>
                     )}
                   </div>
@@ -277,31 +317,65 @@ export default function AdminUsersTab({ categories }: Props) {
                     <select
                       className="input !py-1.5 text-sm"
                       value={role}
-                      onChange={(e) => saveUser(u, e.target.value as 'visitor' | 'admin', cats, sched)}
+                      onChange={(e) => {
+                        const next = e.target.value as Role;
+                        if (next === 'visitor' && (cats.length > 0 || sched)) {
+                          setPopup({
+                            title: 'إلغاء الصلاحيات',
+                            message:
+                              'الحساب العادي لا يحمل صلاحيات. سيفقد إدارة الأقسام والجدول عند التحويل — أكّد الحفظ لتنفيذ التحويل.',
+                          });
+                        }
+                        saveUser(u, next, next === 'visitor' ? [] : cats, next === 'visitor' ? false : sched);
+                      }}
                     >
-                      <option value="visitor">مشرف أقسام</option>
-                      <option value="admin">مشرف عام</option>
+                      <option value="visitor">{ROLE_LABELS.visitor}</option>
+                      <option value="writer">{ROLE_LABELS.writer}</option>
+                      <option value="admin">{ROLE_LABELS.admin}</option>
                     </select>
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-stone-500">
-                    <input
-                      type="checkbox"
-                      checked={sched}
-                      onChange={(e) => saveUser(u, role, cats, e.target.checked)}
-                      className="h-4 w-4 accent-brand-700"
-                    />
-                    إدارة الجدول الأسبوعي
-                  </label>
+                  {isWriter && (
+                    <label className="flex items-center gap-2 text-xs text-stone-500">
+                      <input
+                        type="checkbox"
+                        checked={sched}
+                        onChange={(e) => saveUser(u, role, cats, e.target.checked)}
+                        className="h-4 w-4 accent-brand-700"
+                      />
+                      إدارة الجدول الأسبوعي (صفحة مخصصة)
+                    </label>
+                  )}
                 </div>
-                {role === 'visitor' && (
+                {isWriter && (
                   <div className="mt-3">
-                    <p className="label">الأقسام الموكلة</p>
+                    <p className="label">الأقسام الموكلة (مطلوب)</p>
                     <GrantCheckboxes checked={cats} onChange={(v) => saveUser(u, role, v, sched)} />
                   </div>
                 )}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {popup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
+          onClick={() => setPopup(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <AlertTriangle className="h-6 w-6" />
+            </span>
+            <h3 className="mt-4 text-center font-display text-lg font-black text-brand-950">{popup.title}</h3>
+            <p className="mt-2 text-center text-sm leading-7 text-stone-600">{popup.message}</p>
+            <button onClick={() => setPopup(null)} className="btn-primary mt-5 w-full">
+              حسناً، فهمت
+            </button>
+          </div>
         </div>
       )}
     </div>

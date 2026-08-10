@@ -69,7 +69,7 @@ const createSchema = z.object({
   name: z.string().trim().min(2, 'الاسم قصير جداً').max(40, 'الاسم طويل جداً'),
   email: z.string().toLowerCase().trim().refine((v) => EMAIL_REGEX.test(v), 'البريد الإلكتروني غير صالح'),
   password: z.string().min(8, 'كلمة المرور يجب ألا تقل عن ٨ أحرف').max(72, 'كلمة المرور طويلة جداً'),
-  role: z.enum(['visitor', 'admin']).optional(),
+  role: z.enum(['visitor', 'writer', 'admin']).optional(),
   categoryIds: z.array(z.string().min(1)).max(20).optional(),
   canManageSchedule: z.boolean().optional(),
 });
@@ -77,6 +77,13 @@ const createSchema = z.object({
 router.post('/', requireAdmin, validate(createSchema), async (req, res, next) => {
   try {
     const { name, email, password, role, categoryIds, canManageSchedule } = req.body as z.infer<typeof createSchema>;
+    const finalRole = role ?? 'visitor';
+    if (finalRole === 'writer' && !(categoryIds ?? []).length) {
+      return res.status(400).json({ message: 'يجب تحديد قسم واحد على الأقل لحساب الكاتب' });
+    }
+    if (finalRole === 'visitor' && ((categoryIds ?? []).length || canManageSchedule)) {
+      return res.status(400).json({ message: 'الحساب العادي لا يُمنح أقساماً أو صلاحيات' });
+    }
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ message: 'هذا البريد مسجّل مسبقاً' });
 
@@ -85,9 +92,12 @@ router.post('/', requireAdmin, validate(createSchema), async (req, res, next) =>
         name,
         email,
         passwordHash: await hashPassword(password),
-        role: role ?? 'visitor',
-        canManageSchedule: canManageSchedule ?? false,
-        managedCategories: categoryIds && categoryIds.length ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
+        role: finalRole,
+        canManageSchedule: finalRole === 'writer' ? canManageSchedule ?? false : false,
+        managedCategories:
+          finalRole === 'writer' && categoryIds?.length
+            ? { connect: categoryIds.map((id) => ({ id })) }
+            : undefined,
       },
       select: {
         id: true,
@@ -106,24 +116,41 @@ router.post('/', requireAdmin, validate(createSchema), async (req, res, next) =>
 });
 
 const updateSchema = z.object({
-  role: z.enum(['visitor', 'admin']).optional(),
+  role: z.enum(['visitor', 'writer', 'admin']).optional(),
   categoryIds: z.array(z.string().min(1)).max(20).optional(),
   canManageSchedule: z.boolean().optional(),
 });
 
 router.put('/:id', requireAdmin, validate(updateSchema), async (req, res, next) => {
   try {
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: { managedCategories: { select: { id: true } } },
+    });
     if (!existing) return res.status(404).json({ message: 'المستخدم غير موجود' });
 
     const { role, categoryIds, canManageSchedule } = req.body as z.infer<typeof updateSchema>;
+    const finalRole = role ?? existing.role;
+    const finalCats = categoryIds !== undefined ? categoryIds : existing.managedCategories.map((c) => c.id);
+
+    if (finalRole === 'writer' && (categoryIds !== undefined ? !categoryIds.length : !finalCats.length)) {
+      return res.status(400).json({ message: 'يجب تحديد قسم واحد على الأقل لحساب الكاتب' });
+    }
+    if (finalRole === 'visitor' && ((categoryIds ?? []).length || canManageSchedule)) {
+      return res.status(400).json({ message: 'الحساب العادي لا يُمنح أقساماً أو صلاحيات' });
+    }
+
     const user = await prisma.user.update({
       where: { id: existing.id },
       data: {
-        role: role ?? existing.role,
-        canManageSchedule: canManageSchedule ?? existing.canManageSchedule,
+        role: finalRole,
+        canManageSchedule: finalRole === 'writer' ? canManageSchedule ?? existing.canManageSchedule : false,
         managedCategories:
-          categoryIds !== undefined ? { set: categoryIds.map((id) => ({ id })) } : undefined,
+          finalRole === 'writer' && categoryIds !== undefined
+            ? { set: categoryIds.map((id) => ({ id })) }
+            : finalRole === 'writer'
+              ? undefined
+              : { set: [] },
       },
       select: {
         id: true,

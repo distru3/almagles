@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 
-export type Role = 'visitor' | 'admin';
+export type Role = 'visitor' | 'writer' | 'admin';
 
 export interface AuthUser {
   id: string;
@@ -30,16 +30,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== 'admin') {
-    return res.status(403).json({ message: 'هذا الإجراء متاح للمشرفين فقط' });
-  }
-  next();
-}
-
-/** Super admin OR a user with any grant (categories or schedule). */
-export function requireAnyManager(req: Request, res: Response, next: NextFunction) {
-  const user = req.user;
-  if (!user) return res.status(401).json({ message: 'يرجى تسجيل الدخول أولاً' });
-  if (user.role !== 'admin' && user.managedCategoryIds.length === 0 && !user.canManageSchedule) {
     return res.status(403).json({ message: 'هذا الإجراء متاح للمشرفين فقط' });
   }
   next();

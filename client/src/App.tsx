@@ -10,6 +10,7 @@ import PostPage from './pages/PostPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import { WritePage, SchedulePage } from './pages/write/WriterPages';
 import AccessDenied from './pages/AccessDenied';
 import NotFound from './pages/NotFound';
 
@@ -21,15 +22,31 @@ function ScrollToTop() {
   return null;
 }
 
-function isManager(user: { role: string; canManageSchedule: boolean; managedCategoryIds: string[] }) {
-  return user.role === 'admin' || user.canManageSchedule || user.managedCategoryIds.length > 0;
-}
-
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <Spinner full />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isManager(user)) return <Navigate to="/access-denied" replace />;
+  if (user.role !== 'admin') return <Navigate to="/access-denied" replace />;
+  return <>{children}</>;
+}
+
+function RequireWriter({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner full />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'writer' || user.managedCategoryIds.length === 0) {
+    return <Navigate to="/access-denied" replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireSchedulePage({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner full />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'admin' || !user.canManageSchedule) {
+    return <Navigate to="/access-denied" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -51,6 +68,22 @@ export default function App() {
               <RequireAdmin>
                 <AdminDashboard />
               </RequireAdmin>
+            }
+          />
+          <Route
+            path="/write"
+            element={
+              <RequireWriter>
+                <WritePage />
+              </RequireWriter>
+            }
+          />
+          <Route
+            path="/manage/schedule"
+            element={
+              <RequireSchedulePage>
+                <SchedulePage />
+              </RequireSchedulePage>
             }
           />
           <Route path="*" element={<NotFound />} />

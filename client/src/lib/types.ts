@@ -54,7 +54,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'visitor';
+  role: 'visitor' | 'writer' | 'admin';
   canManageSchedule: boolean;
   managedCategoryIds: string[];
 }
@@ -63,7 +63,7 @@ export interface AdminUser {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'visitor';
+  role: 'visitor' | 'writer' | 'admin';
   canManageSchedule: boolean;
   createdAt: string;
   managedCategories: { id: string; name: string }[];

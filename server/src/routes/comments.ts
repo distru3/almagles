@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
-import { requireAuth, requireAnyManager, canManageCategory } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, canManageCategory } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -11,14 +11,9 @@ const createSchema = z.object({
   parentId: z.string().min(1).max(64).optional(),
 });
 
-router.get('/', requireAnyManager, async (req, res, next) => {
+router.get('/', requireAdmin, async (_req, res, next) => {
   try {
-    const user = req.user!;
     const comments = await prisma.comment.findMany({
-      where:
-        user.role === 'admin'
-          ? {}
-          : { post: { categoryId: { in: user.managedCategoryIds } } },
       orderBy: { createdAt: 'desc' },
       take: 300,
       include: {
