@@ -34,7 +34,15 @@ export default function AdminUsersTab({ categories }: Props) {
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [popup, setPopup] = useState<{ title: string; message: string } | null>(null);
+  const [popup, setPopup] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
+  const [writerPrompt, setWriterPrompt] = useState<
+    | { mode: 'row'; user: AdminUser; sched: boolean }
+    | { mode: 'create' }
+    | null
+  >(null);
+  const [promptCats, setPromptCats] = useState<string[]>([]);
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
 
   const load = async (query = q) => {
     setLoading(true);
@@ -57,20 +65,13 @@ export default function AdminUsersTab({ categories }: Props) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   };
 
-  const requireCatsForWriter = (role: Role, cats: string[]) => {
-    if (role === 'writer' && cats.length === 0) {
-      setPopup({
-        title: 'تحديد قسم مطلوب',
-        message:
-          'حساب الكاتب يتطلب تحديد قسم واحد على الأقل ليتمكن من النشر فيه. اختر الأقسام الموكلة ثم احفظ مرة أخرى.',
-      });
-      return false;
-    }
-    return true;
-  };
-
   const saveUser = async (u: AdminUser, role: Role, cats: string[], sched: boolean) => {
-    if (!requireCatsForWriter(role, cats)) return;
+    if (role === 'writer' && cats.length === 0) {
+      setPromptCats([]);
+      setPromptError(null);
+      setWriterPrompt({ mode: 'row', user: u, sched });
+      return;
+    }
     setError(null);
     try {
       const res = await api<{ user: AdminUser }>(`/users/${u.id}`, {
@@ -88,7 +89,12 @@ export default function AdminUsersTab({ categories }: Props) {
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (createBusy) return;
-    if (!requireCatsForWriter(newRole, newCats)) return;
+    if (newRole === 'writer' && newCats.length === 0) {
+      setPromptCats([]);
+      setPromptError(null);
+      setWriterPrompt({ mode: 'create' });
+      return;
+    }
     setCreateBusy(true);
     setCreateError(null);
     try {
@@ -115,6 +121,49 @@ export default function AdminUsersTab({ categories }: Props) {
       setCreateError(err instanceof ApiError ? err.message : 'تعذّر إنشاء الحساب');
     } finally {
       setCreateBusy(false);
+    }
+  };
+
+  const confirmWriterPrompt = async () => {
+    if (!writerPrompt || promptCats.length === 0 || promptBusy) return;
+    setPromptBusy(true);
+    setPromptError(null);
+    try {
+      if (writerPrompt.mode === 'row') {
+        const res = await api<{ user: AdminUser }>(`/users/${writerPrompt.user.id}`, {
+          method: 'PUT',
+          body: { role: 'writer', categoryIds: promptCats, canManageSchedule: writerPrompt.sched },
+        });
+        setUsers((prev) => prev.map((x) => (x.id === res.user.id ? res.user : x)));
+        setSavedId(res.user.id);
+        window.setTimeout(() => setSavedId((cur) => (cur === res.user.id ? null : cur)), 1600);
+      } else {
+        const res = await api<{ user: AdminUser }>('/users', {
+          method: 'POST',
+          body: {
+            name: newName.trim(),
+            email: newEmail.trim(),
+            password: newPassword,
+            role: 'writer',
+            categoryIds: promptCats,
+            canManageSchedule: newSched,
+          },
+        });
+        setUsers((prev) => [res.user, ...prev]);
+        setShowCreate(false);
+        setNewName('');
+        setNewEmail('');
+        setNewPassword('');
+        setNewRole('visitor');
+        setNewCats([]);
+        setNewSched(false);
+      }
+      setWriterPrompt(null);
+      setPromptCats([]);
+    } catch (err) {
+      setPromptError(err instanceof ApiError ? err.message : 'تعذّر الحفظ');
+    } finally {
+      setPromptBusy(false);
     }
   };
 
@@ -316,8 +365,10 @@ export default function AdminUsersTab({ categories }: Props) {
                           setPopup({
                             title: 'إلغاء الصلاحيات',
                             message:
-                              'الحساب العادي لا يحمل صلاحيات. سيفقد إدارة الأقسام والجدول عند التحويل — أكّد الحفظ لتنفيذ التحويل.',
+                              'الحساب العادي لا يحمل صلاحيات. سيفقد إدارة الأقسام والجدول عند التحويل — هل تريد المتابعة؟',
+                            onConfirm: () => saveUser(u, 'visitor', [], false),
                           });
+                          return;
                         }
                         saveUser(u, next, next === 'visitor' ? [] : cats, next === 'visitor' ? false : sched);
                       }}
@@ -365,9 +416,86 @@ export default function AdminUsersTab({ categories }: Props) {
             </span>
             <h3 className="mt-4 text-center font-display text-lg font-black text-brand-950">{popup.title}</h3>
             <p className="mt-2 text-center text-sm leading-7 text-stone-600">{popup.message}</p>
-            <button onClick={() => setPopup(null)} className="btn-primary mt-5 w-full">
-              حسناً، فهمت
-            </button>
+            {popup.onConfirm ? (
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => {
+                    setPopup(null);
+                    popup.onConfirm?.();
+                  }}
+                  className="btn-danger flex-1"
+                >
+                  متابعة
+                </button>
+                <button onClick={() => setPopup(null)} className="btn-outline flex-1">
+                  إلغاء
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setPopup(null)} className="btn-primary mt-5 w-full">
+                حسناً، فهمت
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {writerPrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!promptBusy) {
+              setWriterPrompt(null);
+              setPromptCats([]);
+              setPromptError(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+              <AlertTriangle className="h-6 w-6" />
+            </span>
+            <h3 className="mt-4 text-center font-display text-lg font-black text-brand-950">تحديد قسم مطلوب</h3>
+            <p className="mt-2 text-center text-sm leading-7 text-stone-600">
+              {writerPrompt.mode === 'row'
+                ? `لا يمكن تحويل «${writerPrompt.user.name}» إلى كاتب دون تحديد قسم واحد على الأقل. اختر الأقسام الموكلة له:`
+                : 'لا يمكن إنشاء حساب كاتب دون تحديد قسم واحد على الأقل. اختر الأقسام الموكلة له:'}
+            </p>
+
+            {promptError && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {promptError}
+              </p>
+            )}
+
+            <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/40 p-3">
+              <GrantCheckboxes checked={promptCats} onChange={setPromptCats} />
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={confirmWriterPrompt}
+                disabled={promptCats.length === 0 || promptBusy}
+                className="btn-primary flex-1"
+              >
+                {promptBusy && <LoaderIcon className="h-4 w-4 animate-spin" />}
+                {writerPrompt.mode === 'row' ? 'تعيين كاتب بهذه الأقسام' : 'إنشاء الكاتب بهذه الأقسام'}
+              </button>
+              <button
+                onClick={() => {
+                  setWriterPrompt(null);
+                  setPromptCats([]);
+                  setPromptError(null);
+                }}
+                className="btn-outline"
+                disabled={promptBusy}
+              >
+                إلغاء
+              </button>
+            </div>
           </div>
         </div>
       )}
