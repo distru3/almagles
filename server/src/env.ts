@@ -20,6 +20,10 @@ export const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? null,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ?? null,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ?? null,
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? null,
+  EMAIL_FROM: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
+  APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
+  MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
   SEED_ADMIN_PASSWORD: process.env.SEED_ADMIN_PASSWORD ?? 'admin1234',
 };
 

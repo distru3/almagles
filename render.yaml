@@ -24,6 +24,12 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: onboarding@resend.dev
+      - key: APP_BASE_URL
+        sync: false
 databases:
   - name: almagles-db
     plan: free

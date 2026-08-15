@@ -50,6 +50,14 @@ app.use(
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }),
 );
 app.use(
+  '/api/auth/send-code',
+  rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false }),
+);
+app.use(
+  '/api/auth/reset-password',
+  rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false }),
+);
+app.use(
   '/api/comments',
   rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }),
 );

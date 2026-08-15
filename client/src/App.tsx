@@ -9,6 +9,7 @@ import CategoryPage from './pages/CategoryPage';
 import PostPage from './pages/PostPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import { WritePage, SchedulePage } from './pages/write/WriterPages';
 import AccessDenied from './pages/AccessDenied';
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/post/:id" element={<PostPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/access-denied" element={<AccessDenied />} />
           <Route
             path="/admin"
