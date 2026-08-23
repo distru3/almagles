@@ -4,7 +4,7 @@ services:
     runtime: node
     region: frankfurt
     plan: free
-    buildCommand: npm ci && npx prisma generate --schema=server/prisma/schema.prisma && npm run build -w server && npm run build -w client
+    buildCommand: npm ci && npx prisma generate --schema=server/prisma/schema.prisma && npx prisma migrate deploy --schema=server/prisma/schema.prisma && npm run build -w server && npm run build -w client
     startCommand: npm run start -w server
     healthCheckPath: /api/categories
     envVars:
@@ -30,6 +30,3 @@ services:
         value: onboarding@resend.dev
       - key: APP_BASE_URL
         sync: false
-databases:
-  - name: almagles-db
-    plan: free
