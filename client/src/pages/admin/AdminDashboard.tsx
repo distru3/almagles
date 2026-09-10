@@ -61,7 +61,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="container-site py-8">
-      <div className="mb-6 flex items-center gap-3">
+      <div className="page-header">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold-400 text-brand-950">
           <ShieldCheck className="h-6 w-6" />
         </span>
@@ -71,7 +71,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="tab-strip">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}

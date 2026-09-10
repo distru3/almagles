@@ -8,7 +8,7 @@ import AdminScheduleTab from '../admin/AdminScheduleTab';
 
 function PageHeader({ icon: Icon, title, subtitle }: { icon: typeof PenLine; title: string; subtitle: string }) {
   return (
-    <div className="mb-6 flex items-center gap-3">
+    <div className="page-header">
       <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold-400 text-brand-950">
         <Icon className="h-6 w-6" />
       </span>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star, Newspaper, PenLine } from 'lucide-react';
+import { ArrowLeft, BookOpen, CalendarDays, MessageCircle, Newspaper, PenLine, Star } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { Category, Post, ScheduleItem } from '../lib/types';
@@ -44,24 +44,33 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden bg-brand-900 text-white">
+      <section className="hero-editorial relative overflow-hidden text-white">
         <div className="absolute inset-0 opacity-15 [background-image:radial-gradient(rgba(234,179,8,0.35)_1px,transparent_1px)] [background-size:22px_22px]" />
-        <div className="container-site relative py-12 sm:py-16">
-          <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-bold text-gold-200">
-            <Star className="h-4 w-4" />
-            {hijriDate(todayISO())}
-          </p>
-          <h1 className="mt-5 max-w-2xl font-display text-3xl font-black leading-tight sm:text-4xl">
-            رجال الأمة
-            <span className="mt-1 block text-xl font-bold text-gold-300 sm:text-2xl">
-              مقرّرٌ يبني الإنسان… ومجتمعٌ يقرأ ويتفاعل
-            </span>
-          </h1>
-          <p className="mt-4 max-w-xl leading-8 text-brand-100">
-            تابع جدول المقرر الأسبوعي، واستعرض منشورات اليوم من مختلف الأقسام، وشارك
-            بتفاعلاتك وتعليقاتك.
-          </p>
-          <div className="mt-7 flex flex-wrap gap-3">
+        <div className="hero-reveal container-site relative grid min-h-[25rem] items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_0.42fr]">
+          <div>
+            <p className="inline-flex items-center gap-2 border-b border-gold-300/40 pb-2 text-sm font-bold text-gold-200">
+              <Star className="h-4 w-4" />
+              {hijriDate(todayISO())}
+            </p>
+            <h1 className="mt-5 max-w-2xl font-display text-4xl font-black leading-[1.2] sm:text-5xl">
+              رجال الأمة
+              <span className="mt-3 block text-xl font-bold leading-9 text-gold-300 sm:text-2xl">
+                مقرّرٌ يبني الإنسان… ومجتمعٌ يقرأ ويتفاعل
+              </span>
+            </h1>
+            <p className="mt-5 max-w-xl leading-8 text-brand-100">
+              تابع جدول المقرر الأسبوعي، واستعرض منشورات اليوم من مختلف الأقسام، وشارك
+              بتفاعلاتك وتعليقاتك.
+            </p>
+          </div>
+          <div className="hidden border-r border-white/15 py-6 pr-8 lg:block">
+            <p className="text-sm font-bold text-gold-200">وجهتك اليومية</p>
+            <p className="mt-3 font-display text-3xl font-black leading-tight text-white">
+              اقرأ، ناقش، وواصل الطريق.
+            </p>
+            <p className="mt-3 text-sm leading-7 text-brand-200">كل ما تحتاجه للمقرر في مكان واحد.</p>
+          </div>
+          <div className="flex flex-wrap gap-3 lg:col-span-2">
             {user?.role === 'admin' && (
               <Link to="/admin" className="btn-gold">
                 <PenLine className="h-4 w-4" />
@@ -77,39 +86,37 @@ export default function Home() {
       </section>
 
       {/* Categories chip bar */}
-      <section className="container-site mt-8">
-        <div className="flex flex-wrap gap-2">
-          <span className="py-1.5 text-sm font-extrabold text-stone-500">الأقسام:</span>
-          {categories.map((c) => (
-            <Link key={c.id} to={`/category/${c.slug}`} className="chip">
-              {c.name}
-              <span className="rounded-full bg-white px-1.5 text-[11px] text-brand-500">{c.postCount}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Weekly schedule */}
-      <section className="container-site mt-8">
-        <ScheduleTable items={schedule} loading={loading} />
-      </section>
-
-      {/* Today's posts */}
-      <section id="post-positions" className="container-site mt-10">
-        <div className="mb-5 flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gold-100 text-gold-700">
-            <Newspaper className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="font-display text-xl font-extrabold text-brand-950">منشورات اليوم</h2>
-            <p className="text-sm text-stone-500">{hijriDate(todayISO())}</p>
+      {categories.length > 0 && (
+        <section className="container-site mt-9">
+          <div className="flex flex-wrap items-center gap-2 border-b border-brand-200 pb-4">
+            <span className="ml-1 py-1.5 text-sm font-extrabold text-stone-500">تصفّح الأقسام</span>
+            {categories.map((c) => (
+              <Link key={c.id} to={`/category/${c.slug}`} className="chip">
+                {c.name}
+                <span className="rounded-md bg-white px-1.5 text-[11px] text-brand-500">{c.postCount}</span>
+              </Link>
+            ))}
           </div>
+        </section>
+      )}
+
+      {/* Daily briefing */}
+      <section id="postList" className="container-site mt-10">
+        <div className="section-heading mb-5 flex items-end justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold-100 text-gold-700">
+              <BookOpen className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs font-extrabold text-gold-700">القراءة اليومية</p>
+              <h2 className="font-display text-2xl font-extrabold text-brand-950">ابدأ من هنا</h2>
+            </div>
+          </div>
+          <span className="text-sm text-stone-500">{hijriDate(todayISO())}</span>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <Spinner />
-          </div>
+          <div className="flex justify-center py-12"><Spinner /></div>
         ) : posts.length === 0 ? (
           <EmptyState
             icon={Newspaper}
@@ -117,20 +124,44 @@ export default function Home() {
             description="لم يُرفع أي منشور لهذا اليوم حتى الآن — عد لاحقاً ليطلّ المشرفون بالجديد"
             action={
               user?.role === 'admin' ? (
-                <Link to="/admin" className="btn-primary">
-                  <PenLine className="h-4 w-4" />
-                  إضافة منشور
-                </Link>
+                <Link to="/admin" className="btn-primary"><PenLine className="h-4 w-4" />إضافة منشور</Link>
               ) : undefined
             }
           />
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
+              <PostCard post={posts[0]} featured />
+              <aside className="rounded-lg border border-brand-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-extrabold text-brand-500">خريطة اليوم</p>
+                <h3 className="mt-2 font-display text-xl font-black text-brand-950">مساحة صغيرة للتركيز</h3>
+                <p className="mt-2 text-sm leading-7 text-stone-600">اقرأ المنشور الأبرز، ثم اختر من بقية الأقسام ما يناسب وقتك.</p>
+                <div className="mt-6 grid grid-cols-2 gap-2 border-y border-brand-100 py-4">
+                  <div><p className="font-display text-2xl font-black text-brand-800">{posts.length}</p><p className="text-xs text-stone-500">منشورات اليوم</p></div>
+                  <div><p className="font-display text-2xl font-black text-brand-800">{categories.length}</p><p className="text-xs text-stone-500">أقسام مفتوحة</p></div>
+                </div>
+                <div className="mt-5 space-y-2">
+                  <a href="#schedule" className="flex items-center justify-between text-sm font-bold text-brand-700 hover:text-brand-950">
+                    <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" />راجع جدول الأسبوع</span><ArrowLeft className="h-4 w-4" />
+                  </a>
+                  <Link to={`/category/${posts[0].category.slug}`} className="flex items-center justify-between text-sm font-bold text-brand-700 hover:text-brand-950">
+                    <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" />استكشف القسم</span><ArrowLeft className="h-4 w-4" />
+                  </Link>
+                </div>
+              </aside>
+            </div>
+            {posts.length > 1 && (
+              <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {posts.slice(1).map((post) => <PostCard key={post.id} post={post} />)}
+              </div>
+            )}
+          </>
         )}
+      </section>
+
+      {/* Weekly schedule */}
+      <section id="schedule" className="container-site mt-14">
+        <ScheduleTable items={schedule} loading={loading} />
       </section>
     </div>
   );

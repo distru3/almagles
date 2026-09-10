@@ -94,13 +94,26 @@ function slugify(name: string): string {
 }
 
 const today = new Date();
-function isoDaysFromNow(n: number): string {
-  const d = new Date(today);
-  d.setDate(d.getDate() + n);
+
+function isoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function currentWeekStart(): Date {
+  const start = new Date(today);
+  start.setHours(0, 0, 0, 0);
+  // The product week starts on Saturday.
+  start.setDate(start.getDate() - ((start.getDay() + 1) % 7));
+  return start;
+}
+
+function isoDaysFromNow(n: number): string {
+  const d = new Date(today);
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
 }
 
 async function main() {
@@ -117,18 +130,24 @@ async function main() {
   }
   console.log(`- ${CATEGORIES.length} categories`);
 
-  const weekRows = [...WEEK_1, ...WEEK_2].map((row) => ({
-    ...row,
-    weekdayKey: row.weekday,
-    timeLabel: 'فجر',
-  }));
+  const weekRows = [...WEEK_1, ...WEEK_2].map((row, index) => {
+    const date = currentWeekStart();
+    date.setDate(date.getDate() + index);
+    return {
+      ...row,
+      id: `${isoDate(date)}-${row.weekday}`,
+      date: isoDate(date),
+      weekdayKey: row.weekday,
+      timeLabel: index % 2 === 0 ? 'فجر' : 'بعد المغرب',
+    };
+  });
 
   for (const row of weekRows) {
     await prisma.scheduleItem.upsert({
-      where: { id: `${row.date}-${row.weekday}` },
+      where: { id: row.id },
       update: { title: row.title, section: row.section ?? null, notes: row.notes ?? null, timeLabel: row.timeLabel },
       create: {
-        id: `${row.date}-${row.weekday}`,
+        id: row.id,
         date: row.date,
         weekdayKey: row.weekday,
         timeLabel: row.timeLabel,
@@ -154,7 +173,10 @@ async function main() {
     },
   });
 
-  const demoHash = await hashPassword('demo1234');
+  // Keep demo credentials outside the repository. In local development they can
+  // reuse SEED_ADMIN_PASSWORD unless SEED_DEMO_PASSWORD is provided.
+  const demoPassword = process.env.SEED_DEMO_PASSWORD ?? adminPassword;
+  const demoHash = await hashPassword(demoPassword);
   const demo = await prisma.user.upsert({
     where: { email: 'demo@almagles.app' },
     update: {},
@@ -165,19 +187,35 @@ async function main() {
       role: 'visitor',
     },
   });
+  const writer = await prisma.user.upsert({
+    where: { email: 'writer@almagles.app' },
+    update: { role: 'writer', canManageSchedule: true },
+    create: {
+      name: 'كاتب تجريبي',
+      email: 'writer@almagles.app',
+      passwordHash: demoHash,
+      role: 'writer',
+      canManageSchedule: true,
+    },
+  });
+  await prisma.user.update({
+    where: { id: writer.id },
+    data: { managedCategories: { connect: CATEGORIES.slice(0, 2).map((c) => ({ slug: slugify(c.name) })) } },
+  });
   console.log(`- admin: admin@almagles.app / ${adminPassword}`);
-  console.log(`- demo : demo@almagles.app / demo1234`);
+  console.log(`- demo : demo@almagles.app / ${demoPassword}`);
+  console.log(`- writer: writer@almagles.app / ${demoPassword}`);
 
   const todayISO = isoDaysFromNow(0);
   let sampleCount = 0;
+  const samplePosts: Array<{ id: string; title: string }> = [];
   for (const post of SAMPLE_POSTS) {
     const catId = categories[post.category];
     if (!catId) continue;
     const exists = await prisma.post.findFirst({
       where: { title: post.title, categoryId: catId, postDate: todayISO },
     });
-    if (!exists) {
-      await prisma.post.create({
+    const created = exists ?? (await prisma.post.create({
         data: {
           title: post.title,
           description: post.description,
@@ -185,11 +223,37 @@ async function main() {
           categoryId: catId,
           authorId: post.category === 'الفكر الإسلامي' ? admin.id : demo.id,
         },
-      });
-      sampleCount += 1;
-    }
+      }));
+    if (!exists) sampleCount += 1;
+    samplePosts.push({ id: created.id, title: created.title });
   }
   console.log(`- ${sampleCount} sample posts (scheduled for today)`);
+
+  const firstPost = samplePosts[0];
+  if (firstPost) {
+    const existingComment = await prisma.comment.findFirst({ where: { postId: firstPost.id, authorId: demo.id } });
+    if (!existingComment) {
+      await prisma.comment.create({
+        data: { postId: firstPost.id, authorId: demo.id, content: 'طرح جميل ومختصر، خصوصاً الربط بين العدل والمعاملة اليومية.' },
+      });
+    }
+    const existingReply = await prisma.comment.findFirst({ where: { postId: firstPost.id, authorId: admin.id } });
+    if (!existingReply) {
+      await prisma.comment.create({
+        data: { postId: firstPost.id, authorId: admin.id, content: 'جزاك الله خيراً على الإضافة الطيبة.', parentId: existingComment?.id ?? undefined },
+      });
+    }
+  }
+
+  for (const [index, post] of samplePosts.entries()) {
+    const userId = index % 2 === 0 ? demo.id : admin.id;
+    await prisma.reaction.upsert({
+      where: { postId_userId: { postId: post.id, userId } },
+      update: { type: index % 2 === 0 ? '❤️' : '👍' },
+      create: { postId: post.id, userId, type: index % 2 === 0 ? '❤️' : '👍' },
+    });
+  }
+  console.log('- demo comments and reactions');
 
   console.log('Done ✓');
 }

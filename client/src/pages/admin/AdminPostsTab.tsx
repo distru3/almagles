@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Search, Trash2, Image as ImageIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import type { Category, Post } from '../../lib/types';
@@ -15,6 +15,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Post | null | 'new'>(null);
+  const [query, setQuery] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -30,6 +31,10 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
       setLoading(false);
     }
   };
+
+  const visiblePosts = posts.filter((post) =>
+    `${post.title} ${post.category.name} ${post.author.name}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
 
   useEffect(() => {
     load();
@@ -47,15 +52,26 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-black text-brand-950">المنشورات</h2>
-          <p className="text-sm text-stone-500">{posts.length} منشور</p>
+          <p className="text-sm text-stone-500">{visiblePosts.length} من {posts.length} منشور</p>
         </div>
         <button onClick={() => setEditing('new')} className="btn-primary">
           <Plus className="h-4 w-4" />
           منشور جديد
         </button>
+      </div>
+
+      <div className="mb-5 flex items-center gap-2 border-b border-brand-200 pb-4">
+        <Search className="h-4 w-4 text-brand-500" />
+        <input
+          className="input max-w-md !py-2"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ابحث في العناوين والأقسام…"
+          aria-label="البحث في المنشورات"
+        />
       </div>
 
       {error && <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -66,9 +82,11 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
         </div>
       ) : posts.length === 0 ? (
         <EmptyState icon={ImageIcon} title="لا توجد منشورات" description="أنشئ أول منشور من الزر أعلاه" />
+      ) : visiblePosts.length === 0 ? (
+        <EmptyState icon={Search} title="لا توجد نتائج" description="جرّب كلمة أخرى أو امسح البحث للعودة إلى كل المنشورات" />
       ) : (
         <div className="space-y-2">
-          {posts.map((post) => (
+          {visiblePosts.map((post) => (
             <div
               key={post.id}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-white p-3"

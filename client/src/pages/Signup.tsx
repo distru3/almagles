@@ -89,7 +89,7 @@ export default function Signup() {
 
   return (
     <div className="container-site flex justify-center py-12">
-      <div className="card w-full max-w-md p-7">
+      <div className="card card-editorial w-full max-w-md p-7">
         <div className="mb-6 text-center">
           <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-800 text-white">
             {step === 'details' ? <UserPlus className="h-6 w-6" /> : <MailCheck className="h-6 w-6" />}

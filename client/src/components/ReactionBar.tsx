@@ -60,7 +60,7 @@ export default function ReactionBar({ postId, counts, myReaction, onChange }: Pr
   const total = Object.values(counts).reduce((s, v) => s + v, 0);
 
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+    <div className="card card-editorial flex flex-wrap items-center justify-between gap-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
         {REACTION_TYPES.map((type) => {
           const active = myReaction === type;

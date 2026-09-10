@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-sm font-bold transition ${
-    isActive ? 'bg-brand-700 text-white' : 'text-brand-900 hover:bg-brand-100'
+  `relative rounded-lg px-3 py-2 text-sm font-bold transition ${
+    isActive
+      ? 'text-brand-950 after:absolute after:inset-x-3 after:-bottom-1 after:h-0.5 after:bg-gold-500'
+      : 'text-brand-800 hover:bg-brand-100'
   }`;
 
 export default function Navbar() {
@@ -21,9 +23,9 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-brand-100 bg-cream/90 backdrop-blur">
+    <header className="site-header sticky top-0 z-40">
       <div className="container-site">
-        <div className="flex h-16 items-center justify-between gap-3">
+        <div className="flex h-[4.5rem] items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
             <Logo className="h-10 w-10" />
             <div className="leading-tight">

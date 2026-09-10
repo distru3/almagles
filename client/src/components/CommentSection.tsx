@@ -108,7 +108,7 @@ export default function CommentSection({ postId, postCategoryId, comments, onCha
 
   const renderComment = (c: CommentItem, isReply: boolean) => (
     <div key={c.id} className={isReply ? 'mr-8 border-r-2 border-brand-100 pr-3 sm:mr-12' : ''}>
-      <div className="card !rounded-xl p-3.5">
+      <div className="card card-editorial !rounded-xl p-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-extrabold text-brand-700">
@@ -196,7 +196,7 @@ export default function CommentSection({ postId, postCategoryId, comments, onCha
   );
 
   return (
-    <section className="card p-5">
+    <section className="card card-editorial p-5">
       <div className="mb-4 flex items-center gap-2">
         <MessageSquare className="h-5 w-5 text-brand-700" />
         <h3 className="font-display text-lg font-extrabold text-brand-950">

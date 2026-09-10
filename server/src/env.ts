@@ -24,7 +24,7 @@ export const env = {
   EMAIL_FROM: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
   APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
   MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
-  SEED_ADMIN_PASSWORD: process.env.SEED_ADMIN_PASSWORD ?? 'admin1234',
+  SEED_ADMIN_PASSWORD: required('SEED_ADMIN_PASSWORD'),
 };
 
 export const isProd = env.NODE_ENV === 'production';

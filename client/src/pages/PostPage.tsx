@@ -88,7 +88,7 @@ export default function PostPage() {
       </Link>
 
       <div className="mx-auto max-w-3xl">
-        <div className="card overflow-hidden">
+        <div className="card card-editorial overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 px-5 pt-5 sm:px-7">
             <Link to={`/category/${post.category.slug}`} className="chip text-xs">
               {post.category.name}

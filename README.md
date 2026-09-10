@@ -35,8 +35,8 @@
 
 ## الحسابات الجاهزة (بعد `db:seed`)
 
-- مشرف: `admin@almagles.app` — كلمة المرور من `SEED_ADMIN_PASSWORD` (افتراضي: `admin1234`)
-- زائر تجريبي: `demo@almagles.app` / `demo1234`
+- مشرف: `admin@almagles.app` — كلمة المرور من `SEED_ADMIN_PASSWORD`
+- زائر تجريبي: `demo@almagles.app` — كلمة المرور من `SEED_DEMO_PASSWORD` أو `SEED_ADMIN_PASSWORD`
 
 ## الأدوار والصلاحيات
 

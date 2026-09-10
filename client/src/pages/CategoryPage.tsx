@@ -66,7 +66,7 @@ export default function CategoryPage() {
 
   return (
     <div className="container-site py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="page-header flex-wrap justify-between">
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-800 text-white">
             <FolderOpen className="h-5 w-5" />

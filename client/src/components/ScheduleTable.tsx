@@ -32,8 +32,8 @@ export default function ScheduleTable({ items, loading }: Props) {
   const goNext = () => setAnchor((a) => addDays(a, 7));
 
   return (
-    <section className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-100 bg-brand-900 px-5 py-4">
+    <section className="schedule-shell overflow-hidden">
+      <div className="schedule-header flex flex-wrap items-center justify-between gap-3 border-b border-brand-100 px-5 py-4">
         <div className="flex items-center gap-2 text-white">
           <CalendarDays className="h-5 w-5 text-gold-300" />
           <h2 className="font-display text-lg font-extrabold">المقرر الأسبوعي</h2>

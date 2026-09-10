@@ -35,12 +35,9 @@ html {
 body {
   background-color: var(--color-cream);
   background-image:
-    radial-gradient(rgba(151, 109, 40, 0.08) 1px, transparent 1px),
-    radial-gradient(rgba(151, 109, 40, 0.05) 1px, transparent 1px);
-  background-size: 26px 26px, 34px 34px;
-  background-position:
-    0 0,
-    13px 17px;
+    linear-gradient(rgba(151, 109, 40, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(151, 109, 40, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -76,7 +73,7 @@ body {
   }
 
   .card {
-    @apply rounded-2xl border border-brand-100 bg-white shadow-sm;
+    @apply rounded-lg border border-brand-100 bg-white shadow-sm;
   }
 
   .btn,
@@ -84,7 +81,7 @@ body {
   .btn-gold,
   .btn-outline,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-primary {
@@ -104,7 +101,7 @@ body {
   }
 
   .input {
-    @apply w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-base text-ink transition placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200;
+    @apply w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2.5 text-base text-ink transition placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200;
   }
 
   .label {
@@ -112,11 +109,101 @@ body {
   }
 
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-bold text-brand-800 transition hover:bg-brand-100;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-bold text-brand-800 transition hover:bg-brand-100;
   }
 
   .prose-ar {
     @apply leading-8 text-stone-700;
+  }
+}
+
+@layer components {
+  .site-header {
+    @apply border-b border-brand-200/80 bg-cream/95 backdrop-blur;
+    box-shadow: 0 1px 0 rgba(16, 63, 45, 0.04);
+  }
+
+  .hero-editorial {
+    background:
+      radial-gradient(circle at 12% 18%, rgba(240, 185, 60, 0.16), transparent 22rem),
+      linear-gradient(120deg, #082c1f 0%, #103f2d 58%, #145138 100%);
+  }
+
+  .hero-editorial::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0;
+    height: 5px;
+    background: linear-gradient(90deg, #f0b93c, #e6a81c 45%, transparent 45%);
+    opacity: 0.9;
+  }
+
+  .section-heading {
+    @apply border-b border-brand-200 pb-3;
+  }
+
+  .schedule-shell {
+    @apply rounded-lg border border-brand-200 bg-white shadow-sm;
+  }
+
+  .schedule-header {
+    background: linear-gradient(100deg, #082c1f, #145138);
+  }
+
+  .page-header {
+    @apply mb-7 flex items-center gap-3 border-b border-brand-200 pb-5;
+  }
+
+  .tab-strip {
+    @apply mb-6 flex flex-wrap gap-2 border-b border-brand-200 pb-3;
+  }
+
+  .card-editorial {
+    box-shadow: 0 8px 24px rgba(16, 63, 45, 0.06);
+  }
+
+  .hero-reveal > * {
+    animation: hero-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .hero-reveal > *:nth-child(2) { animation-delay: 100ms; }
+  .hero-reveal > *:nth-child(3) { animation-delay: 180ms; }
+
+  .hero-editorial::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10%;
+    background: radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.08), transparent 24rem);
+    animation: hero-glow 9s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  .card-editorial {
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  }
+
+  .card-editorial:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 30px rgba(16, 63, 45, 0.11);
+  }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hero-glow {
+  from { transform: translate3d(-1%, -1%, 0) scale(1); opacity: 0.65; }
+  to { transform: translate3d(2%, 1%, 0) scale(1.05); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
