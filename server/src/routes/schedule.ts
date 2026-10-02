@@ -10,9 +10,22 @@ const WEEKDAYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
 const WEEKDAYS_ENUM = z.enum(WEEKDAYS, { errorMap: () => ({ message: 'اليوم غير صالح' }) });
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
-router.get('/', async (_req, res, next) => {
+const listQuerySchema = z.object({
+  from: z.string().regex(DATE_REGEX, 'تاريخ البداية غير صالح').optional(),
+  to: z.string().regex(DATE_REGEX, 'تاريخ النهاية غير صالح').optional(),
+});
+
+router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   try {
+    const { from, to } = req.query as unknown as z.infer<typeof listQuerySchema>;
+    const where: any = {};
+    if (from || to) {
+      where.date = {};
+      if (from) where.date.gte = from;
+      if (to) where.date.lte = to;
+    }
     const items = await prisma.scheduleItem.findMany({
+      where,
       orderBy: [{ date: 'asc' }, { weekdayKey: 'asc' }],
     });
     return res.json({ items });
@@ -21,6 +34,33 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
+const linkUrlSchema = z
+  .string()
+  .trim()
+  .nullish()
+  .transform((val) => {
+    if (!val) return null;
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    return `https://${trimmed}`;
+  })
+  .refine(
+    (val) => {
+      if (!val) return true;
+      if (val.startsWith('/')) return true;
+      try {
+        const u = new URL(val);
+        return u.protocol === 'http:' || u.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'الرابط غير صالح' }
+  );
+
 const createSchema = z.object({
   date: z.string().regex(DATE_REGEX, 'تاريخ غير صالح'),
   weekdayKey: WEEKDAYS_ENUM,
@@ -28,7 +68,7 @@ const createSchema = z.object({
   section: z.string().trim().max(100).nullish(),
   title: z.string().trim().min(1, 'العنوان مطلوب').max(200),
   notes: z.string().trim().max(2000).nullish(),
-  linkUrl: z.string().trim().url('الرابط غير صالح').max(500).nullish(),
+  linkUrl: linkUrlSchema,
 });
 
 router.post('/', requireAuth, requireScheduleManager, validate(createSchema), async (req, res, next) => {

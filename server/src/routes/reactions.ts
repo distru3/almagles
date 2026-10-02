@@ -5,10 +5,21 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = Router({ mergeParams: true });
 
-const REACTION_TYPES = ['👍', '❤️', '💗', '😮', '😢'];
+export const CANONICAL_REACTIONS: Record<string, string> = {
+  like: 'like',
+  love: 'love',
+  insight: 'insight',
+  '👍': 'like',
+  '❤️': 'love',
+  '💗': 'love',
+  '😮': 'insight',
+  '😢': 'insight',
+};
+
+const VALID_TYPES = ['like', 'love', 'insight', '👍', '❤️', '💗', '😮', '😢'] as const;
 
 const reactSchema = z.object({
-  type: z.enum(['👍', '❤️', '💗', '😮', '😢']),
+  type: z.enum(VALID_TYPES),
 });
 
 router.get('/', async (req, res, next) => {
@@ -19,7 +30,10 @@ router.get('/', async (req, res, next) => {
       select: { type: true },
     });
     const counts: Record<string, number> = {};
-    for (const r of reactions) counts[r.type] = (counts[r.type] ?? 0) + 1;
+    for (const r of reactions) {
+      const norm = CANONICAL_REACTIONS[r.type] ?? r.type;
+      counts[norm] = (counts[norm] ?? 0) + 1;
+    }
     return res.json({ counts });
   } catch (err) {
     next(err);
@@ -33,7 +47,7 @@ router.put('/', requireAuth, async (req, res, next) => {
     if (!parsed.success || !postId) {
       return res.status(400).json({ message: 'نوع التفاعل غير مدعوم' });
     }
-    const { type } = parsed.data;
+    const type = CANONICAL_REACTIONS[parsed.data.type] ?? parsed.data.type;
 
     const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
     if (!post) return res.status(404).json({ message: 'المنشور غير موجود' });
@@ -42,7 +56,9 @@ router.put('/', requireAuth, async (req, res, next) => {
       where: { postId_userId: { postId, userId: req.user!.id } },
     });
 
-    if (existing && existing.type === type) {
+    const existingType = existing ? (CANONICAL_REACTIONS[existing.type] ?? existing.type) : null;
+
+    if (existing && existingType === type) {
       await prisma.reaction.delete({ where: { id: existing.id } });
       return res.json({ removed: true, type });
     }

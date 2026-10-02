@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowRight, Calendar, User, X, ZoomIn } from 'lucide-react';
+import { ArrowRight, Calendar, User, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
 import { hijriDate, gregorianLong } from '../lib/dates';
@@ -17,6 +17,38 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleShare = async () => {
+    if (!post) return;
+    const shareData = {
+      title: post.title,
+      text: post.title,
+      url: window.location.href,
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // User cancelled or share failed silently
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        setToastMessage('تم نسخ رابط المقال بنجاح!');
+        setTimeout(() => {
+          setCopied(false);
+          setToastMessage(null);
+        }, 3000);
+      } catch {
+        setToastMessage('تعذّر نسخ الرابط');
+        setTimeout(() => setToastMessage(null), 3000);
+      }
+    }
+  };
 
   const loadComments = useCallback(async () => {
     try {
@@ -81,7 +113,7 @@ export default function PostPage() {
     <article className="container-site py-8">
       <Link
         to={`/category/${post.category.slug}`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-bold text-brand-600 hover:text-brand-800"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm font-bold text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-gold-300"
       >
         <ArrowRight className="h-4 w-4 rotate-180" />
         {post.category.name}
@@ -89,18 +121,33 @@ export default function PostPage() {
 
       <div className="mx-auto max-w-3xl">
         <div className="card card-editorial overflow-hidden">
-          <div className="flex flex-wrap items-center gap-3 px-5 pt-5 sm:px-7">
-            <Link to={`/category/${post.category.slug}`} className="chip text-xs">
-              {post.category.name}
-            </Link>
-            <span className="text-xs text-stone-400">{hijriDate(post.postDate)}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-7">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link to={`/category/${post.category.slug}`} className="chip text-xs">
+                {post.category.name}
+              </Link>
+              <span className="text-xs text-stone-400">{hijriDate(post.postDate)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleShare}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/80 bg-white/70 px-3 py-1.5 text-xs font-bold text-stone-700 shadow-sm transition hover:border-brand-400 hover:text-brand-800 dark:border-brand-800 dark:bg-brand-900/40 dark:text-stone-300 dark:hover:border-brand-600 dark:hover:text-gold-300"
+              title="مشاركة المقال"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Share2 className="h-3.5 w-3.5" />
+              )}
+              <span>{copied ? 'تم النسخ' : 'مشاركة'}</span>
+            </button>
           </div>
 
-          <h1 className="px-5 pt-3 font-display text-2xl font-black leading-10 text-brand-950 sm:px-7 sm:text-3xl">
+          <h1 className="px-5 pt-3 font-display text-2xl font-black leading-10 text-brand-950 sm:px-7 sm:text-3xl dark:text-stone-100">
             {post.title}
           </h1>
 
-          <div className="flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-stone-500 sm:px-7">
+          <div className="flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-stone-500 sm:px-7 dark:text-stone-400">
             <span className="inline-flex items-center gap-1.5">
               <User className="h-4 w-4" />
               {post.author.name}
@@ -116,7 +163,7 @@ export default function PostPage() {
               <button
                 type="button"
                 onClick={() => setZoomed(true)}
-                className="group relative mx-auto block w-full max-w-xl overflow-hidden rounded-2xl border border-brand-100 shadow-sm"
+                className="group relative mx-auto block w-full max-w-xl overflow-hidden rounded-2xl border border-brand-100 shadow-sm dark:border-brand-800"
                 aria-label="تكبير الصورة"
               >
                 <img src={image} alt={post.title} className="mx-auto w-full object-contain" />
@@ -129,7 +176,7 @@ export default function PostPage() {
 
           <div className="prose-ar whitespace-pre-line px-5 py-6 text-base sm:px-7">{post.description}</div>
 
-          <div className="border-t border-brand-100 px-5 py-4 sm:px-7">
+          <div className="border-t border-brand-100 px-5 py-4 sm:px-7 dark:border-brand-800/80">
             <ReactionBar
               postId={post.id}
               counts={post.reactionCounts}
@@ -151,15 +198,61 @@ export default function PostPage() {
           </div>
         </div>
 
+        {(post.prevPost || post.nextPost) && (
+          <nav aria-label="التنقل بين المقالات" className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {post.prevPost ? (
+              <Link
+                to={`/post/${post.prevPost.id}`}
+                className="card card-editorial group flex flex-col justify-between p-4 transition-all hover:border-brand-300 hover:shadow-md dark:hover:border-brand-600"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-400 group-hover:text-brand-700 dark:group-hover:text-gold-300">
+                  <ChevronRight className="h-4 w-4" />
+                  <span>المنشور السابق</span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-sm font-bold text-brand-950 group-hover:text-brand-700 dark:text-stone-100 dark:group-hover:text-gold-300">
+                  {post.prevPost.title}
+                </p>
+              </Link>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+
+            {post.nextPost ? (
+              <Link
+                to={`/post/${post.nextPost.id}`}
+                className="card card-editorial group flex flex-col justify-between p-4 transition-all hover:border-brand-300 hover:shadow-md text-left dark:hover:border-brand-600"
+              >
+                <div className="flex items-center justify-end gap-1.5 text-xs font-bold text-stone-400 group-hover:text-brand-700 dark:group-hover:text-gold-300">
+                  <span>المنشور التالي</span>
+                  <ChevronLeft className="h-4 w-4" />
+                </div>
+                <p className="mt-2 line-clamp-2 text-sm font-bold text-brand-950 group-hover:text-brand-700 text-right dark:text-stone-100 dark:group-hover:text-gold-300">
+                  {post.nextPost.title}
+                </p>
+              </Link>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+          </nav>
+        )}
+
         <div className="mx-auto mt-8 max-w-3xl">
           <CommentSection
             postId={post.id}
             postCategoryId={post.category.id}
+            postAuthorId={post.author.id}
             comments={comments}
             onChanged={loadComments}
           />
         </div>
       </div>
+
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-brand-950 px-4 py-2.5 text-sm font-bold text-white shadow-xl animate-fade-in dark:bg-stone-800 dark:border dark:border-stone-700">
+          <Check className="h-4 w-4 text-emerald-400" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {zoomed && post.imageUrl && (
         <div

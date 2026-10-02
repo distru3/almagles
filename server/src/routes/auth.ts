@@ -76,9 +76,15 @@ async function attachSession(user: { id: string; role: string; email: string; na
   const access = signAccessToken({ uid: user.id, role: user.role });
   const { raw, hash } = generateRefreshToken();
 
+  const current = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { refreshTokens: true },
+  });
+  const updatedTokens = [...(current?.refreshTokens ?? []).slice(-9), hash];
+
   await prisma.user.update({
     where: { id: user.id },
-    data: { refreshTokens: { push: hash } },
+    data: { refreshTokens: updatedTokens },
   });
 
   setAccessCookie(res, access);
@@ -257,13 +263,14 @@ router.post('/refresh', async (req, res, next) => {
     }
 
     const nextToken = generateRefreshToken();
+    const nextTokens = user.refreshTokens
+      .filter((t) => t !== hash)
+      .slice(-9)
+      .concat(nextToken.hash);
+
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        refreshTokens: user.refreshTokens
-          .filter((t) => t !== hash)
-          .concat(nextToken.hash),
-      },
+      data: { refreshTokens: nextTokens },
     });
 
     // Rotate: replace the old refresh cookie with a fresh one.

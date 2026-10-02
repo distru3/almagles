@@ -33,6 +33,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return res.status(400).json({ message: 'يُسمح بملف صورة واحد فقط' });
   }
 
+  // Prisma database errors
+  if ((err as any)?.code === 'P2002') {
+    return res.status(409).json({ message: 'هذا السجل مسجّل مسبقاً (تكرار في البيانات)' });
+  }
+  if ((err as any)?.code === 'P2025') {
+    return res.status(404).json({ message: 'السجل المطلوب غير موجود' });
+  }
+
   console.error('[server error]', err);
   res.status(500).json({ message: 'حدث خطأ غير متوقع في الخادم' });
 }

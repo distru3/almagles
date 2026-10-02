@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Image as ImageIcon, Loader as LoaderIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { compressImage } from '../../lib/image';
-import { todayISO } from '../../lib/dates';
+import { todayISO, hijriDate } from '../../lib/dates';
 import { useAuth } from '../../context/AuthContext';
 import type { Category, Post } from '../../lib/types';
 
@@ -94,40 +94,54 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl border border-brand-100 dark:border-brand-800/90 dark:bg-[#0b1c15]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-center justify-between border-b border-brand-100 bg-white px-6 py-4">
-          <h3 className="font-display text-lg font-black text-brand-950">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-100 bg-white/95 px-6 py-4 backdrop-blur dark:border-brand-800/80 dark:bg-[#0b1c15]/95">
+          <h3 className="font-display text-lg font-black text-brand-950 dark:text-stone-100">
             {post ? 'تعديل المنشور' : 'منشور جديد'}
           </h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100" aria-label="إغلاق">
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 dark:hover:bg-brand-900/50 dark:hover:text-stone-200 transition"
+            aria-label="إغلاق"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <form onSubmit={submit} className="space-y-4 px-6 py-5" encType="multipart/form-data">
           {error && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              {error}
+            </p>
           )}
 
           <div>
-            <label className="label">العنوان</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="label !mb-0">العنوان</label>
+              <span className="text-[11px] text-stone-400">{title.length}/200</span>
+            </div>
             <input
               className="input"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              placeholder="اكتب عنواناً جذاباً ومعبراً للمنشور…"
               maxLength={200}
               required
             />
           </div>
 
           <div>
-            <label className="label">نص المنشور</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="label !mb-0">نص المنشور</label>
+              <span className="text-[11px] text-stone-400">{description.length}/20000</span>
+            </div>
             <textarea
               className="input min-h-40 resize-y"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="اكتب المحتوى الكامل للمنشور هنا…"
               maxLength={20000}
               required
             />
@@ -137,7 +151,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
             <div>
               <label className="label">القسم</label>
               {options.length === 0 ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
                   لم تُوكَّل لك أي أقسام للنشر بعد — تواصل مع المشرف العام.
                 </p>
               ) : (
@@ -159,7 +173,14 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
               )}
             </div>
             <div>
-              <label className="label">تاريخ المنشور (يوم العرض)</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="label !mb-0">تاريخ المنشور</label>
+                {postDate && (
+                  <span className="text-[11px] font-bold text-brand-700 dark:text-gold-300">
+                    {hijriDate(postDate)}
+                  </span>
+                )}
+              </div>
               <input
                 type="date"
                 className="input"
@@ -167,14 +188,14 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
                 onChange={(e) => setPostDate(e.target.value)}
                 required
               />
-              <p className="mt-1 text-[11px] text-stone-400">سيظهر هذا المنشور ضمن منشورات هذا اليوم</p>
+              <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-400">سيظهر ضمن منشورات هذا اليوم في الموقع</p>
             </div>
           </div>
 
           <div>
-            <label className="label">صورة (اختياري)</label>
+            <label className="label">صورة الغلاف (اختياري)</label>
             {preview && !removeImage ? (
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 rounded-xl border border-brand-100 p-3 dark:border-brand-800/80 dark:bg-[#07160f]">
                 <img src={preview} alt="معاينة" className="h-24 w-40 rounded-xl object-cover" />
                 <div className="space-y-2">
                   <button
@@ -184,30 +205,30 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
                       setPreview(null);
                       setFile(null);
                     }}
-                    className="btn-danger"
+                    className="btn-danger !py-1 text-xs"
                   >
                     إزالة الصورة
                   </button>
-                  <label className="btn-outline cursor-pointer">
+                  <label className="btn-outline !py-1 text-xs cursor-pointer block text-center">
                     تغيير الصورة
                     <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pickImage} />
                   </label>
                 </div>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-200 bg-brand-50/50 px-4 py-6 text-sm text-brand-700 transition hover:border-brand-300 hover:bg-brand-50">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-200 bg-brand-50/50 px-4 py-6 text-sm text-brand-700 transition hover:border-brand-300 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#07160f] dark:text-gold-300 dark:hover:border-gold-500/60 dark:hover:bg-brand-900/30">
                 <ImageIcon className="h-6 w-6" />
-                <span className="font-bold">اضغط لاختيار صورة</span>
-                <span className="text-xs text-stone-400">JPG / PNG / WebP — حتى ١٠ ميغابايت</span>
+                <span className="font-bold">اضغط لاختيار صورة الغلاف</span>
+                <span className="text-xs text-stone-400 dark:text-stone-400">JPG / PNG / WebP — يتم ضغطها تلقائياً</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pickImage} />
               </label>
             )}
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-3 border-t border-brand-100/60 dark:border-brand-800/60">
             <button type="submit" className="btn-primary flex-1" disabled={busy || !title.trim() || !description.trim()}>
               {busy && <LoaderIcon className="h-4 w-4 animate-spin" />}
-              {post ? 'حفظ التعديلات' : 'نشر المنشور'}
+              <span>{post ? 'حفظ التعديلات' : 'نشر المنشور'}</span>
             </button>
             <button type="button" onClick={onClose} className="btn-outline">
               إلغاء
