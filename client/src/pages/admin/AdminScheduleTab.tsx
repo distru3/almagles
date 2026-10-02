@@ -25,6 +25,7 @@ import {
   isTodayKey,
 } from '../../lib/dates';
 import Spinner from '../../components/Spinner';
+import { normalizeUrl } from '../../lib/url';
 
 const TIME_LABELS = ['فجر', 'بعد العصر', 'بعد المغرب', 'بعد العشاء'];
 const SECTIONS = ['قرآن — تدبر', 'تزكية — الثقافة والسلوك', 'استدراك ومراجعة', 'استدراك وتسميع', ''];
@@ -151,10 +152,7 @@ export default function AdminScheduleTab() {
     }
     setBusy(true);
     setError(null);
-    let cleanUrl = form.linkUrl.trim();
-    if (cleanUrl && !cleanUrl.startsWith('/') && !cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-      cleanUrl = `https://${cleanUrl}`;
-    }
+    const cleanUrl = normalizeUrl(form.linkUrl);
     const body = {
       date: form.date,
       weekdayKey: weekdayKey(new Date(`${form.date}T12:00:00`)),
@@ -286,7 +284,7 @@ export default function AdminScheduleTab() {
                           )}
                           {item.linkUrl && (
                             <a
-                              href={item.linkUrl}
+                              href={normalizeUrl(item.linkUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="mt-0.5 inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800 dark:text-gold-400 dark:hover:text-gold-300 underline underline-offset-2"
@@ -335,7 +333,7 @@ export default function AdminScheduleTab() {
                             <p className="font-extrabold text-brand-950 dark:text-stone-100">{item.title}</p>
                             {item.linkUrl && (
                               <a
-                                href={item.linkUrl}
+                                href={normalizeUrl(item.linkUrl)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="mt-0.5 inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800 dark:text-gold-400 dark:hover:text-gold-300 underline underline-offset-2"

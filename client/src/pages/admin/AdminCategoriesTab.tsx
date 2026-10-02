@@ -62,7 +62,11 @@ export default function AdminCategoriesTab() {
   };
 
   const remove = async (c: Category) => {
-    if (!window.confirm(`حذف قسم «${c.name}»؟ سيتم حذف كل منشورات هذا القسم أيضاً.`)) return;
+    if (c.postCount > 0) {
+      alert(`لا يمكن حذف قسم «${c.name}» لأنه يحتوي على ${c.postCount} منشور — انقل المنشورات أو احذفها أولاً.`);
+      return;
+    }
+    if (!window.confirm(`حذف قسم «${c.name}»؟`)) return;
     try {
       await api(`/categories/${c.id}`, { method: 'DELETE' });
       await load();

@@ -21,6 +21,15 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 
   const status = (err as any)?.status;
   const message = (err as any)?.message;
+  const type = (err as any)?.type;
+
+  // body-parser errors (malformed JSON, oversized body) carry a 4xx status.
+  if (type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'بيانات الطلب غير صالحة' });
+  }
+  if (type === 'entity.too.large') {
+    return res.status(413).json({ message: 'حجم الطلب يتجاوز الحد المسموح' });
+  }
 
   // Multer file errors
   if (message?.startsWith('File too large')) {
@@ -39,6 +48,10 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   }
   if ((err as any)?.code === 'P2025') {
     return res.status(404).json({ message: 'السجل المطلوب غير موجود' });
+  }
+
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    return res.status(status).json({ message: 'طلب غير صالح' });
   }
 
   console.error('[server error]', err);

@@ -45,6 +45,19 @@ export function requireScheduleManager(req: Request, res: Response, next: NextFu
   next();
 }
 
+/**
+ * Super admin OR a writer with at least one category. Runs before the upload
+ * parser so other accounts can't push images into memory just to get a 403.
+ */
+export function requirePublisher(req: Request, res: Response, next: NextFunction) {
+  const user = req.user;
+  if (!user) return res.status(401).json({ message: 'يرجى تسجيل الدخول أولاً' });
+  if (user.role !== 'admin' && user.managedCategoryIds.length === 0) {
+    return res.status(403).json({ message: 'لا يمكنك النشر' });
+  }
+  next();
+}
+
 /** True when the user is super admin or manages the given category. */
 export function canManageCategory(user: AuthUser | undefined, categoryId: string): boolean {
   return user?.role === 'admin' || (user?.managedCategoryIds.includes(categoryId) ?? false);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Calendar, User, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
 import { hijriDate, gregorianLong } from '../lib/dates';
 import { cloudinaryUrl } from '../lib/image';
@@ -16,6 +16,7 @@ export default function PostPage() {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [zoomed, setZoomed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -62,12 +63,17 @@ export default function PostPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setNotFound(false);
+    setLoadFailed(false);
     (async () => {
       try {
         const res = await api<Post>(`/posts/${id}`);
         if (active) setPost(res);
-      } catch {
-        if (active) setNotFound(true);
+      } catch (err) {
+        if (!active) return;
+        // Only a 404 means the post is gone; anything else is a load failure.
+        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        else setLoadFailed(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -95,6 +101,14 @@ export default function PostPage() {
     return (
       <div className="flex justify-center py-20">
         <Spinner />
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="container-site py-16">
+        <EmptyState icon={Calendar} title="تعذّر تحميل المنشور" description="تحقق من اتصالك ثم أعد تحميل الصفحة" />
       </div>
     );
   }
