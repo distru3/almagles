@@ -26,7 +26,9 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      # Must be an address on a domain verified in Resend; the shared
+      # onboarding@resend.dev sender only delivers to the Resend account owner.
       - key: EMAIL_FROM
-        value: onboarding@resend.dev
+        sync: false
       - key: APP_BASE_URL
         sync: false

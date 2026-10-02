@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { ScheduleItem } from '../lib/types';
+import { isInternalPath, normalizeUrl } from '../lib/url';
 import {
   WEEKDAY_KEYS,
   WEEKDAY_NAMES,
@@ -25,16 +26,6 @@ import {
   isTodayKey,
   todayISO,
 } from '../lib/dates';
-
-function normalizeUrl(url: string | null | undefined): string {
-  if (!url) return '';
-  const trimmed = url.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return trimmed;
-  }
-  return `https://${trimmed}`;
-}
 
 interface Props {
   items: ScheduleItem[];
@@ -305,7 +296,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                           {a.linkUrl && (
                             <a
                               href={normalizeUrl(a.linkUrl)}
-                              target={a.linkUrl.startsWith('/') ? undefined : '_blank'}
+                              target={isInternalPath(a.linkUrl) ? undefined : '_blank'}
                               rel="noopener noreferrer"
                               className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-brand-200/90 bg-brand-50/70 px-2 py-1 text-[11px] font-bold text-brand-700 hover:bg-brand-100 hover:text-brand-900 dark:border-brand-700/60 dark:bg-brand-900/50 dark:text-gold-300 dark:hover:bg-brand-900 transition shadow-2xs"
                             >
@@ -422,7 +413,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                     {a.linkUrl && (
                       <a
                         href={normalizeUrl(a.linkUrl)}
-                        target={a.linkUrl.startsWith('/') ? undefined : '_blank'}
+                        target={isInternalPath(a.linkUrl) ? undefined : '_blank'}
                         rel="noopener noreferrer"
                         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-brand-200/90 bg-brand-50/70 px-3 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-100 hover:text-brand-900 dark:border-brand-700/60 dark:bg-brand-900/50 dark:text-gold-300 dark:hover:bg-brand-900 transition shadow-2xs"
                       >

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { prisma } from '../db.js';
-import { requireAuth, canManageCategory } from '../middleware/auth.js';
+import { requireAuth, requirePublisher, canManageCategory } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { optimizeImage, ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
 import { uploadPostImage, deletePostImage } from '../lib/cloudinary.js';
@@ -243,7 +243,7 @@ function parsePostFields(raw: any) {
   return parsed.data;
 }
 
-router.post('/', requireAuth, upload.single('image'), async (req, res, next) => {
+router.post('/', requirePublisher, upload.single('image'), async (req, res, next) => {
   try {
     const user = req.user!;
     const data = parsePostFields(req.body);
@@ -283,7 +283,7 @@ router.post('/', requireAuth, upload.single('image'), async (req, res, next) => 
   }
 });
 
-router.put('/:id', requireAuth, upload.single('image'), async (req, res, next) => {
+router.put('/:id', requirePublisher, upload.single('image'), async (req, res, next) => {
   try {
     const user = req.user!;
     const existing = await prisma.post.findUnique({ where: { id: req.params.id } });

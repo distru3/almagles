@@ -139,6 +139,12 @@ router.put('/:id', requireAdmin, validate(updateSchema), async (req, res, next) 
     if (finalRole === 'visitor' && ((categoryIds ?? []).length || canManageSchedule)) {
       return res.status(400).json({ message: 'الحساب العادي لا يُمنح أقساماً أو صلاحيات' });
     }
+    if (existing.role === 'admin' && finalRole !== 'admin') {
+      const admins = await prisma.user.count({ where: { role: 'admin' } });
+      if (admins <= 1) {
+        return res.status(400).json({ message: 'لا يمكن إزالة صلاحية آخر مشرف عام' });
+      }
+    }
 
     const user = await prisma.user.update({
       where: { id: existing.id },

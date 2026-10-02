@@ -59,22 +59,18 @@ router.put('/', requireAuth, async (req, res, next) => {
     const existingType = existing ? (CANONICAL_REACTIONS[existing.type] ?? existing.type) : null;
 
     if (existing && existingType === type) {
-      await prisma.reaction.delete({ where: { id: existing.id } });
+      // deleteMany: a double-click that already removed it is not an error.
+      await prisma.reaction.deleteMany({ where: { id: existing.id } });
       return res.json({ removed: true, type });
     }
 
-    if (existing) {
-      const updated = await prisma.reaction.update({
-        where: { id: existing.id },
-        data: { type },
-      });
-      return res.json({ removed: false, type: updated.type });
-    }
-
-    const created = await prisma.reaction.create({
-      data: { postId, userId: req.user!.id, type },
+    // upsert: two quick clicks can both see "no reaction" and race to create.
+    const saved = await prisma.reaction.upsert({
+      where: { postId_userId: { postId, userId: req.user!.id } },
+      update: { type },
+      create: { postId, userId: req.user!.id, type },
     });
-    return res.status(201).json({ removed: false, type: created.type });
+    return res.status(existing ? 200 : 201).json({ removed: false, type: saved.type });
   } catch (err) {
     next(err);
   }

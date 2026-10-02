@@ -74,22 +74,38 @@ async function parseResponse(res: Response): Promise<any> {
   return data;
 }
 
-export async function api<T = any>(path: string, opts: ApiOptions = {}, retried = false): Promise<T> {
-  const method = opts.method ?? 'GET';
-  const isAuthRoute = path.startsWith('/auth/');
+// Auth endpoints where a 401 means "bad credentials", not "access token lapsed".
+const NO_REFRESH_PATHS = new Set([
+  '/auth/login',
+  '/auth/signup',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/send-code',
+  '/auth/reset-password',
+]);
 
+// Single-flight: concurrent 401s share one refresh call, so parallel requests
+// don't rotate the refresh token out from under each other.
+let refreshing: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  refreshing ??= rawRequest('/auth/refresh', { method: 'POST' })
+    .then((res) => res.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+export async function api<T = any>(path: string, opts: ApiOptions = {}, retried = false): Promise<T> {
   const res = await rawRequest(path, opts);
 
-  if (res.status === 401 && !isAuthRoute && method !== 'GET' && !retried) {
-    // Single silent refresh attempt for state-changing calls whose token lapsed.
-    const refreshed = await rawRequest('/auth/refresh', { method: 'POST' });
-    if (refreshed.ok) {
+  if (res.status === 401 && !retried && !NO_REFRESH_PATHS.has(path)) {
+    // The access token lives 15 minutes; the refresh cookie keeps the session alive.
+    if (await refreshSession()) {
       return api<T>(path, opts, true);
     }
-  }
-  if (res.status === 401 && path === '/auth/me') {
-    // Let the AuthProvider handle an expired session quietly.
-    throw new ApiError('غير مسجل', 401);
   }
 
   return parseResponse(res);

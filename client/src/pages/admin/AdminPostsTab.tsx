@@ -22,6 +22,11 @@ import Spinner from '../../components/Spinner';
 import EmptyState from '../../components/EmptyState';
 import PostFormModal from './PostFormModal';
 
+// The list endpoint returns per-type counts, not totalReactions.
+function reactionTotal(post: Post): number {
+  return Object.values(post.reactionCounts ?? {}).reduce((sum, n) => sum + n, 0);
+}
+
 export default function AdminPosts({ categories }: { categories: Category[] }) {
   const { user, loading: authLoading } = useAuth();
   const isSuper = user?.role === 'admin';
@@ -38,10 +43,17 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
     if (authLoading) return;
     setLoading(true);
     try {
-      const res = await api<{ items: Post[]; total: number }>(
-        `/posts?limit=200${isSuper ? '' : '&managed=1'}`
-      );
-      setPosts(res.items);
+      // Filtering/sorting below is client-side, so page through everything
+      // rather than silently stopping at the API's 200-per-page cap.
+      const all: Post[] = [];
+      for (let page = 1; ; page++) {
+        const res = await api<{ items: Post[]; total: number }>(
+          `/posts?limit=200&page=${page}${isSuper ? '' : '&managed=1'}`
+        );
+        all.push(...res.items);
+        if (res.items.length === 0 || all.length >= res.total) break;
+      }
+      setPosts(all);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر التحميل');
@@ -70,7 +82,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
         return a.postDate.localeCompare(b.postDate);
       }
       if (sortBy === 'reactions') {
-        return (b.totalReactions ?? 0) - (a.totalReactions ?? 0);
+        return reactionTotal(b) - reactionTotal(a);
       }
       if (sortBy === 'comments') {
         return (b.commentsCount ?? 0) - (a.commentsCount ?? 0);
@@ -318,10 +330,10 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                       <MessageSquare className="h-3 w-3" />
                       {post.commentsCount}
                     </span>
-                    {post.totalReactions !== undefined && post.totalReactions > 0 && (
+                    {reactionTotal(post) > 0 && (
                       <span className="inline-flex items-center gap-1 text-gold-600 dark:text-gold-400">
                         <Sparkles className="h-3 w-3" />
-                        {post.totalReactions}
+                        {reactionTotal(post)}
                       </span>
                     )}
                   </div>

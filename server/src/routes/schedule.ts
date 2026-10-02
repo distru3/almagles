@@ -34,6 +34,11 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   }
 });
 
+/** `//host` and `/\host` start with a slash but resolve to another site. */
+function isInternalPath(url: string): boolean {
+  return url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\');
+}
+
 const linkUrlSchema = z
   .string()
   .trim()
@@ -42,15 +47,13 @@ const linkUrlSchema = z
     if (!val) return null;
     const trimmed = val.trim();
     if (!trimmed) return null;
-    if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-    return `https://${trimmed}`;
+    if (isInternalPath(trimmed) || /^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed.replace(/^[/\\]+/, '')}`;
   })
   .refine(
     (val) => {
       if (!val) return true;
-      if (val.startsWith('/')) return true;
+      if (isInternalPath(val)) return true;
       try {
         const u = new URL(val);
         return u.protocol === 'http:' || u.protocol === 'https:';

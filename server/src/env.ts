@@ -15,7 +15,7 @@ export const env = {
   PORT: Number(process.env.PORT ?? 4000),
   DATABASE_URL: required('DATABASE_URL'),
   JWT_SECRET: required('JWT_SECRET'),
-  JWT_ACCESS_TTL: process.env.JWT_ACCESS_TTL ?? '15m',
+  ACCESS_TTL_MINUTES: Number(process.env.ACCESS_TTL_MINUTES ?? 15),
   REFRESH_TTL_DAYS: Number(process.env.REFRESH_TTL_DAYS ?? 30),
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? null,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ?? null,
@@ -24,7 +24,10 @@ export const env = {
   EMAIL_FROM: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
   APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
   MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
-  SEED_ADMIN_PASSWORD: required('SEED_ADMIN_PASSWORD'),
 };
 
 export const isProd = env.NODE_ENV === 'production';
+
+// Resend's shared sender only delivers to the Resend account owner's own address.
+export const usesSandboxSender = env.EMAIL_FROM.endsWith('@resend.dev');
+

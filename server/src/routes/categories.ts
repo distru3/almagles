@@ -93,8 +93,18 @@ router.put('/:id', requireAdmin, validate(updateSchema), async (req, res, next) 
 router.delete('/:id', requireAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.category.findUnique({ where: { id } });
+    const existing = await prisma.category.findUnique({
+      where: { id },
+      include: { _count: { select: { posts: true } } },
+    });
     if (!existing) return res.status(404).json({ message: 'القسم غير موجود' });
+    // Deleting cascades to every post and comment in the category, and leaves
+    // their Cloudinary images orphaned — require an empty category instead.
+    if (existing._count.posts > 0) {
+      return res.status(409).json({
+        message: `لا يمكن حذف قسم يحتوي على منشورات (${existing._count.posts}) — انقل المنشورات أو احذفها أولاً`,
+      });
+    }
     await prisma.category.delete({ where: { id } });
     return res.json({ ok: true });
   } catch (err) {
