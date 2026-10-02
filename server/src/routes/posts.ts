@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { optimizeImage, ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
 import { uploadPostImage, deletePostImage } from '../lib/cloudinary.js';
 import { HttpError } from '../middleware/error.js';
+import { CANONICAL_REACTIONS } from './reactions.js';
 
 const router = Router();
 
@@ -24,8 +25,10 @@ const upload = multer({
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const listQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
   date: z.string().regex(DATE_REGEX, 'التاريخ غير صالح').optional(),
   category: z.string().min(1).optional(),
+  sort: z.enum(['newest', 'oldest', 'reactions']).default('newest'),
   managed: z
     .string()
     .refine((v) => v === '1' || v === '0', 'قيمة غير صالحة')
@@ -46,7 +49,8 @@ async function reactionData(postIds: string[], userId?: string) {
   const counts = new Map<string, Record<string, number>>();
   for (const g of grouped) {
     const row = counts.get(g.postId) ?? {};
-    row[g.type] = g._count._all;
+    const norm = CANONICAL_REACTIONS[g.type] ?? g.type;
+    row[norm] = (row[norm] ?? 0) + g._count._all;
     counts.set(g.postId, row);
   }
   const mine = new Map<string, string>();
@@ -55,14 +59,16 @@ async function reactionData(postIds: string[], userId?: string) {
       where: { postId: { in: postIds }, userId },
       select: { postId: true, type: true },
     });
-    for (const r of myReactions) mine.set(r.postId, r.type);
+    for (const r of myReactions) {
+      mine.set(r.postId, CANONICAL_REACTIONS[r.type] ?? r.type);
+    }
   }
   return { counts, mine };
 }
 
 router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   try {
-    const { date, category, managed, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
+    const { q, date, category, sort, managed, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
     const user = req.user;
     let userId = user?.id;
 
@@ -73,6 +79,12 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
     }
 
     const where: any = {};
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+      ];
+    }
     if (date) where.postDate = date;
     if (managed === '1' && user && user.role !== 'admin') where.categoryId = { in: user.managedCategoryIds };
     if (category) {
@@ -81,11 +93,20 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
       where.categoryId = cat.id;
     }
 
-    const [total, posts, commentRows] = await Promise.all([
+    let orderBy: any[];
+    if (sort === 'oldest') {
+      orderBy = [{ postDate: 'asc' }, { createdAt: 'asc' }];
+    } else if (sort === 'reactions') {
+      orderBy = [{ reactions: { _count: 'desc' } }, { postDate: 'desc' }, { createdAt: 'desc' }];
+    } else {
+      orderBy = [{ postDate: 'desc' }, { createdAt: 'desc' }];
+    }
+
+    const [total, posts] = await Promise.all([
       prisma.post.count({ where }),
       prisma.post.findMany({
         where,
-        orderBy: [{ postDate: 'desc' }, { createdAt: 'desc' }],
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
         include: {
@@ -93,17 +114,22 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
           author: { select: { id: true, name: true } },
         },
       }),
-      prisma.comment.groupBy({
-        by: ['postId'],
-        where: { postId: { in: (await prisma.post.findMany({ where, select: { id: true } })).map((p) => p.id) } },
-        _count: { _all: true },
-      }),
+    ]);
+
+    const postIds = posts.map((p) => p.id);
+    const [commentRows, { counts, mine }] = await Promise.all([
+      postIds.length > 0
+        ? prisma.comment.groupBy({
+            by: ['postId'],
+            where: { postId: { in: postIds } },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+      reactionData(postIds, userId),
     ]);
 
     const commentCounts = new Map<string, number>();
     for (const c of commentRows) commentCounts.set(c.postId, c._count._all);
-
-    const { counts, mine } = await reactionData(posts.map((p) => p.id), userId);
 
     return res.json({
       items: posts.map((p) => ({
@@ -146,21 +172,51 @@ router.get('/:id', async (req, res, next) => {
       select: { type: true },
     });
     const counts: Record<string, number> = {};
-    for (const r of reactions) counts[r.type] = (counts[r.type] ?? 0) + 1;
+    for (const r of reactions) {
+      const norm = CANONICAL_REACTIONS[r.type] ?? r.type;
+      counts[norm] = (counts[norm] ?? 0) + 1;
+    }
 
     let myReaction: string | null = null;
     if (req.user) {
       const me = await prisma.reaction.findUnique({
         where: { postId_userId: { postId: post.id, userId: req.user.id } },
       });
-      myReaction = me?.type ?? null;
+      myReaction = me ? (CANONICAL_REACTIONS[me.type] ?? me.type) : null;
     }
+
+    const [prevPost, nextPost] = await Promise.all([
+      prisma.post.findFirst({
+        where: {
+          categoryId: post.categoryId,
+          OR: [
+            { postDate: { lt: post.postDate } },
+            { postDate: post.postDate, createdAt: { lt: post.createdAt } },
+          ],
+        },
+        orderBy: [{ postDate: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true, title: true, postDate: true },
+      }),
+      prisma.post.findFirst({
+        where: {
+          categoryId: post.categoryId,
+          OR: [
+            { postDate: { gt: post.postDate } },
+            { postDate: post.postDate, createdAt: { gt: post.createdAt } },
+          ],
+        },
+        orderBy: [{ postDate: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, title: true, postDate: true },
+      }),
+    ]);
 
     return res.json({
       ...post,
       reactionCounts: counts,
       totalReactions: reactions.length,
       myReaction,
+      prevPost,
+      nextPost,
     });
   } catch (err) {
     next(err);

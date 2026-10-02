@@ -10,11 +10,14 @@ import Spinner from '../components/Spinner';
 
 const PAGE_SIZE = 9;
 
+type SortType = 'newest' | 'reactions' | 'oldest';
+
 export default function CategoryPage() {
   const { slug = '' } = useParams();
   const { user } = useAuth();
   const [category, setCategory] = useState<Category | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [sort, setSort] = useState<SortType>('newest');
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -30,7 +33,7 @@ export default function CategoryPage() {
         const [catRes, postsRes] = await Promise.all([
           api<{ categories: Category[] }>('/categories'),
           api<{ items: Post[]; total: number }>(
-            `/posts?category=${encodeURIComponent(slug)}&page=1&limit=${PAGE_SIZE}`,
+            `/posts?category=${encodeURIComponent(slug)}&sort=${sort}&page=1&limit=${PAGE_SIZE}`,
           ),
         ]);
         if (!active) return;
@@ -47,14 +50,14 @@ export default function CategoryPage() {
     return () => {
       active = false;
     };
-  }, [slug]);
+  }, [slug, sort]);
 
   const loadMore = async () => {
     if (loadingMore) return;
     setLoadingMore(true);
     try {
       const res = await api<{ items: Post[]; total: number }>(
-        `/posts?category=${encodeURIComponent(slug)}&page=${page + 1}&limit=${PAGE_SIZE}`,
+        `/posts?category=${encodeURIComponent(slug)}&sort=${sort}&page=${page + 1}&limit=${PAGE_SIZE}`,
       );
       setPosts((prev) => [...prev, ...res.items]);
       setTotal(res.total);
@@ -66,22 +69,61 @@ export default function CategoryPage() {
 
   return (
     <div className="container-site py-8">
-      <div className="page-header flex-wrap justify-between">
+      <div className="page-header flex-wrap justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-800 text-white">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-800 text-white dark:bg-brand-900 dark:text-gold-400">
             <FolderOpen className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="font-display text-2xl font-black text-brand-950">{category?.name ?? '…'}</h1>
-            {!loading && <p className="text-sm text-stone-500">{total} منشور — الأحدث أولاً</p>}
+            <h1 className="font-display text-2xl font-black text-brand-950 dark:text-stone-100">
+              {category?.name ?? '…'}
+            </h1>
+            {!loading && <p className="text-sm text-stone-500 dark:text-stone-400">{total} منشور</p>}
           </div>
         </div>
-        {user?.role === 'admin' && (
-          <Link to="/admin" className="btn-primary">
-            <PenLine className="h-4 w-4" />
-            إضافة منشور
-          </Link>
-        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sorting Pills */}
+          <div className="inline-flex items-center gap-1 rounded-xl border border-brand-200/80 bg-white p-1 shadow-sm dark:border-brand-800/80 dark:bg-brand-900/60">
+            <button
+              onClick={() => setSort('newest')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                sort === 'newest'
+                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
+                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+              }`}
+            >
+              الأحدث
+            </button>
+            <button
+              onClick={() => setSort('reactions')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                sort === 'reactions'
+                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
+                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+              }`}
+            >
+              الأكثر تفاعلاً
+            </button>
+            <button
+              onClick={() => setSort('oldest')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                sort === 'oldest'
+                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
+                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+              }`}
+            >
+              الأقدم
+            </button>
+          </div>
+
+          {user?.role === 'admin' && (
+            <Link to="/admin" className="btn-primary">
+              <PenLine className="h-4 w-4" />
+              إضافة منشور
+            </Link>
+          )}
+        </div>
       </div>
 
       {loading ? (

@@ -25,6 +25,8 @@ export interface Post {
   myReaction: string | null;
   commentsCount: number;
   totalReactions?: number;
+  prevPost?: { id: string; title: string; postDate: string } | null;
+  nextPost?: { id: string; title: string; postDate: string } | null;
 }
 
 export interface CommentItem {
@@ -35,6 +37,7 @@ export interface CommentItem {
   parentId: string | null;
   authorId: string;
   authorName: string;
+  authorRole?: string;
   createdAt: string;
   repliesCount: number;
 }

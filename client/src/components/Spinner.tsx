@@ -12,7 +12,7 @@ export default function Spinner({ full = false }: { full?: boolean }) {
 function SpinnerIcon() {
   return (
     <span
-      className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-700"
+      className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-brand-200 border-t-brand-700 dark:border-brand-800 dark:border-t-gold-400"
       role="status"
       aria-label="جارٍ التحميل"
     />
