@@ -3,7 +3,8 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { hashPassword, verifyPassword, dummyPasswordHash } from '../lib/password.js';
-import { signAccessToken, generateRefreshToken, hashRefreshToken } from '../lib/tokens.js';
+import { signAccessToken } from '../lib/tokens.js';
+import { createSession, rotateSession, revokeSession, revokeAllSessions } from '../lib/sessions.js';
 import { setAccessCookie, setRefreshCookie, clearAuthCookies, setCsrfCookie } from '../lib/cookies.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -72,20 +73,8 @@ function publicUser(user: {
 }
 
 async function attachSession(user: { id: string; role: string; email: string; name: string }, req: Request, res: Response) {
-  const now = Date.now();
   const access = signAccessToken({ uid: user.id, role: user.role });
-  const { raw, hash } = generateRefreshToken();
-
-  const current = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { refreshTokens: true },
-  });
-  const updatedTokens = [...(current?.refreshTokens ?? []).slice(-9), hash];
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { refreshTokens: updatedTokens },
-  });
+  const raw = await createSession(user.id);
 
   setAccessCookie(res, access);
   setRefreshCookie(res, raw);
@@ -200,8 +189,9 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res, n
     const passwordHash = await hashPassword(password);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, refreshTokens: [] },
+      data: { passwordHash },
     });
+    await revokeAllSessions(user.id);
     return res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -233,19 +223,7 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
 router.post('/logout', async (req, res, next) => {
   try {
     const raw = req.cookies?.alm_refresh as string | undefined;
-    if (raw) {
-      const hash = hashRefreshToken(raw);
-      const owner = await prisma.user.findFirst({
-        where: { refreshTokens: { has: hash } },
-        select: { id: true, refreshTokens: true },
-      });
-      if (owner) {
-        await prisma.user.update({
-          where: { id: owner.id },
-          data: { refreshTokens: owner.refreshTokens.filter((t) => t !== hash) },
-        });
-      }
-    }
+    if (raw) await revokeSession(raw);
     clearAuthCookies(res);
     return res.json({ ok: true });
   } catch (err) {
@@ -259,38 +237,27 @@ router.post('/refresh', async (req, res, next) => {
     if (!raw) {
       return res.status(401).json({ message: 'لا توجد جلسة نشطة' });
     }
-    const hash = hashRefreshToken(raw);
-    const user = await prisma.user.findFirst({
-      where: { refreshTokens: { has: hash } },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        canManageSchedule: true,
-        refreshTokens: true,
-        managedCategories: { select: { id: true } },
-      },
-    });
-    if (!user) {
+    const rotated = await rotateSession(raw);
+    const user = rotated
+      ? await prisma.user.findUnique({
+          where: { id: rotated.userId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            canManageSchedule: true,
+            managedCategories: { select: { id: true } },
+          },
+        })
+      : null;
+    if (!rotated || !user) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: 'انتهت الجلسة، الرجاء تسجيل الدخول مجدداً' });
     }
 
-    const nextToken = generateRefreshToken();
-    const nextTokens = user.refreshTokens
-      .filter((t) => t !== hash)
-      .slice(-9)
-      .concat(nextToken.hash);
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { refreshTokens: nextTokens },
-    });
-
-    // Rotate: replace the old refresh cookie with a fresh one.
-    const access = signAccessToken({ uid: user.id, role: user.role });
-    setAccessCookie(res, access);
-    setRefreshCookie(res, nextToken.raw);
+    setAccessCookie(res, signAccessToken({ uid: user.id, role: user.role }));
+    setRefreshCookie(res, rotated.raw);
     const csrf = (req.cookies?.alm_csrf as string | undefined) ?? crypto.randomBytes(24).toString('hex');
     setCsrfCookie(res, csrf);
 
