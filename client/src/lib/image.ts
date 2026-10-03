@@ -1,3 +1,9 @@
+/**
+ * Upload ceiling after compression. The host (Vercel) rejects request bodies
+ * over 4.5 MB, and the form fields share that budget with the image.
+ */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 /** Client-side compression: downscale large phone photos before upload. */
 export async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
@@ -13,9 +19,11 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.82): 
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, w, h);
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', quality),
-    );
+    const encode = (type: string) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+    // Browsers without WebP encoding silently return PNG; fall back to JPEG instead.
+    let blob = await encode('image/webp');
+    if (!blob || blob.type !== 'image/webp') blob = await encode('image/jpeg');
     return blob ?? file;
   } finally {
     bitmap.close();

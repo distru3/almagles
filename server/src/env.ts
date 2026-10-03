@@ -11,7 +11,9 @@ function required(name: string): string {
 }
 
 export const env = {
-  NODE_ENV: process.env.NODE_ENV ?? 'development',
+  // Vercel sets VERCEL=1. Don't set NODE_ENV=production there yourself: it
+  // also applies at build time and makes npm skip devDependencies.
+  NODE_ENV: process.env.NODE_ENV ?? (process.env.VERCEL ? 'production' : 'development'),
   PORT: Number(process.env.PORT ?? 4000),
   DATABASE_URL: required('DATABASE_URL'),
   JWT_SECRET: required('JWT_SECRET'),

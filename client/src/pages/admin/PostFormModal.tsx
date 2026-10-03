@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Image as ImageIcon, Loader as LoaderIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import { compressImage } from '../../lib/image';
+import { compressImage, MAX_UPLOAD_BYTES } from '../../lib/image';
 import { todayISO, hijriDate } from '../../lib/dates';
 import { useAuth } from '../../context/AuthContext';
 import type { Category, Post } from '../../lib/types';
@@ -49,7 +49,12 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     }
     try {
       const blob = await compressImage(selected);
-      const next = new File([blob], selected.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
+      if (blob.size > MAX_UPLOAD_BYTES) {
+        setError('الصورة كبيرة جداً حتى بعد الضغط — اختر صورة أصغر (٤ ميغابايت كحد أقصى)');
+        return;
+      }
+      const ext = blob.type === 'image/webp' ? '.webp' : blob.type === 'image/png' ? '.png' : '.jpg';
+      const next = new File([blob], selected.name.replace(/\.[^.]+$/, '') + ext, { type: blob.type || selected.type });
       setFile(next);
       setPreview(URL.createObjectURL(next));
       setRemoveImage(false);
