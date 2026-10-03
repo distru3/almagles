@@ -76,9 +76,15 @@ async function attachSession(user: { id: string; role: string; email: string; na
   const access = signAccessToken({ uid: user.id, role: user.role });
   const { raw, hash } = generateRefreshToken();
 
+  const current = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { refreshTokens: true },
+  });
+  const updatedTokens = [...(current?.refreshTokens ?? []).slice(-9), hash];
+
   await prisma.user.update({
     where: { id: user.id },
-    data: { refreshTokens: { push: hash } },
+    data: { refreshTokens: updatedTokens },
   });
 
   setAccessCookie(res, access);
@@ -105,8 +111,15 @@ async function issueCode(email: string, purpose: 'signup' | 'reset') {
   await prisma.verificationCode.create({
     data: { email, purpose, codeHash: hashOtp(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) },
   });
-  const sent = await sendVerificationEmail(email, purpose, code);
-  return { devCode: sent.devCode, delivered: sent.delivered };
+  try {
+    const sent = await sendVerificationEmail(email, purpose, code);
+    return { devCode: sent.devCode, delivered: sent.delivered };
+  } catch (err) {
+    // Drop the undelivered code so the resend cooldown doesn't block a retry.
+    await prisma.verificationCode.deleteMany({ where: { email, purpose } });
+    console.error('[mail] send failed', err);
+    throw new HttpError(502, 'تعذّر إرسال رمز التحقق، يرجى المحاولة لاحقاً');
+  }
 }
 
 async function verifyCode(email: string, purpose: 'signup' | 'reset', code: string) {
@@ -117,20 +130,26 @@ async function verifyCode(email: string, purpose: 'signup' | 'reset', code: stri
   if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
     throw new HttpError(400, 'رمز التحقق غير صحيح أو منتهي الصلاحية');
   }
-  if (record.attempts >= OTP_MAX_ATTEMPTS) {
+  // Claim an attempt atomically: a read-then-write counter lets parallel
+  // guesses all see the old count and bypass OTP_MAX_ATTEMPTS.
+  const claimed = await prisma.verificationCode.updateMany({
+    where: { id: record.id, usedAt: null, attempts: { lt: OTP_MAX_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (claimed.count === 0) {
     throw new HttpError(400, 'انتهت محاولات التحقق — اطلب رمزاً جديداً');
   }
   if (record.codeHash !== hashOtp(normalizeOtp(code))) {
-    await prisma.verificationCode.update({
-      where: { id: record.id },
-      data: { attempts: record.attempts + 1 },
-    });
     throw new HttpError(400, 'رمز التحقق غير صحيح');
   }
-  await prisma.verificationCode.update({
-    where: { id: record.id },
+  // Single use: only one concurrent request can mark the code as used.
+  const consumed = await prisma.verificationCode.updateMany({
+    where: { id: record.id, usedAt: null },
     data: { usedAt: new Date() },
   });
+  if (consumed.count === 0) {
+    throw new HttpError(400, 'رمز التحقق غير صحيح أو منتهي الصلاحية');
+  }
 }
 
 router.post('/send-code', validate(sendCodeSchema), async (req, res, next) => {
@@ -209,20 +228,21 @@ router.post('/login', validate(loginSchema), async (req, res, next) => {
   }
 });
 
-router.post('/logout', requireAuth, async (req, res, next) => {
+// No requireAuth: the access token may have lapsed, but the refresh token
+// still needs revoking.
+router.post('/logout', async (req, res, next) => {
   try {
     const raw = req.cookies?.alm_refresh as string | undefined;
     if (raw) {
       const hash = hashRefreshToken(raw);
-      const user = req.user!;
-      const current = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { refreshTokens: true },
+      const owner = await prisma.user.findFirst({
+        where: { refreshTokens: { has: hash } },
+        select: { id: true, refreshTokens: true },
       });
-      if (current) {
+      if (owner) {
         await prisma.user.update({
-          where: { id: user.id },
-          data: { refreshTokens: current.refreshTokens.filter((t) => t !== hash) },
+          where: { id: owner.id },
+          data: { refreshTokens: owner.refreshTokens.filter((t) => t !== hash) },
         });
       }
     }
@@ -257,13 +277,14 @@ router.post('/refresh', async (req, res, next) => {
     }
 
     const nextToken = generateRefreshToken();
+    const nextTokens = user.refreshTokens
+      .filter((t) => t !== hash)
+      .slice(-9)
+      .concat(nextToken.hash);
+
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        refreshTokens: user.refreshTokens
-          .filter((t) => t !== hash)
-          .concat(nextToken.hash),
-      },
+      data: { refreshTokens: nextTokens },
     });
 
     // Rotate: replace the old refresh cookie with a fresh one.

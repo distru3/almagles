@@ -7,7 +7,7 @@ export function setAccessCookie(res: Response, token: string): void {
     secure: isProd,
     sameSite: 'lax',
     path: '/',
-    maxAge: 15 * 60 * 1000,
+    maxAge: env.ACCESS_TTL_MINUTES * 60 * 1000,
   });
 }
 

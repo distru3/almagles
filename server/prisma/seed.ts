@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/lib/password.js';
-import { env } from '../src/env.js';
 
 const prisma = new PrismaClient();
 
@@ -160,7 +159,8 @@ async function main() {
   console.log(`- ${weekRows.length} activities in the weekly schedule`);
 
   // Accounts
-  const adminPassword = env.SEED_ADMIN_PASSWORD;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword) throw new Error('Missing required environment variable: SEED_ADMIN_PASSWORD');
   const adminHash = await hashPassword(adminPassword);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@almagles.app' },

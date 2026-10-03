@@ -50,7 +50,7 @@ router.get('/post/:postId', async (req, res, next) => {
       where: { postId },
       orderBy: { createdAt: 'asc' },
       include: {
-        author: { select: { id: true, name: true } },
+        author: { select: { id: true, name: true, role: true } },
         _count: { select: { replies: true } },
       },
     });
@@ -62,6 +62,7 @@ router.get('/post/:postId', async (req, res, next) => {
         parentId: c.parentId,
         authorId: c.authorId,
         authorName: c.author.name,
+        authorRole: c.author.role,
         createdAt: c.createdAt,
         repliesCount: c._count.replies,
       })),
@@ -96,7 +97,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
         authorId: req.user!.id,
         parentId: finalParent,
       },
-      include: { author: { select: { id: true, name: true } } },
+      include: { author: { select: { id: true, name: true, role: true } } },
     });
     return res.status(201).json({
       comment: {
@@ -106,6 +107,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
         parentId: comment.parentId,
         authorId: comment.authorId,
         authorName: comment.author.name,
+        authorRole: comment.author.role,
         createdAt: comment.createdAt,
         repliesCount: 0,
       },
@@ -133,9 +135,15 @@ router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) =
     const updated = await prisma.comment.update({
       where: { id },
       data: { content },
-      include: { author: { select: { id: true, name: true } } },
+      include: { author: { select: { id: true, name: true, role: true } } },
     });
-    return res.json({ comment: { ...updated, authorName: updated.author.name } });
+    return res.json({
+      comment: {
+        ...updated,
+        authorName: updated.author.name,
+        authorRole: updated.author.role,
+      },
+    });
   } catch (err) {
     next(err);
   }

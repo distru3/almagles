@@ -19,6 +19,9 @@ import userRoutes from './routes/users.js';
 
 const app = express();
 app.disable('x-powered-by');
+// Render (and most PaaS) sit behind one reverse proxy; without this every
+// request appears to come from the proxy IP and shares one rate-limit bucket.
+app.set('trust proxy', 1);
 
 app.use(
   helmet({
@@ -40,35 +43,36 @@ app.use(
   }),
 );
 
+// Liveness probe for Render's health check and uptime pingers. Deliberately
+// skips the database so frequent pings don't keep Neon's compute awake.
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 
-// Login/signup/refresh are expensive; throttle them aggressively.
-app.use(
-  '/api/auth',
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }),
-);
-app.use(
-  '/api/auth/send-code',
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false }),
-);
-app.use(
-  '/api/auth/reset-password',
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false }),
-);
-app.use(
-  '/api/comments',
-  rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }),
-);
-app.use(
-  '/api/posts/:postId/reactions',
-  rateLimit({ windowMs: 10 * 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false }),
-);
-app.use(
-  '/api/posts',
-  rateLimit({ windowMs: 60 * 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false }),
-);
+// Rate limiting for production environments (skip GET reads to avoid locking out normal browsing)
+function limiter(windowMinutes: number, limit: number) {
+  return rateLimit({
+    windowMs: windowMinutes * 60 * 1000,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method === 'GET',
+    message: { message: 'طلبات كثيرة جداً، يرجى المحاولة لاحقاً' },
+  });
+}
+
+if (isProd) {
+  app.use('/api/auth', limiter(15, 60));
+  app.use('/api/auth/send-code', limiter(15, 5));
+  app.use('/api/auth/reset-password', limiter(15, 10));
+  app.use('/api/comments', limiter(10, 60));
+  app.use('/api/posts/:postId/reactions', limiter(10, 120));
+  app.use('/api/posts', limiter(60, 120));
+}
 
 app.use('/api', resolveUser);
 app.use('/api', csrfProtect);
@@ -97,4 +101,7 @@ app.use(errorHandler);
 
 app.listen(env.PORT, () => {
   console.log(`[server] listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  if (isProd && (!env.BREVO_API_KEY || !env.EMAIL_FROM)) {
+    console.warn('[mail] BREVO_API_KEY or EMAIL_FROM is not set — signup and password-reset codes will fail to send.');
+  }
 });

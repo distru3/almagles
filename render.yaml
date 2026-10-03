@@ -4,9 +4,11 @@ services:
     runtime: node
     region: frankfurt
     plan: free
-    buildCommand: npm ci && npx prisma generate --schema=server/prisma/schema.prisma && npx prisma migrate deploy --schema=server/prisma/schema.prisma && npm run build -w server && npm run build -w client
+    # --include=dev: NODE_ENV=production below also applies at build time and
+    # would otherwise skip TypeScript, Vite and the Prisma CLI.
+    buildCommand: npm ci --include=dev && npx prisma generate --schema=server/prisma/schema.prisma && npx prisma migrate deploy --schema=server/prisma/schema.prisma && npm run build -w server && npm run build -w client
     startCommand: npm run start -w server
-    healthCheckPath: /api/categories
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -16,17 +18,16 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: SEED_ADMIN_PASSWORD
-        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: RESEND_API_KEY
+      - key: BREVO_API_KEY
         sync: false
+      # The sender address verified in Brevo (Senders & IP → Senders).
       - key: EMAIL_FROM
-        value: onboarding@resend.dev
+        sync: false
       - key: APP_BASE_URL
         sync: false
