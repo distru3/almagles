@@ -11,7 +11,8 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import type { ScheduleItem } from '../lib/types';
+import type { ScheduleColumn, ScheduleItem } from '../lib/types';
+import { customSummary, linkText } from '../lib/schedule';
 import { isInternalPath, normalizeUrl } from '../lib/url';
 import {
   WEEKDAY_KEYS,
@@ -29,12 +30,16 @@ import {
 
 interface Props {
   items: ScheduleItem[];
+  columns?: ScheduleColumn[];
   loading?: boolean;
 }
 
-export default function ScheduleTable({ items, loading }: Props) {
+export default function ScheduleTable({ items, columns = [], loading }: Props) {
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || (user?.canManageSchedule ?? false);
+  // Admins edit from the dashboard; schedule managers have their own page.
+  const manageHref = (query = '') =>
+    user?.role === 'admin' ? `/admin?tab=schedule${query ? `&${query}` : ''}` : `/manage/schedule${query ? `?${query}` : ''}`;
   const [anchor, setAnchor] = useState<Date>(() => weekStart(new Date()));
   const [selectedMobileDate, setSelectedMobileDate] = useState<string>(() => todayISO());
 
@@ -100,7 +105,7 @@ export default function ScheduleTable({ items, loading }: Props) {
 
         <div className="flex items-center gap-2">
           {canManage && (
-            <Link to="/admin?tab=schedule" className="btn-outline hidden !min-h-10 !px-4 !text-sm sm:inline-flex">
+            <Link to={manageHref()} className="btn-outline hidden !min-h-10 !px-4 !text-sm sm:inline-flex">
               <Plus className="h-4 w-4" />
               إضافة نشاط
             </Link>
@@ -171,7 +176,7 @@ export default function ScheduleTable({ items, loading }: Props) {
             سيقوم المشرفون بإضافة مهام المقرر قريباً — تابع الجدول يومياً لمعرفة الجديد في كل مادة.
           </p>
           {canManage && (
-            <Link to="/admin?tab=schedule" className="btn-primary mt-2 !py-2 text-xs">
+            <Link to={manageHref()} className="btn-primary mt-2 !py-2 text-xs">
               <Plus className="h-4 w-4" />
               إضافة أول نشاط لهذا الأسبوع
             </Link>
@@ -216,7 +221,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                     </p>
                     {canManage && (
                       <Link
-                        to={`/admin?tab=schedule&date=${day.date}`}
+                        to={manageHref(`date=${day.date}`)}
                         className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted hover:bg-surface-2 hover:text-fg"
                         title={`إضافة نشاط ليوم ${WEEKDAY_NAMES[day.key]}`}
                       >
@@ -256,7 +261,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                             </div>
                             {canManage && (
                               <Link
-                                to={`/admin?tab=schedule&edit=${a.id}`}
+                                to={manageHref(`edit=${a.id}`)}
                                 className="opacity-0 group-hover:opacity-100 text-muted hover:text-accent transition"
                                 title="تعديل في لوحة التحكم"
                               >
@@ -272,6 +277,9 @@ export default function ScheduleTable({ items, loading }: Props) {
                               {a.notes}
                             </p>
                           )}
+                          {customSummary(a, columns) && (
+                            <p className="mt-1 text-[11px] leading-5 text-fg-2">{customSummary(a, columns)}</p>
+                          )}
                           {a.linkUrl && (
                             <a
                               href={normalizeUrl(a.linkUrl)}
@@ -280,7 +288,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                               className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-line/90 bg-surface-2/70 px-2 py-1 text-[11px] font-bold text-accent hover:bg-surface-2 hover:text-fg transition shadow-2xs"
                             >
                               <ExternalLink className="h-3 w-3 shrink-0" />
-                              <span>رابط المادة</span>
+                              <span>{linkText(a)}</span>
                             </a>
                           )}
                         </div>
@@ -338,7 +346,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                   <span>{activeMobileActivities.length} أنشطة</span>
                   {canManage && (
                     <Link
-                      to={`/admin?tab=schedule&date=${activeMobileDate}`}
+                      to={manageHref(`date=${activeMobileDate}`)}
                       className="text-xs font-bold text-accent hover:text-fg underline"
                     >
                       + إضافة نشاط
@@ -373,7 +381,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                       </div>
                       {canManage && (
                         <Link
-                          to={`/admin?tab=schedule&edit=${a.id}`}
+                          to={manageHref(`edit=${a.id}`)}
                           className="text-muted hover:text-accent p-1"
                           title="تعديل في لوحة التحكم"
                         >
@@ -389,6 +397,9 @@ export default function ScheduleTable({ items, loading }: Props) {
                         {a.notes}
                       </p>
                     )}
+                    {customSummary(a, columns) && (
+                      <p className="mt-1 text-xs leading-6 text-muted">{customSummary(a, columns)}</p>
+                    )}
                     {a.linkUrl && (
                       <a
                         href={normalizeUrl(a.linkUrl)}
@@ -397,7 +408,7 @@ export default function ScheduleTable({ items, loading }: Props) {
                         className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-line/90 bg-surface-2/70 px-3 py-1.5 text-xs font-bold text-accent hover:bg-surface-2 hover:text-fg transition shadow-2xs"
                       >
                         <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                        <span>فتح رابط المادة</span>
+                        <span>{linkText(a)}</span>
                       </a>
                     )}
                   </div>
