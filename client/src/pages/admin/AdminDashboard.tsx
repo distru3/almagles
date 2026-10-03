@@ -89,7 +89,7 @@ export default function AdminDashboard() {
         api<{ categories: Category[] }>('/categories'),
         api<{ items: any[]; total: number }>('/posts?limit=1'),
         api<{ items: any[] }>('/schedule'),
-        api<{ comments: any[] }>('/comments'),
+        api<{ total: number }>('/comments?limit=1'),
         isSuper ? api<{ users: any[] }>('/users') : Promise.resolve({ users: [] }),
       ]);
 
@@ -101,7 +101,7 @@ export default function AdminDashboard() {
         categories: catRes.status === 'fulfilled' ? catRes.value.categories.length : 0,
         posts: postRes.status === 'fulfilled' ? (postRes.value.total ?? postRes.value.items.length) : 0,
         schedule: schedRes.status === 'fulfilled' ? schedRes.value.items.length : 0,
-        comments: commRes.status === 'fulfilled' ? commRes.value.comments.length : 0,
+        comments: commRes.status === 'fulfilled' ? commRes.value.total : 0,
         users: usersRes.status === 'fulfilled' ? (usersRes.value as any).users?.length ?? 0 : 0,
       });
     } catch {

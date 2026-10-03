@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, MessageSquare, MessagesSquare, Search, ExternalLink, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
@@ -15,47 +15,72 @@ function timeAgoFull(iso: string): string {
   return new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 }
 
+const PAGE_SIZE = 50;
+
+interface CommentsPage {
+  comments: CommentItem[];
+  total: number;
+}
+
 export default function AdminCommentsTab() {
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterReply, setFilterReply] = useState<'all' | 'direct' | 'reply'>('all');
+  // Ignores responses from superseded requests (e.g. earlier keystrokes).
+  const requestId = useRef(0);
 
-  const load = async () => {
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchPage = async (nextPage: number) => {
+    const id = ++requestId.current;
+    const params = new URLSearchParams({ page: String(nextPage), limit: String(PAGE_SIZE), type: filterReply });
+    if (debouncedSearch) params.set('q', debouncedSearch);
+    if (nextPage === 1) setLoading(true);
+    else setLoadingMore(true);
     try {
-      const res = await api<{ comments: CommentItem[] }>('/comments');
-      setComments(res.comments);
+      const res = await api<CommentsPage>(`/comments?${params}`);
+      if (id !== requestId.current) return;
+      setComments((prev) => (nextPage === 1 ? res.comments : [...prev, ...res.comments]));
+      setTotal(res.total);
+      setPage(nextPage);
+      setError(null);
     } catch (err) {
+      if (id !== requestId.current) return;
       setError(err instanceof ApiError ? err.message : 'تعذّر التحميل');
     } finally {
-      setLoading(false);
+      if (id === requestId.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    fetchPage(1);
+  }, [debouncedSearch, filterReply]);
 
   const remove = async (comment: CommentItem) => {
     if (!window.confirm('حذف هذا التعليق؟')) return;
     try {
       await api(`/comments/${comment.id}`, { method: 'DELETE' });
-      setComments((prev) => prev.filter((c) => c.id !== comment.id));
+      // Deleting a top-level comment also deletes its replies (cascade).
+      setComments((prev) => prev.filter((c) => c.id !== comment.id && c.parentId !== comment.id));
+      setTotal((t) => Math.max(0, t - 1 - (comment.parentId ? 0 : comment.repliesCount)));
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'تعذّر الحذف');
     }
   };
 
-  const filtered = comments.filter((c) => {
-    const matchesSearch = `${c.authorName} ${c.content} ${c.postTitle || ''}`
-      .toLowerCase()
-      .includes(search.trim().toLowerCase());
-    if (!matchesSearch) return false;
-    if (filterReply === 'direct') return !c.parentId;
-    if (filterReply === 'reply') return Boolean(c.parentId);
-    return true;
-  });
+  const isFiltered = debouncedSearch !== '' || filterReply !== 'all';
 
   return (
     <div>
@@ -65,7 +90,7 @@ export default function AdminCommentsTab() {
             إدارة التعليقات
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-            عرض {filtered.length} من أصل {comments.length} تعليق
+            عرض {comments.length} من أصل {total} تعليق
           </p>
         </div>
       </div>
@@ -139,13 +164,13 @@ export default function AdminCommentsTab() {
         <div className="flex justify-center py-16">
           <Spinner />
         </div>
-      ) : comments.length === 0 ? (
+      ) : comments.length === 0 && !isFiltered ? (
         <EmptyState
           icon={MessagesSquare}
           title="لا توجد تعليقات بعد"
           description="عندما يشارك الزوار تفاعلاتهم ستظهر تعليقاتهم هنا لإدارتها"
         />
-      ) : filtered.length === 0 ? (
+      ) : comments.length === 0 ? (
         <EmptyState
           icon={Search}
           title="لم يتم العثور على نتائج"
@@ -164,7 +189,7 @@ export default function AdminCommentsTab() {
         />
       ) : (
         <div className="space-y-2.5">
-          {filtered.map((c) => (
+          {comments.map((c) => (
             <div
               key={c.id}
               className="rounded-2xl border border-brand-100 bg-white p-4 shadow-2xs transition hover:border-brand-300 dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
@@ -224,6 +249,18 @@ export default function AdminCommentsTab() {
               </p>
             </div>
           ))}
+          {comments.length < total && (
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => fetchPage(page + 1)}
+                disabled={loadingMore}
+                className="btn-outline text-xs"
+              >
+                {loadingMore ? 'جارٍ التحميل…' : `تحميل المزيد (${total - comments.length} متبقٍ)`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
