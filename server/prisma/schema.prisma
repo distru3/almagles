@@ -14,47 +14,63 @@ enum Role {
 }
 
 model User {
-  id                String          @id @default(cuid())
+  id                String         @id @default(cuid())
   name              String
-  email             String          @unique
+  email             String         @unique
   passwordHash      String
-  role              Role            @default(visitor)
-  canManageSchedule Boolean         @default(false)
-  managedCategories Category[]      @relation("CategoryAdmins")
-  refreshTokens     String[]        @default([])
+  role              Role           @default(visitor)
+  canManageSchedule Boolean        @default(false)
+  managedCategories Category[]     @relation("CategoryAdmins")
+  refreshTokens     RefreshToken[]
   posts             Post[]
   comments          Comment[]
   reactions         Reaction[]
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+/// One row per login session. Only the SHA-256 of the cookie value is stored.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  /// Set when this token is exchanged for a new one; it stays usable for a
+  /// short grace window so tabs refreshing at the same moment both succeed.
+  rotatedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Category {
-  id              String   @id @default(cuid())
-  name            String
-  slug            String   @unique
-  order           Int      @default(0)
-  adminUsers      User[]   @relation("CategoryAdmins")
-  posts           Post[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  order      Int      @default(0)
+  adminUsers User[]   @relation("CategoryAdmins")
+  posts      Post[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Post {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   title         String
   description   String
   postDate      String
   imagePublicId String?
   imageUrl      String?
-  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category      Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   categoryId    String
-  author        User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author        User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId      String
   comments      Comment[]
   reactions     Reaction[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([postDate])
   @@index([categoryId])
@@ -104,14 +120,14 @@ model ScheduleItem {
 }
 
 model VerificationCode {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   email     String
   codeHash  String
   purpose   String
-  attempts  Int      @default(0)
+  attempts  Int       @default(0)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([email, purpose])
 }
