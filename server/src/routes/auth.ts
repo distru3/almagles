@@ -111,8 +111,15 @@ async function issueCode(email: string, purpose: 'signup' | 'reset') {
   await prisma.verificationCode.create({
     data: { email, purpose, codeHash: hashOtp(code), expiresAt: new Date(Date.now() + OTP_TTL_MS) },
   });
-  const sent = await sendVerificationEmail(email, purpose, code);
-  return { devCode: sent.devCode, delivered: sent.delivered };
+  try {
+    const sent = await sendVerificationEmail(email, purpose, code);
+    return { devCode: sent.devCode, delivered: sent.delivered };
+  } catch (err) {
+    // Drop the undelivered code so the resend cooldown doesn't block a retry.
+    await prisma.verificationCode.deleteMany({ where: { email, purpose } });
+    console.error('[mail] send failed', err);
+    throw new HttpError(502, 'تعذّر إرسال رمز التحقق، يرجى المحاولة لاحقاً');
+  }
 }
 
 async function verifyCode(email: string, purpose: 'signup' | 'reset', code: string) {
