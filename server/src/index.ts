@@ -43,6 +43,12 @@ app.use(
   }),
 );
 
+// Liveness probe for Render's health check and uptime pingers. Deliberately
+// skips the database so frequent pings don't keep Neon's compute awake.
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
