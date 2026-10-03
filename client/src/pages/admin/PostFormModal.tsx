@@ -47,15 +47,19 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
       setError('صيغة الصورة غير مدعومة — يُسمح بـ JPG أو PNG أو WebP');
       return;
     }
+    let next: File = selected;
     try {
       const blob = await compressImage(selected);
-      const next = new File([blob], selected.name.replace(/\.[^.]+$/, '.webp'), { type: 'image/webp' });
-      setFile(next);
-      setPreview(URL.createObjectURL(next));
-      setRemoveImage(false);
+      // Name and type come from what the browser actually produced.
+      const ext = blob.type === 'image/webp' ? '.webp' : blob.type === 'image/png' ? '.png' : '.jpg';
+      next = new File([blob], selected.name.replace(/\.[^.]+$/, '') + ext, { type: blob.type || selected.type });
     } catch {
-      setError('تعذّرت معالجة الصورة');
+      // Safari < 15 has no createImageBitmap. The original already passed the
+      // size/type checks and the server re-encodes it, so upload it as-is.
     }
+    setFile(next);
+    setPreview(URL.createObjectURL(next));
+    setRemoveImage(false);
   };
 
   const submit = async (e: React.FormEvent) => {

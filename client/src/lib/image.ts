@@ -13,9 +13,12 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.82): 
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, w, h);
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', quality),
-    );
+    const encode = (type: string) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+    // Browsers without WebP encoding (older Safari) silently return PNG,
+    // which is far larger than JPEG for photos — fall back to JPEG instead.
+    let blob = await encode('image/webp');
+    if (!blob || blob.type !== 'image/webp') blob = await encode('image/jpeg');
     return blob ?? file;
   } finally {
     bitmap.close();
