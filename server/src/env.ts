@@ -20,14 +20,13 @@ export const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? null,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ?? null,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ?? null,
-  RESEND_API_KEY: process.env.RESEND_API_KEY ?? null,
-  EMAIL_FROM: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
+  BREVO_API_KEY: process.env.BREVO_API_KEY ?? null,
+  // A sender address verified in Brevo (Senders & IP → Senders).
+  EMAIL_FROM: process.env.EMAIL_FROM ?? null,
+  EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME ?? 'رجال الأمة',
   APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
   MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
 };
 
 export const isProd = env.NODE_ENV === 'production';
-
-// Resend's shared sender only delivers to the Resend account owner's own address.
-export const usesSandboxSender = env.EMAIL_FROM.endsWith('@resend.dev');
 

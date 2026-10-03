@@ -24,10 +24,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: RESEND_API_KEY
+      - key: BREVO_API_KEY
         sync: false
-      # Must be an address on a domain verified in Resend; the shared
-      # onboarding@resend.dev sender only delivers to the Resend account owner.
+      # The sender address verified in Brevo (Senders & IP → Senders).
       - key: EMAIL_FROM
         sync: false
       - key: APP_BASE_URL

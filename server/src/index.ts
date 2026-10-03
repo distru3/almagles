@@ -5,7 +5,7 @@ import rateLimit from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { env, isProd, usesSandboxSender } from './env.js';
+import { env, isProd } from './env.js';
 import { resolveUser } from './middleware/resolve-user.js';
 import { csrfProtect } from './middleware/csrf.js';
 import { errorHandler, notFoundApi } from './middleware/error.js';
@@ -95,10 +95,7 @@ app.use(errorHandler);
 
 app.listen(env.PORT, () => {
   console.log(`[server] listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
-  if (isProd && usesSandboxSender) {
-    console.warn(
-      `[mail] EMAIL_FROM is ${env.EMAIL_FROM}: Resend only delivers from this sandbox sender to the ` +
-        'account owner. Verify a domain in Resend and set EMAIL_FROM to an address on it.',
-    );
+  if (isProd && (!env.BREVO_API_KEY || !env.EMAIL_FROM)) {
+    console.warn('[mail] BREVO_API_KEY or EMAIL_FROM is not set — signup and password-reset codes will fail to send.');
   }
 });
