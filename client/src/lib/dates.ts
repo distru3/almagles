@@ -28,10 +28,38 @@ const hijriFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
   year: 'numeric',
 });
 
+const hijriShortFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
+  day: 'numeric',
+  month: 'long',
+});
+
+const hijriDayFormatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
+  day: 'numeric',
+});
+
 /** e.g. "٤ صفر ١٤٤٨ هـ" */
 export function hijriDate(iso: string): string {
   const date = new Date(`${iso}T12:00:00`);
   return hijriFormatter.format(date);
+}
+
+/** e.g. "٤ صفر" without the year */
+export function hijriShort(iso: string): string {
+  const date = new Date(`${iso}T12:00:00`);
+  return hijriShortFormatter.format(date);
+}
+
+/** e.g. "٤" — Hijri day number */
+export function hijriDayNumber(iso: string): string {
+  const date = new Date(`${iso}T12:00:00`);
+  return hijriDayFormatter.format(date);
+}
+
+/** e.g. "من ٤ صفر إلى ١٠ صفر ١٤٤٨ هـ" */
+export function formatHijriWeekRange(start: Date, end: Date): string {
+  const startIso = toISODate(start);
+  const endIso = toISODate(end);
+  return `من ${hijriShort(startIso)} إلى ${hijriDate(endIso)}`;
 }
 
 export function gregorianLong(iso: string): string {

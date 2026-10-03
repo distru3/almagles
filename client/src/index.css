@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Cairo", "Tajawal", ui-sans-serif, sans-serif;
@@ -16,6 +18,7 @@
   --color-brand-900: #103f2d;
   --color-brand-950: #082c1f;
 
+  --color-gold-50: #fefbf3;
   --color-gold-100: #fdf3d4;
   --color-gold-200: #fae4a3;
   --color-gold-300: #f6d071;
@@ -23,6 +26,9 @@
   --color-gold-500: #e6a81c;
   --color-gold-600: #cf8e0d;
   --color-gold-700: #ad7309;
+  --color-gold-800: #8a5a0a;
+  --color-gold-900: #6b450c;
+  --color-gold-950: #3b2304;
 
   --color-cream: #faf7ef;
   --color-ink: #18231e;
@@ -212,3 +218,155 @@ body {
     font-family: var(--font-display);
   }
 }
+
+/* Dark Mode Overrides */
+html.dark {
+  --color-cream: #081711;
+  --color-ink: #eaf3ee;
+}
+
+html.dark body {
+  background-color: #081711;
+  background-image:
+    linear-gradient(rgba(240, 185, 60, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 185, 60, 0.025) 1px, transparent 1px);
+  color: #dbe7e1;
+}
+
+html.dark .card {
+  background-color: #0b1c15;
+  border-color: #173b2d;
+}
+
+html.dark .card-editorial {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .card-editorial:hover {
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+  border-color: #265945;
+}
+
+html.dark .site-header {
+  background-color: rgba(8, 23, 17, 0.94);
+  border-bottom-color: #183e2f;
+}
+
+html.dark .input {
+  background-color: #07160f;
+  border-color: #1b4535;
+  color: #eaf3ee;
+}
+
+html.dark .input:focus {
+  border-color: #2b9d66;
+  --tw-ring-color: rgba(43, 157, 102, 0.25);
+}
+
+html.dark select.input option {
+  background-color: #0b1c15;
+  color: #eaf3ee;
+}
+
+html.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
+}
+
+html.dark .label {
+  color: #cdddd5;
+}
+
+html.dark .btn-outline {
+  background-color: #0b1c15;
+  border-color: #1f4d3c;
+  color: #c8dfd5;
+}
+
+html.dark .btn-outline:hover {
+  background-color: #143528;
+  color: #ffffff;
+}
+
+html.dark .btn-danger {
+  background-color: rgba(127, 29, 29, 0.25);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+html.dark .btn-danger:hover {
+  background-color: rgba(127, 29, 29, 0.45);
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fecaca;
+}
+
+html.dark .chip {
+  background-color: #10291f;
+  border-color: #1c4736;
+  color: #9cd4b7;
+}
+
+html.dark .chip:hover {
+  background-color: #173b2c;
+}
+
+html.dark .chip span {
+  background-color: #081711;
+  color: #f6d071;
+}
+
+html.dark .schedule-shell {
+  background-color: #0b1c15;
+  border-color: #173b2d;
+}
+
+html.dark .section-heading,
+html.dark .page-header,
+html.dark .tab-strip {
+  border-bottom-color: #183e2f;
+}
+
+html.dark .text-brand-950,
+html.dark .text-brand-900,
+html.dark .text-brand-800 {
+  color: #f5efe3;
+}
+
+html.dark .text-brand-700,
+html.dark .text-brand-600 {
+  color: #72cb9a;
+}
+
+html.dark .text-stone-700,
+html.dark .text-stone-600 {
+  color: #cad8d0;
+}
+
+html.dark .text-stone-500,
+html.dark .text-stone-400 {
+  color: #8da49a;
+}
+
+html.dark .prose-ar {
+  color: #dbe7e1;
+}
+
+/* Fallback overrides for raw classes */
+html.dark .bg-white:not([class*="dark:bg-"]) {
+  background-color: #0b1c15;
+}
+
+html.dark .border-brand-100:not([class*="dark:border-"]),
+html.dark .border-brand-200:not([class*="dark:border-"]) {
+  border-color: #183e2f;
+}
+
+html.dark .border-brand-300:not([class*="dark:border-"]) {
+  border-color: #20503d;
+}
+
+html.dark .bg-brand-50:not([class*="dark:bg-"]),
+html.dark .bg-brand-100:not([class*="dark:bg-"]) {
+  background-color: #10291f;
+}
+

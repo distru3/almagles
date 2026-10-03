@@ -19,7 +19,7 @@ const TITLES: Record<MailPurpose, string> = {
 
 const LEAD: Record<MailPurpose, string> = {
   signup: 'أهلاً بك في رجال الأمة. استخدم الرمز أدناه لتأكيد إنشاء حسابك:',
-  reset: 'طلبنا استعادة كلمة مرورك. استخدم الرمز أدناه لإعادة تعيينها:',
+  reset: 'تلقّينا طلباً لاستعادة كلمة مرورك. استخدم الرمز أدناه لإعادة تعيينها:',
 };
 
 function escapeHtml(value: string): string {
@@ -81,26 +81,45 @@ function template(purpose: MailPurpose, code: string): string {
 </html>`;
 }
 
-async function sendViaResend(to: string, subject: string, html: string): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
+function plainText(purpose: MailPurpose, code: string): string {
+  return `${TITLES[purpose]}
+
+${LEAD[purpose]}
+
+${code}
+
+الرمز صالح لمدة ١٠ دقائق. إذا لم تكن طلبت هذا الرمز يمكنك تجاهل هذه الرسالة بأمان.`;
+}
+
+async function sendViaBrevo(to: string, subject: string, html: string, text: string): Promise<void> {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'api-key': env.BREVO_API_KEY!,
       'Content-Type': 'application/json',
+      Accept: 'application/json',
     },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject, html }),
+    body: JSON.stringify({
+      sender: { name: env.EMAIL_FROM_NAME, email: env.EMAIL_FROM },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      // A plain-text part improves spam scoring.
+      textContent: text,
+    }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Resend failed (${res.status}): ${body.slice(0, 200)}`);
+    throw new Error(`Brevo failed (${res.status}): ${body.slice(0, 200)}`);
   }
 }
 
 /**
  * Sends a verification code email. In development, MAIL_DEV_MODE (default '1')
  * skips the network and returns the code so the flow can be tested locally;
- * set MAIL_DEV_MODE=0 to deliver through Resend for a real delivery check.
- * Production always sends via Resend and requires a RESEND_API_KEY.
+ * set MAIL_DEV_MODE=0 to deliver through Brevo for a real delivery check.
+ * Production always sends via Brevo's HTTPS API (Render's free tier blocks
+ * outbound SMTP) and requires BREVO_API_KEY and EMAIL_FROM.
  */
 export async function sendVerificationEmail(to: string, purpose: MailPurpose, code: string): Promise<SendResult> {
   const devMode = !isProd && env.MAIL_DEV_MODE !== '0';
@@ -108,9 +127,9 @@ export async function sendVerificationEmail(to: string, purpose: MailPurpose, co
     console.log(`[mail:dev] ${purpose} code for ${to}: ${code}`);
     return { delivered: false, devCode: code };
   }
-  if (!env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY is not configured');
+  if (!env.BREVO_API_KEY || !env.EMAIL_FROM) {
+    throw new Error('BREVO_API_KEY and EMAIL_FROM must be configured');
   }
-  await sendViaResend(to, SUBJECTS[purpose], template(purpose, code));
+  await sendViaBrevo(to, SUBJECTS[purpose], template(purpose, code), plainText(purpose, code));
   return { delivered: true, devCode: null };
 }

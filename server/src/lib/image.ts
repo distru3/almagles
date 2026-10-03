@@ -8,7 +8,8 @@ export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
  * Cloudinary — smaller payload, faster upload, consistent format.
  */
 export async function optimizeImage(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
+  // Cap decoded size so a small, highly compressed file can't expand to gigabytes in memory.
+  return sharp(buffer, { limitInputPixels: 40_000_000 })
     .rotate()
     .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
     .webp({ quality: 82 })
