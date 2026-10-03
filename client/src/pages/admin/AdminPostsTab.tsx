@@ -109,10 +109,10 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
       {/* Header bar */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-black text-brand-950 dark:text-stone-100">
+          <h2 className="font-display text-xl font-black text-fg">
             إدارة المنشورات
           </h2>
-          <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             عرض {visiblePosts.length} من أصل {posts.length} منشور
           </p>
         </div>
@@ -123,11 +123,11 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
       </div>
 
       {/* Control Bar: Search + Category Selector + Sort + View Mode */}
-      <div className="mb-6 space-y-3 rounded-2xl border border-brand-100 bg-white/70 p-3.5 backdrop-blur-sm shadow-2xs dark:border-brand-800/80 dark:bg-[#0b1c15]">
+      <div className="mb-6 space-y-3 rounded-2xl border border-line bg-surface/70 p-3.5 backdrop-blur-sm shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Search box */}
           <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               className="input !py-2 pr-9 pl-8 text-xs w-full"
               value={query}
@@ -139,7 +139,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-fg-2"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -148,12 +148,12 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
 
           {/* Controls: Sort + View Mode */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-brand-200/80 bg-white px-2.5 py-1 text-xs dark:border-brand-800 dark:bg-[#07160f]">
-              <ArrowUpDown className="h-3.5 w-3.5 text-stone-400" />
+            <div className="flex items-center gap-1.5 rounded-xl border border-line/80 bg-surface px-2.5 py-1 text-xs">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted" />
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-transparent text-xs font-bold text-stone-700 dark:text-stone-200 focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-fg focus:outline-none cursor-pointer"
               >
                 <option value="newest">الأحدث أولاً</option>
                 <option value="oldest">الأقدم أولاً</option>
@@ -163,14 +163,14 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
             </div>
 
             {/* View Mode Toggle Buttons */}
-            <div className="flex items-center rounded-xl border border-brand-200/80 bg-white p-0.5 dark:border-brand-800 dark:bg-[#07160f]">
+            <div className="flex items-center rounded-xl border border-line/80 bg-surface p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
                 className={`rounded-lg p-1.5 transition ${
                   viewMode === 'grid'
-                    ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-                    : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+                    ? 'bg-accent-fill text-on-accent'
+                    : 'text-muted hover:text-fg'
                 }`}
                 title="عرض شبكي"
                 aria-label="عرض شبكي"
@@ -182,8 +182,8 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                 onClick={() => setViewMode('list')}
                 className={`rounded-lg p-1.5 transition ${
                   viewMode === 'list'
-                    ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-                    : 'text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
+                    ? 'bg-accent-fill text-on-accent'
+                    : 'text-muted hover:text-fg'
                 }`}
                 title="عرض قائمة"
                 aria-label="عرض قائمة"
@@ -195,14 +195,14 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
         </div>
 
         {/* Category Chip Selector */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-brand-100/60 dark:border-brand-800/60 overflow-x-auto no-scrollbar">
+        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-line/60 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setSelectedCat('all')}
             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition shrink-0 ${
               selectedCat === 'all'
-                ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950 shadow-xs'
-                : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#07160f] dark:text-stone-300 dark:hover:bg-brand-900/40'
+                ? 'bg-accent-fill text-on-accent shadow-xs'
+                : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
             }`}
           >
             الكل ({posts.length})
@@ -217,8 +217,8 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                 onClick={() => setSelectedCat(c.id)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-bold transition shrink-0 ${
                   isSelected
-                    ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950 shadow-xs'
-                    : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#07160f] dark:text-stone-300 dark:hover:bg-brand-900/40'
+                    ? 'bg-accent-fill text-on-accent shadow-xs'
+                    : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
                 }`}
               >
                 {c.name} ({count})
@@ -233,7 +233,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                 setQuery('');
                 setSelectedCat('all');
               }}
-              className="mr-auto inline-flex items-center gap-1 rounded-lg text-xs font-bold text-red-600 hover:text-red-700 dark:text-red-400 px-2 py-1 transition"
+              className="mr-auto inline-flex items-center gap-1 rounded-lg text-xs font-bold text-danger hover:text-danger px-2 py-1 transition"
             >
               <X className="h-3.5 w-3.5" />
               <span>إلغاء التصفية</span>
@@ -243,7 +243,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3.5 py-2 text-xs font-bold text-danger">
           {error}
         </p>
       )}
@@ -287,10 +287,10 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
           {visiblePosts.map((post) => (
             <div
               key={post.id}
-              className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
+              className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-line bg-surface shadow-2xs transition-all duration-200 hover:-translate-y-1 hover:border-line-strong hover:shadow-md"
             >
               {/* Card Image Banner */}
-              <div className="relative aspect-video w-full overflow-hidden bg-brand-50 dark:bg-[#07160f] border-b border-brand-100/60 dark:border-brand-800/60">
+              <div className="relative aspect-video w-full overflow-hidden bg-surface-2 border-b border-line/60">
                 {post.imageUrl ? (
                   <img
                     src={post.imageUrl}
@@ -298,14 +298,14 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-stone-400 dark:text-stone-600">
+                  <div className="flex h-full w-full items-center justify-center text-muted">
                     <ImageIcon className="h-8 w-8" />
                   </div>
                 )}
-                <span className="absolute top-2.5 right-2.5 rounded-md bg-brand-950/80 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                <span className="absolute top-2.5 right-2.5 rounded-md bg-accent-fill/80 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-on-accent shadow-sm">
                   {post.category.name}
                 </span>
-                <span className="absolute bottom-2.5 right-2.5 rounded-md bg-white/90 dark:bg-[#0b1c15]/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-brand-900 dark:text-gold-300 shadow-sm">
+                <span className="absolute bottom-2.5 right-2.5 rounded-md bg-surface/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-fg shadow-sm">
                   {hijriDate(post.postDate)}
                 </span>
               </div>
@@ -313,17 +313,17 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
               {/* Card Content */}
               <div className="p-4 flex-1 flex flex-col justify-between">
                 <div>
-                  <h3 className="font-display text-sm font-black text-brand-950 dark:text-stone-100 group-hover:text-brand-800 dark:group-hover:text-gold-300 line-clamp-2 leading-snug">
+                  <h3 className="font-display text-sm font-black text-fg group-hover:text-fg line-clamp-2 leading-snug">
                     {post.title}
                   </h3>
                   {post.description && (
-                    <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400 line-clamp-2 leading-relaxed">
+                    <p className="mt-1.5 text-xs text-muted line-clamp-2 leading-relaxed">
                       {post.description}
                     </p>
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-brand-100/60 dark:border-brand-800/60 flex items-center justify-between text-[11px] text-stone-400">
+                <div className="mt-4 pt-3 border-t border-line/60 flex items-center justify-between text-[11px] text-muted">
                   <span className="truncate max-w-[110px]">بواسطة: {post.author.name}</span>
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1">
@@ -331,7 +331,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                       {post.commentsCount}
                     </span>
                     {reactionTotal(post) > 0 && (
-                      <span className="inline-flex items-center gap-1 text-gold-600 dark:text-gold-400">
+                      <span className="inline-flex items-center gap-1 text-accent">
                         <Sparkles className="h-3 w-3" />
                         {reactionTotal(post)}
                       </span>
@@ -341,7 +341,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
               </div>
 
               {/* Card Footer Actions */}
-              <div className="flex items-center gap-1 p-2.5 bg-brand-50/40 dark:bg-[#07160f]/60 border-t border-brand-100/60 dark:border-brand-800/60">
+              <div className="flex items-center gap-1 p-2.5 bg-surface-2/40 border-t border-line/60">
                 <Link
                   to={`/post/${post.id}`}
                   target="_blank"
@@ -380,38 +380,38 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
           {visiblePosts.map((post) => (
             <div
               key={post.id}
-              className="group flex flex-wrap items-center gap-3.5 rounded-2xl border border-brand-100 bg-white p-3.5 shadow-2xs transition hover:border-brand-300 hover:shadow-sm dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
+              className="group flex flex-wrap items-center gap-3.5 rounded-2xl border border-line bg-surface p-3.5 shadow-2xs transition hover:border-line-strong hover:shadow-sm"
             >
               {/* Thumbnail preview */}
-              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-brand-50 dark:bg-[#07160f] flex items-center justify-center border border-brand-100/60 dark:border-brand-800/60">
+              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-surface-2 flex items-center justify-center border border-line/60">
                 {post.imageUrl ? (
                   <img src={post.imageUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <ImageIcon className="h-5 w-5 text-stone-400 dark:text-stone-600" />
+                  <ImageIcon className="h-5 w-5 text-muted" />
                 )}
               </div>
 
               {/* Post Details */}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-brand-900/60 dark:text-gold-300">
+                  <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[10px] font-bold text-accent">
                     {post.category.name}
                   </span>
-                  <span className="text-[11px] font-bold text-stone-500 dark:text-gold-400/80">
+                  <span className="text-[11px] font-bold text-muted">
                     {hijriDate(post.postDate)}
                   </span>
                 </div>
-                <h3 className="mt-1 truncate font-display text-sm font-extrabold text-brand-950 dark:text-stone-100 group-hover:text-brand-800 dark:group-hover:text-gold-300">
+                <h3 className="mt-1 truncate font-display text-sm font-extrabold text-fg group-hover:text-fg">
                   {post.title}
                 </h3>
-                <div className="mt-1 flex items-center gap-3 text-[11px] text-stone-400">
+                <div className="mt-1 flex items-center gap-3 text-[11px] text-muted">
                   <span>الكاتب: {post.author.name}</span>
                   <span className="inline-flex items-center gap-1">
                     <MessageSquare className="h-3 w-3" />
                     {post.commentsCount} تعليق
                   </span>
                   {post.totalReactions !== undefined && post.totalReactions > 0 && (
-                    <span className="inline-flex items-center gap-1 text-gold-600 dark:text-gold-400">
+                    <span className="inline-flex items-center gap-1 text-accent">
                       <Sparkles className="h-3 w-3" />
                       {post.totalReactions} تفاعل
                     </span>
