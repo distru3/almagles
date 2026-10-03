@@ -123,37 +123,37 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
       (!!postCategoryId && user.managedCategoryIds.includes(postCategoryId)));
 
   const renderComment = (c: CommentItem, isReply: boolean) => (
-    <div key={c.id} className={isReply ? 'mr-8 border-r-2 border-brand-100 pr-3 sm:mr-12' : ''}>
-      <div className="card card-editorial !rounded-xl p-3.5">
+    <div key={c.id} className={isReply ? 'mt-1 border-r-2 border-accent-fill pr-4' : 'border-b border-line py-4'}>
+      <div className={isReply ? 'py-2' : ''}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-extrabold text-brand-700 dark:bg-stone-800 dark:text-brand-300">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-sm font-extrabold text-accent">
               {c.authorName.charAt(0)}
             </span>
             <div className="leading-tight">
               <div className="flex flex-wrap items-center gap-1.5">
-                <p className="text-sm font-extrabold text-brand-950 dark:text-stone-100">{c.authorName}</p>
+                <p className="font-display text-[15px] text-fg">{c.authorName}</p>
                 {postAuthorId && c.authorId === postAuthorId && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-warn-soft px-1.5 py-0.5 text-[10px] font-bold text-warn border border-warn/20">
                     <PenTool className="h-2.5 w-2.5" />
                     كاتب المنشور
                   </span>
                 )}
                 {c.authorRole === 'admin' && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-brand-500/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 dark:text-brand-400 border border-brand-500/20">
+                  <span className="inline-flex items-center gap-1 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent border border-accent/20">
                     <ShieldCheck className="h-2.5 w-2.5" />
                     مشرف
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-stone-400 mt-0.5">{timeAgo(c.createdAt)}</p>
+              <p className="mt-0.5 text-xs text-muted">{timeAgo(c.createdAt)}</p>
             </div>
           </div>
           <div className="flex gap-1.5">
             {canEdit(c) && (
               <button
                 onClick={() => startEdit(c)}
-                className="rounded-lg p-1.5 text-stone-400 transition hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-stone-800 dark:hover:text-brand-400"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-accent"
                 aria-label="تعديل"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -162,7 +162,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
             {canDelete(c) && (
               <button
                 onClick={() => setDeleteTargetId(c.id)}
-                className="rounded-lg p-1.5 text-stone-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition hover:bg-danger-soft hover:text-danger"
                 aria-label="حذف"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -184,7 +184,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
             <div className="flex items-center justify-between">
               <span
                 className={`text-[11px] ${
-                  editContent.length > 1800 ? 'font-bold text-red-500' : 'text-stone-400'
+                  editContent.length > 1800 ? 'font-bold text-danger' : 'text-muted'
                 }`}
               >
                 {editContent.length} / 2000
@@ -206,7 +206,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
             </div>
           </div>
         ) : (
-          <p className="mt-2 whitespace-pre-line text-sm leading-7 text-stone-700 dark:text-stone-300">{c.content}</p>
+          <p className="mt-2 whitespace-pre-line text-[16px] leading-[1.9] text-fg-2">{c.content}</p>
         )}
 
         {!isReply && user && editingId !== c.id && (
@@ -215,7 +215,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
               setReplyingTo(replyingTo === c.id ? null : c.id);
               setReplyContent('');
             }}
-            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
+            className="mt-1 inline-flex min-h-10 items-center gap-1 font-display text-sm text-accent hover:text-accent-strong"
           >
             <Reply className="h-3.5 w-3.5" />
             رد
@@ -237,7 +237,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
           <div className="flex items-center justify-between">
             <span
               className={`text-[11px] ${
-                replyContent.length > 1800 ? 'font-bold text-red-500' : 'text-stone-400'
+                replyContent.length > 1800 ? 'font-bold text-danger' : 'text-muted'
               }`}
             >
               {replyContent.length} / 2000
@@ -271,16 +271,14 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
   );
 
   return (
-    <section className="card card-editorial p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <MessageSquare className="h-5 w-5 text-brand-700 dark:text-brand-400" />
-        <h3 className="font-display text-lg font-extrabold text-brand-950 dark:text-stone-100">
-          التعليقات ({comments.length})
-        </h3>
-      </div>
+    <section aria-label="التعليقات">
+      <h2 className="mb-4 flex items-center gap-2 font-display text-[22px] font-semibold">
+        <MessageSquare className="h-5 w-5 text-accent" aria-hidden="true" />
+        التعليقات ({comments.length})
+      </h2>
 
       {error && (
-        <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-400">
+        <p className="mb-3 rounded-lg border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
@@ -299,10 +297,10 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
             <span
               className={`text-xs ${
                 newContent.length > 1800
-                  ? 'font-bold text-red-500'
+                  ? 'font-bold text-danger'
                   : newContent.length > 1500
-                  ? 'text-amber-500'
-                  : 'text-stone-400'
+                  ? 'text-warn'
+                  : 'text-muted'
               }`}
             >
               {newContent.length} / 2000
@@ -318,8 +316,8 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
           </div>
         </form>
       ) : (
-        <div className="mb-6 rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-stone-800 dark:bg-stone-800/60 dark:text-stone-300">
-          <Link to="/login" className="font-extrabold underline underline-offset-2 text-brand-700 dark:text-brand-400">
+        <div className="mb-6 rounded-sm border border-line bg-surface px-4 py-3 text-fg-2">
+          <Link to="/login" className="font-extrabold underline underline-offset-2 text-accent">
             سجّل الدخول
           </Link>{' '}
           لتتمكن من التعليق والرد
@@ -327,28 +325,28 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
       )}
 
       {comments.length === 0 ? (
-        <p className="py-6 text-center text-sm text-stone-400">لا توجد تعليقات بعد — كن أول من يشارك</p>
+        <p className="py-6 text-center text-sm text-muted">لا توجد تعليقات بعد — كن أول من يشارك</p>
       ) : (
-        <div className="space-y-3">{tree.topLevel.map((c) => renderComment(c, false))}</div>
+        <div>{tree.topLevel.map((c) => renderComment(c, false))}</div>
       )}
 
       {deleteTargetId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setDeleteTargetId(null)}
           role="dialog"
           aria-modal="true"
           aria-label="تأكيد حذف التعليق"
         >
           <div
-            className="card card-editorial max-w-sm w-full p-6 text-center shadow-2xl"
+            className="card max-w-sm w-full p-6 text-center shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger">
               <Trash2 className="h-6 w-6" />
             </div>
-            <h4 className="text-base font-bold text-brand-950 dark:text-stone-100">حذف التعليق</h4>
-            <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+            <h4 className="text-base font-bold text-fg">حذف التعليق</h4>
+            <p className="mt-2 text-sm text-muted">
               هل أنت متأكد من رغبتك في حذف هذا التعليق؟ لا يمكن التراجع عن هذا الإجراء.
             </p>
             <div className="mt-5 flex gap-2.5 justify-center">
@@ -356,7 +354,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
                 type="button"
                 onClick={() => confirmDelete(deleteTargetId)}
                 disabled={busy}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-50"
+                className="btn-danger"
               >
                 {busy ? 'جارِ الحذف...' : 'تأكيد الحذف'}
               </button>
@@ -374,8 +372,8 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-brand-950 px-4 py-2.5 text-sm font-bold text-white shadow-xl animate-fade-in dark:bg-stone-800 dark:border dark:border-stone-700">
-          <Check className="h-4 w-4 text-emerald-400" />
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-fg px-5 py-2.5 font-display text-sm text-canvas shadow-xl">
+          <Check className="h-4 w-4" />
           <span>{toast}</span>
         </div>
       )}

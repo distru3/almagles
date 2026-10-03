@@ -2,36 +2,86 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
-  --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Cairo", "Tajawal", ui-sans-serif, sans-serif;
+/*
+ * Design tokens — direction C «السَّحَر».
+ * Components use only these semantic colours; light (paper) and dark (night)
+ * values swap on <html class="dark">, so no component needs dark: variants.
+ */
+:root {
+  color-scheme: light;
+  --canvas: #f5efe3;
+  --surface: #fffbf3;
+  --surface-2: #ede3ce;
+  --line: #e3d9c6;
+  --line-strong: #cdbf9f;
+  --fg: #1d2622;
+  --fg-2: #3e443f;
+  --muted: #5e6259;
+  --accent: #7a5c17;
+  --accent-strong: #6b4f12;
+  --accent-fill: #c9a04a;
+  --accent-fill-hover: #d4ae5c;
+  --on-accent: #1a1408;
+  --accent-soft: #f1e7d1;
+  --pattern: #a9842f;
+  --danger: #8e2b1e;
+  --danger-soft: #f7e3de;
+  --success: #2f6b4a;
+  --success-soft: #e2efe6;
+  --warn: #7a4e05;
+  --warn-soft: #fbebc9;
+}
 
-  --color-brand-50: #effaf3;
-  --color-brand-100: #d8f2e2;
-  --color-brand-200: #b4e5c9;
-  --color-brand-300: #83d2a8;
-  --color-brand-400: #4fb883;
-  --color-brand-500: #2b9d66;
-  --color-brand-600: #1c7f53;
-  --color-brand-700: #176544;
-  --color-brand-800: #145138;
-  --color-brand-900: #103f2d;
-  --color-brand-950: #082c1f;
+.dark {
+  color-scheme: dark;
+  --canvas: #0e1513;
+  --surface: #16201d;
+  --surface-2: #1b2723;
+  --line: #24302b;
+  --line-strong: #3a4a44;
+  --fg: #e9e4d8;
+  --fg-2: #c9c3b4;
+  --muted: #a8a291;
+  --accent: #d8b25a;
+  --accent-strong: #ebcb7e;
+  --accent-fill: #d8b25a;
+  --accent-fill-hover: #e3c171;
+  --on-accent: #1a1408;
+  --accent-soft: #2a261b;
+  --pattern: #d8b25a;
+  --danger: #f0a496;
+  --danger-soft: #3a1e1a;
+  --success: #8fd0a8;
+  --success-soft: #17291f;
+  --warn: #e9c277;
+  --warn-soft: #33280f;
+}
 
-  --color-gold-50: #fefbf3;
-  --color-gold-100: #fdf3d4;
-  --color-gold-200: #fae4a3;
-  --color-gold-300: #f6d071;
-  --color-gold-400: #f0b93c;
-  --color-gold-500: #e6a81c;
-  --color-gold-600: #cf8e0d;
-  --color-gold-700: #ad7309;
-  --color-gold-800: #8a5a0a;
-  --color-gold-900: #6b450c;
-  --color-gold-950: #3b2304;
+@theme inline {
+  --font-sans: "Noto Naskh Arabic", "Amiri", ui-serif, serif;
+  --font-display: "Reem Kufi", "Noto Naskh Arabic", ui-sans-serif, sans-serif;
 
-  --color-cream: #faf7ef;
-  --color-ink: #18231e;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-fill-hover: var(--accent-fill-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-pattern: var(--pattern);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
 }
 
 html {
@@ -39,22 +89,19 @@ html {
 }
 
 body {
-  background-color: var(--color-cream);
-  background-image:
-    linear-gradient(rgba(151, 109, 40, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(151, 109, 40, 0.025) 1px, transparent 1px);
-  background-size: 32px 32px;
-  color: var(--color-ink);
+  background-color: var(--canvas);
+  color: var(--fg);
   font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.8;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--color-brand-200);
-  color: var(--color-brand-900);
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -63,23 +110,19 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-brand-300);
+  background: var(--line-strong);
   border-radius: 999px;
   border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-brand-500);
   background-clip: content-box;
 }
 
 @layer components {
   .container-site {
-    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+    @apply mx-auto w-full max-w-[1180px] px-4 sm:px-7;
   }
 
   .card {
-    @apply rounded-lg border border-brand-100 bg-white shadow-sm;
+    @apply rounded border border-line bg-surface;
   }
 
   .btn,
@@ -87,121 +130,69 @@ body {
   .btn-gold,
   .btn-outline,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 font-display text-[15px] font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  .btn-primary {
-    @apply bg-brand-700 text-white shadow-md shadow-brand-900/15 hover:bg-brand-800;
-  }
-
+  .btn-primary,
   .btn-gold {
-    @apply bg-gold-400 text-brand-950 shadow-md shadow-gold-700/20 hover:bg-gold-300;
+    @apply bg-accent-fill text-on-accent hover:bg-accent-fill-hover;
   }
 
   .btn-outline {
-    @apply border border-brand-300 bg-white text-brand-800 hover:bg-brand-50;
+    @apply border border-line-strong bg-transparent text-fg hover:border-accent hover:text-accent;
   }
 
   .btn-danger {
-    @apply border border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+    @apply border border-danger/40 bg-danger-soft text-danger hover:border-danger;
   }
 
   .input {
-    @apply w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2.5 text-base text-ink transition placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200;
+    @apply w-full rounded border border-line-strong bg-surface px-3.5 py-2.5 text-base text-fg transition placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25;
   }
 
   .label {
-    @apply mb-1.5 block text-sm font-bold text-stone-700;
+    @apply mb-1.5 block font-display text-sm font-semibold text-fg-2;
   }
 
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-bold text-brand-800 transition hover:bg-brand-100;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line-strong px-3.5 py-1.5 font-display text-sm text-fg transition hover:border-accent hover:text-accent;
   }
 
   .prose-ar {
-    @apply leading-8 text-stone-700;
+    @apply text-[19px] leading-[2.05] text-fg;
   }
-}
 
-@layer components {
+  /* Quranic text set inside ﴿ ﴾ */
+  .ayah {
+    @apply text-accent-strong;
+  }
+
   .site-header {
-    @apply border-b border-brand-200/80 bg-cream/95 backdrop-blur;
-    box-shadow: 0 1px 0 rgba(16, 63, 45, 0.04);
-  }
-
-  .hero-editorial {
-    background:
-      radial-gradient(circle at 12% 18%, rgba(240, 185, 60, 0.16), transparent 22rem),
-      linear-gradient(120deg, #082c1f 0%, #103f2d 58%, #145138 100%);
-  }
-
-  .hero-editorial::after {
-    content: '';
-    position: absolute;
-    inset: auto 0 0;
-    height: 5px;
-    background: linear-gradient(90deg, #f0b93c, #e6a81c 45%, transparent 45%);
-    opacity: 0.9;
+    @apply border-b border-line bg-canvas/95 backdrop-blur;
   }
 
   .section-heading {
-    @apply border-b border-brand-200 pb-3;
-  }
-
-  .schedule-shell {
-    @apply rounded-lg border border-brand-200 bg-white shadow-sm;
-  }
-
-  .schedule-header {
-    background: linear-gradient(100deg, #082c1f, #145138);
+    @apply border-b border-line pb-3;
   }
 
   .page-header {
-    @apply mb-7 flex items-center gap-3 border-b border-brand-200 pb-5;
+    @apply mb-7 flex items-center gap-3 border-b border-line pb-5;
   }
 
   .tab-strip {
-    @apply mb-6 flex flex-wrap gap-2 border-b border-brand-200 pb-3;
-  }
-
-  .card-editorial {
-    box-shadow: 0 8px 24px rgba(16, 63, 45, 0.06);
+    @apply mb-6 flex flex-wrap gap-2 border-b border-line pb-3;
   }
 
   .hero-reveal > * {
     animation: hero-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-
   .hero-reveal > *:nth-child(2) { animation-delay: 100ms; }
   .hero-reveal > *:nth-child(3) { animation-delay: 180ms; }
-
-  .hero-editorial::before {
-    content: '';
-    position: absolute;
-    inset: -20% -10%;
-    background: radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.08), transparent 24rem);
-    animation: hero-glow 9s ease-in-out infinite alternate;
-    pointer-events: none;
-  }
-
-  .card-editorial {
-    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
-  }
-
-  .card-editorial:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 14px 30px rgba(16, 63, 45, 0.11);
-  }
 }
 
 @keyframes hero-rise {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes hero-glow {
-  from { transform: translate3d(-1%, -1%, 0) scale(1); opacity: 0.65; }
-  to { transform: translate3d(2%, 1%, 0) scale(1.05); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -212,161 +203,3 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
-
-@layer utilities {
-  .font-display {
-    font-family: var(--font-display);
-  }
-}
-
-/* Dark Mode Overrides */
-html.dark {
-  --color-cream: #081711;
-  --color-ink: #eaf3ee;
-}
-
-html.dark body {
-  background-color: #081711;
-  background-image:
-    linear-gradient(rgba(240, 185, 60, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(240, 185, 60, 0.025) 1px, transparent 1px);
-  color: #dbe7e1;
-}
-
-html.dark .card {
-  background-color: #0b1c15;
-  border-color: #173b2d;
-}
-
-html.dark .card-editorial {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-html.dark .card-editorial:hover {
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
-  border-color: #265945;
-}
-
-html.dark .site-header {
-  background-color: rgba(8, 23, 17, 0.94);
-  border-bottom-color: #183e2f;
-}
-
-html.dark .input {
-  background-color: #07160f;
-  border-color: #1b4535;
-  color: #eaf3ee;
-}
-
-html.dark .input:focus {
-  border-color: #2b9d66;
-  --tw-ring-color: rgba(43, 157, 102, 0.25);
-}
-
-html.dark select.input option {
-  background-color: #0b1c15;
-  color: #eaf3ee;
-}
-
-html.dark input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.85);
-  cursor: pointer;
-}
-
-html.dark .label {
-  color: #cdddd5;
-}
-
-html.dark .btn-outline {
-  background-color: #0b1c15;
-  border-color: #1f4d3c;
-  color: #c8dfd5;
-}
-
-html.dark .btn-outline:hover {
-  background-color: #143528;
-  color: #ffffff;
-}
-
-html.dark .btn-danger {
-  background-color: rgba(127, 29, 29, 0.25);
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #fca5a5;
-}
-
-html.dark .btn-danger:hover {
-  background-color: rgba(127, 29, 29, 0.45);
-  border-color: rgba(239, 68, 68, 0.55);
-  color: #fecaca;
-}
-
-html.dark .chip {
-  background-color: #10291f;
-  border-color: #1c4736;
-  color: #9cd4b7;
-}
-
-html.dark .chip:hover {
-  background-color: #173b2c;
-}
-
-html.dark .chip span {
-  background-color: #081711;
-  color: #f6d071;
-}
-
-html.dark .schedule-shell {
-  background-color: #0b1c15;
-  border-color: #173b2d;
-}
-
-html.dark .section-heading,
-html.dark .page-header,
-html.dark .tab-strip {
-  border-bottom-color: #183e2f;
-}
-
-html.dark .text-brand-950,
-html.dark .text-brand-900,
-html.dark .text-brand-800 {
-  color: #f5efe3;
-}
-
-html.dark .text-brand-700,
-html.dark .text-brand-600 {
-  color: #72cb9a;
-}
-
-html.dark .text-stone-700,
-html.dark .text-stone-600 {
-  color: #cad8d0;
-}
-
-html.dark .text-stone-500,
-html.dark .text-stone-400 {
-  color: #8da49a;
-}
-
-html.dark .prose-ar {
-  color: #dbe7e1;
-}
-
-/* Fallback overrides for raw classes */
-html.dark .bg-white:not([class*="dark:bg-"]) {
-  background-color: #0b1c15;
-}
-
-html.dark .border-brand-100:not([class*="dark:border-"]),
-html.dark .border-brand-200:not([class*="dark:border-"]) {
-  border-color: #183e2f;
-}
-
-html.dark .border-brand-300:not([class*="dark:border-"]) {
-  border-color: #20503d;
-}
-
-html.dark .bg-brand-50:not([class*="dark:bg-"]),
-html.dark .bg-brand-100:not([class*="dark:bg-"]) {
-  background-color: #10291f;
-}
-

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowRight, Calendar, User, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Calendar, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
 import { hijriDate, gregorianLong } from '../lib/dates';
@@ -9,6 +9,23 @@ import ReactionBar from '../components/ReactionBar';
 import CommentSection from '../components/CommentSection';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
+import AyahText from '../components/AyahText';
+
+const TEXT_SIZES = [
+  { label: 'عادي', className: '' },
+  { label: 'كبير', className: '!text-[21px] !leading-[2.15]' },
+  { label: 'أكبر', className: '!text-[24px] !leading-[2.2]' },
+] as const;
+const TEXT_SIZE_KEY = 'almagles_text_size';
+
+function readTextSize(): number {
+  try {
+    const n = Number(localStorage.getItem(TEXT_SIZE_KEY));
+    return n >= 0 && n < TEXT_SIZES.length ? n : 0;
+  } catch {
+    return 0;
+  }
+}
 
 export default function PostPage() {
   const { id = '' } = useParams();
@@ -20,6 +37,17 @@ export default function PostPage() {
   const [zoomed, setZoomed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [textSize, setTextSize] = useState(readTextSize);
+
+  const cycleTextSize = () => {
+    const next = (textSize + 1) % TEXT_SIZES.length;
+    setTextSize(next);
+    try {
+      localStorage.setItem(TEXT_SIZE_KEY, String(next));
+    } catch {
+      /* private mode: size resets next visit */
+    }
+  };
 
   const handleShare = async () => {
     if (!post) return;
@@ -124,133 +152,82 @@ export default function PostPage() {
   const image = post.imageUrl ? cloudinaryUrl(post.imageUrl, 1100) : null;
 
   return (
-    <article className="container-site py-8">
-      <Link
-        to={`/category/${post.category.slug}`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-bold text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-gold-300"
-      >
-        <ArrowRight className="h-4 w-4 rotate-180" />
-        {post.category.name}
-      </Link>
-
-      <div className="mx-auto max-w-3xl">
-        <div className="card card-editorial overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-7">
-            <div className="flex flex-wrap items-center gap-3">
-              <Link to={`/category/${post.category.slug}`} className="chip text-xs">
-                {post.category.name}
-              </Link>
-              <span className="text-xs text-stone-400">{hijriDate(post.postDate)}</span>
-            </div>
+    <article className="container-site py-10">
+      <div className="mx-auto max-w-[720px]">
+        <div className="flex items-center justify-between gap-3">
+          <Link to={`/category/${post.category.slug}`} className="font-display text-[15px] text-accent hover:text-accent-strong">
+            {post.category.name}
+          </Link>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={cycleTextSize}
+              className="flex h-11 min-w-11 items-center justify-center rounded-full px-2 font-display text-fg-2 transition hover:bg-surface-2 hover:text-fg"
+              aria-label={`حجم الخط: ${TEXT_SIZES[textSize].label}`}
+              title="حجم الخط"
+            >
+              <span className="text-[17px]">أ</span>
+              <span className="text-[12px]">أ</span>
+            </button>
             <button
               type="button"
               onClick={handleShare}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-200/80 bg-white/70 px-3 py-1.5 text-xs font-bold text-stone-700 shadow-sm transition hover:border-brand-400 hover:text-brand-800 dark:border-brand-800 dark:bg-brand-900/40 dark:text-stone-300 dark:hover:border-brand-600 dark:hover:text-gold-300"
-              title="مشاركة المقال"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-fg-2 transition hover:bg-surface-2 hover:text-fg"
+              aria-label={copied ? 'تم نسخ الرابط' : 'مشاركة'}
+              title="مشاركة"
             >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              ) : (
-                <Share2 className="h-3.5 w-3.5" />
-              )}
-              <span>{copied ? 'تم النسخ' : 'مشاركة'}</span>
+              {copied ? <Check className="h-[18px] w-[18px]" /> : <Share2 className="h-[18px] w-[18px]" />}
             </button>
-          </div>
-
-          <h1 className="px-5 pt-3 font-display text-2xl font-black leading-10 text-brand-950 sm:px-7 sm:text-3xl dark:text-stone-100">
-            {post.title}
-          </h1>
-
-          <div className="flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-stone-500 sm:px-7 dark:text-stone-400">
-            <span className="inline-flex items-center gap-1.5">
-              <User className="h-4 w-4" />
-              {post.author.name}
-            </span>
-            <span className="inline-flex items-center gap-1.5" title={gregorianLong(post.postDate)}>
-              <Calendar className="h-4 w-4" />
-              {hijriDate(post.postDate)}
-            </span>
-          </div>
-
-          {image && (
-            <div className="px-5 pt-5 sm:px-7">
-              <button
-                type="button"
-                onClick={() => setZoomed(true)}
-                className="group relative mx-auto block w-full max-w-xl overflow-hidden rounded-2xl border border-brand-100 shadow-sm dark:border-brand-800"
-                aria-label="تكبير الصورة"
-              >
-                <img src={image} alt={post.title} className="mx-auto w-full object-contain" />
-                <span className="absolute bottom-3 left-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-950/70 text-white opacity-0 transition group-hover:opacity-100">
-                  <ZoomIn className="h-5 w-5" />
-                </span>
-              </button>
-            </div>
-          )}
-
-          <div className="prose-ar whitespace-pre-line px-5 py-6 text-base sm:px-7">{post.description}</div>
-
-          <div className="border-t border-brand-100 px-5 py-4 sm:px-7 dark:border-brand-800/80">
-            <ReactionBar
-              postId={post.id}
-              counts={post.reactionCounts}
-              myReaction={post.myReaction}
-              total={post.totalReactions}
-              onChange={(counts, my) =>
-                setPost((p) =>
-                  p
-                    ? {
-                        ...p,
-                        reactionCounts: counts,
-                        myReaction: my,
-                        totalReactions: Object.values(counts).reduce((s, v) => s + v, 0),
-                      }
-                    : p,
-                )
-              }
-            />
           </div>
         </div>
 
-        {(post.prevPost || post.nextPost) && (
-          <nav aria-label="التنقل بين المقالات" className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {post.prevPost ? (
-              <Link
-                to={`/post/${post.prevPost.id}`}
-                className="card card-editorial group flex flex-col justify-between p-4 transition-all hover:border-brand-300 hover:shadow-md dark:hover:border-brand-600"
-              >
-                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-400 group-hover:text-brand-700 dark:group-hover:text-gold-300">
-                  <ChevronRight className="h-4 w-4" />
-                  <span>المنشور السابق</span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-sm font-bold text-brand-950 group-hover:text-brand-700 dark:text-stone-100 dark:group-hover:text-gold-300">
-                  {post.prevPost.title}
-                </p>
-              </Link>
-            ) : (
-              <div className="hidden sm:block" />
-            )}
+        <h1 className="mt-2 font-display text-[32px] font-semibold leading-[1.4] sm:text-[40px]">{post.title}</h1>
+        <p className="mt-2 flex flex-wrap gap-x-3 text-sm text-muted">
+          <span title={gregorianLong(post.postDate)}>{hijriDate(post.postDate)}</span>
+          <span aria-hidden="true">·</span>
+          <span>{post.author.name}</span>
+        </p>
 
-            {post.nextPost ? (
-              <Link
-                to={`/post/${post.nextPost.id}`}
-                className="card card-editorial group flex flex-col justify-between p-4 transition-all hover:border-brand-300 hover:shadow-md text-left dark:hover:border-brand-600"
-              >
-                <div className="flex items-center justify-end gap-1.5 text-xs font-bold text-stone-400 group-hover:text-brand-700 dark:group-hover:text-gold-300">
-                  <span>المنشور التالي</span>
-                  <ChevronLeft className="h-4 w-4" />
-                </div>
-                <p className="mt-2 line-clamp-2 text-sm font-bold text-brand-950 group-hover:text-brand-700 text-right dark:text-stone-100 dark:group-hover:text-gold-300">
-                  {post.nextPost.title}
-                </p>
-              </Link>
-            ) : (
-              <div className="hidden sm:block" />
-            )}
-          </nav>
+        {image && (
+          <button
+            type="button"
+            onClick={() => setZoomed(true)}
+            className="group relative mt-7 block w-full overflow-hidden rounded-sm border border-line"
+            aria-label="تكبير الصورة"
+          >
+            <img src={image} alt={post.title} className="w-full object-contain" />
+            <span className="absolute bottom-3 left-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition group-hover:opacity-100">
+              <ZoomIn className="h-5 w-5" />
+            </span>
+          </button>
         )}
 
-        <div className="mx-auto mt-8 max-w-3xl">
+        <div className={`prose-ar mt-7 whitespace-pre-line ${TEXT_SIZES[textSize].className}`}>
+          <AyahText text={post.description} />
+        </div>
+
+        <div className="mt-10">
+          <ReactionBar
+            postId={post.id}
+            counts={post.reactionCounts}
+            myReaction={post.myReaction}
+            total={post.totalReactions}
+            onChange={(counts, my) =>
+              setPost((p) =>
+                p
+                  ? {
+                      ...p,
+                      reactionCounts: counts,
+                      myReaction: my,
+                      totalReactions: Object.values(counts).reduce((s, v) => s + v, 0),
+                    }
+                  : p,
+              )
+            }
+          />
+        </div>
+
+        <div className="mt-12">
           <CommentSection
             postId={post.id}
             postCategoryId={post.category.id}
@@ -259,18 +236,45 @@ export default function PostPage() {
             onChanged={loadComments}
           />
         </div>
+
+        {(post.prevPost || post.nextPost) && (
+          <nav aria-label="منشورات القسم" className="mt-12 flex justify-between gap-6 border-t border-line pt-6">
+            {post.prevPost ? (
+              <Link to={`/post/${post.prevPost.id}`} className="group min-w-0">
+                <span className="flex items-center gap-1 text-sm text-muted">
+                  <ChevronRight className="h-4 w-4" />
+                  السابق
+                </span>
+                <span className="mt-1 line-clamp-2 font-display text-[17px] text-fg group-hover:text-accent">{post.prevPost.title}</span>
+              </Link>
+            ) : (
+              <span />
+            )}
+            {post.nextPost ? (
+              <Link to={`/post/${post.nextPost.id}`} className="group min-w-0 text-left">
+                <span className="flex items-center justify-end gap-1 text-sm text-muted">
+                  التالي
+                  <ChevronLeft className="h-4 w-4" />
+                </span>
+                <span className="mt-1 line-clamp-2 font-display text-[17px] text-fg group-hover:text-accent">{post.nextPost.title}</span>
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
+        )}
       </div>
 
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-brand-950 px-4 py-2.5 text-sm font-bold text-white shadow-xl animate-fade-in dark:bg-stone-800 dark:border dark:border-stone-700">
-          <Check className="h-4 w-4 text-emerald-400" />
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-fg px-5 py-2.5 font-display text-sm text-canvas shadow-xl">
+          <Check className="h-4 w-4" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {zoomed && post.imageUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/90 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
           onClick={() => setZoomed(false)}
           role="dialog"
           aria-modal="true"

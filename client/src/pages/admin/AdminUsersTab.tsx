@@ -181,7 +181,7 @@ export default function AdminUsersTab({ categories }: Props) {
     onChange: (v: string[]) => void;
   }) => (
     <div className="flex flex-wrap gap-2">
-      {categories.length === 0 && <span className="text-xs text-stone-400">لا توجد أقسام بعد</span>}
+      {categories.length === 0 && <span className="text-xs text-muted">لا توجد أقسام بعد</span>}
       {categories.map((c) => {
         const isSelected = checked.includes(c.id);
         return (
@@ -189,15 +189,15 @@ export default function AdminUsersTab({ categories }: Props) {
             key={c.id}
             className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition select-none ${
               isSelected
-                ? 'border-brand-600 bg-brand-100/70 text-brand-900 dark:border-gold-500/70 dark:bg-gold-950/40 dark:text-gold-300'
-                : 'border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#07160f] dark:text-stone-300 dark:hover:bg-brand-900/40'
+                ? 'border-accent bg-surface-2/70 text-fg'
+                : 'border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
             }`}
           >
             <input
               type="checkbox"
               checked={isSelected}
               onChange={() => toggleCat(checked, onChange, c.id)}
-              className="h-3.5 w-3.5 accent-brand-700 dark:accent-gold-500"
+              className="h-3.5 w-3.5 accent-accent"
             />
             <span>{c.name}</span>
           </label>
@@ -210,16 +210,16 @@ export default function AdminUsersTab({ categories }: Props) {
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-black text-brand-950 dark:text-stone-100">
+          <h2 className="font-display text-xl font-black text-fg">
             المستخدمون والصلاحيات
           </h2>
-          <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             تحديد صلاحيات المشرفين وتعيين الأقسام الموكلة للكُتّاب
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               className="input !py-2 pl-8 pr-9 text-xs"
               placeholder="بحث بالاسم أو البريد…"
@@ -234,7 +234,7 @@ export default function AdminUsersTab({ categories }: Props) {
                   setQ('');
                   load('');
                 }}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-fg-2"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -257,8 +257,8 @@ export default function AdminUsersTab({ categories }: Props) {
           onClick={() => setRoleFilter('all')}
           className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
             roleFilter === 'all'
-              ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-              : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+              ? 'bg-accent-fill text-on-accent'
+              : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
           }`}
         >
           الكل ({users.length})
@@ -268,8 +268,8 @@ export default function AdminUsersTab({ categories }: Props) {
           onClick={() => setRoleFilter('admin')}
           className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
             roleFilter === 'admin'
-              ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-              : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+              ? 'bg-accent-fill text-on-accent'
+              : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
           }`}
         >
           المشرفون ({users.filter((u) => u.role === 'admin').length})
@@ -279,8 +279,8 @@ export default function AdminUsersTab({ categories }: Props) {
           onClick={() => setRoleFilter('writer')}
           className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
             roleFilter === 'writer'
-              ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-              : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+              ? 'bg-accent-fill text-on-accent'
+              : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
           }`}
         >
           الكُتّاب ({users.filter((u) => u.role === 'writer').length})
@@ -290,8 +290,8 @@ export default function AdminUsersTab({ categories }: Props) {
           onClick={() => setRoleFilter('visitor')}
           className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
             roleFilter === 'visitor'
-              ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-              : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+              ? 'bg-accent-fill text-on-accent'
+              : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
           }`}
         >
           حسابات عادية ({users.filter((u) => u.role === 'visitor').length})
@@ -299,7 +299,7 @@ export default function AdminUsersTab({ categories }: Props) {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3.5 py-2 text-xs font-bold text-danger">
           {error}
         </p>
       )}
@@ -307,23 +307,23 @@ export default function AdminUsersTab({ categories }: Props) {
       {showCreate && (
         <form
           onSubmit={createUser}
-          className="card card-editorial mb-6 space-y-4 rounded-2xl border border-brand-200 p-5 dark:border-brand-800 dark:bg-[#0b1c15]"
+          className="card mb-6 space-y-4 rounded-2xl border border-line p-5"
         >
-          <div className="flex items-center justify-between border-b border-brand-100 dark:border-brand-800 pb-2">
-            <h3 className="font-display text-sm font-black text-brand-950 dark:text-stone-100">
+          <div className="flex items-center justify-between border-b border-line pb-2">
+            <h3 className="font-display text-sm font-black text-fg">
               إنشاء حساب جديد
             </h3>
             <button
               type="button"
               onClick={() => setShowCreate(false)}
-              className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+              className="text-muted hover:text-fg-2"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {createError && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <p className="rounded-xl border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
               {createError}
             </p>
           )}
@@ -370,14 +370,14 @@ export default function AdminUsersTab({ categories }: Props) {
               <option value="admin">{ROLE_LABELS.admin}</option>
             </select>
             {newRole === 'writer' && (
-              <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+              <p className="mt-1 text-[11px] text-warn">
                 تنبيه: يجب تحديد قسم واحد على الأقل ليتمكن الكاتب من النشر.
               </p>
             )}
           </div>
 
           {newRole === 'writer' && (
-            <div className="space-y-3 rounded-xl border border-brand-100 p-3 dark:border-brand-800 dark:bg-[#07160f]">
+            <div className="space-y-3 rounded-xl border border-line p-3">
               <div>
                 <label className="label">الأقسام الموكلة (مطلوب)</label>
                 <GrantCheckboxes checked={newCats} onChange={setNewCats} />
@@ -388,7 +388,7 @@ export default function AdminUsersTab({ categories }: Props) {
                     type="checkbox"
                     checked={newSched}
                     onChange={(e) => setNewSched(e.target.checked)}
-                    className="h-4 w-4 accent-brand-700"
+                    className="h-4 w-4 accent-accent"
                   />
                   <span>صلاحية إضافية: إدارة الجدول الأسبوعي للمقرر</span>
                 </label>
@@ -424,41 +424,41 @@ export default function AdminUsersTab({ categories }: Props) {
             return (
               <div
                 key={u.id}
-                className="rounded-2xl border border-brand-100 bg-white p-4 shadow-2xs transition hover:border-brand-300 dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
+                className="rounded-2xl border border-line bg-surface p-4 shadow-2xs transition hover:border-line-strong"
               >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-brand-100/60 dark:border-brand-800/60 pb-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 font-black text-brand-800 dark:bg-brand-900/60 dark:text-gold-300">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 font-black text-fg">
                       {u.name.charAt(0)}
                     </span>
                     <div className="leading-tight">
-                      <p className="font-extrabold text-sm text-brand-950 dark:text-stone-100">{u.name}</p>
-                      <p className="text-xs text-stone-400" dir="ltr">
+                      <p className="font-extrabold text-sm text-fg">{u.name}</p>
+                      <p className="text-xs text-muted" dir="ltr">
                         {u.email}
                       </p>
                     </div>
 
                     {role === 'admin' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-gold-400/20 px-2.5 py-0.5 text-xs font-bold text-gold-700 border border-gold-400/30 dark:text-gold-300">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-accent-fill/20 px-2.5 py-0.5 text-xs font-bold text-accent border border-accent/30">
                         <Shield className="h-3 w-3" />
                         مشرف عام
                       </span>
                     )}
                     {role === 'writer' && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-bold text-brand-700 border border-brand-200/80 dark:bg-brand-900/60 dark:text-gold-300 dark:border-brand-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-bold text-accent border border-line/80">
                         <PenTool className="h-3 w-3" />
                         كاتب
                       </span>
                     )}
                     {role === 'visitor' && (
-                      <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-bold text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                      <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-bold text-muted">
                         حساب عادي
                       </span>
                     )}
                   </div>
 
                   {savedId === u.id && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-1 text-xs font-bold text-success animate-pulse">
                       <Check className="h-3.5 w-3.5" />
                       تم الحفظ
                     </span>
@@ -467,9 +467,9 @@ export default function AdminUsersTab({ categories }: Props) {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-stone-500 dark:text-stone-400 shrink-0">الدور:</span>
+                    <span className="text-xs font-bold text-muted shrink-0">الدور:</span>
                     <select
-                      className="input !py-1.5 text-xs dark:bg-[#07160f] dark:border-brand-800 dark:text-stone-200"
+                      className="input !py-1.5 text-xs"
                       value={role}
                       onChange={(e) => {
                         const next = e.target.value as Role;
@@ -492,12 +492,12 @@ export default function AdminUsersTab({ categories }: Props) {
                   </div>
 
                   {isWriter && (
-                    <label className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-300 cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs text-fg-2 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={sched}
                         onChange={(e) => saveUser(u, role, cats, e.target.checked)}
-                        className="h-4 w-4 accent-brand-700"
+                        className="h-4 w-4 accent-accent"
                       />
                       <span>إدارة الجدول الأسبوعي للمقرر</span>
                     </label>
@@ -505,8 +505,8 @@ export default function AdminUsersTab({ categories }: Props) {
                 </div>
 
                 {isWriter && (
-                  <div className="mt-3 border-t border-brand-100/60 pt-3 dark:border-brand-800/60">
-                    <p className="text-xs font-bold text-stone-600 dark:text-stone-300 mb-1.5">
+                  <div className="mt-3 border-t border-line/60 pt-3">
+                    <p className="text-xs font-bold text-fg-2 mb-1.5">
                       الأقسام الموكلة للكاتب (انقر للتعديل المباشر):
                     </p>
                     <GrantCheckboxes checked={cats} onChange={(v) => saveUser(u, role, v, sched)} />
@@ -520,20 +520,20 @@ export default function AdminUsersTab({ categories }: Props) {
 
       {popup && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
           onClick={() => setPopup(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-brand-100 dark:border-brand-800 dark:bg-[#0b1c15]"
+            className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl border border-line"
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-warn-soft text-warn">
               <AlertTriangle className="h-6 w-6" />
             </span>
-            <h3 className="mt-4 text-center font-display text-lg font-black text-brand-950 dark:text-stone-100">
+            <h3 className="mt-4 text-center font-display text-lg font-black text-fg">
               {popup.title}
             </h3>
-            <p className="mt-2 text-center text-xs leading-6 text-stone-600 dark:text-stone-300">
+            <p className="mt-2 text-center text-xs leading-6 text-fg-2">
               {popup.message}
             </p>
             {popup.onConfirm ? (
@@ -562,7 +562,7 @@ export default function AdminUsersTab({ categories }: Props) {
 
       {writerPrompt && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
           onClick={() => {
             if (!promptBusy) {
               setWriterPrompt(null);
@@ -572,26 +572,26 @@ export default function AdminUsersTab({ categories }: Props) {
           }}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-brand-100 dark:border-brand-800 dark:bg-[#0b1c15]"
+            className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl border border-line"
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-warn-soft text-warn">
               <AlertTriangle className="h-6 w-6" />
             </span>
-            <h3 className="mt-4 text-center font-display text-lg font-black text-brand-950 dark:text-stone-100">تحديد قسم مطلوب</h3>
-            <p className="mt-2 text-center text-sm leading-7 text-stone-600 dark:text-stone-300">
+            <h3 className="mt-4 text-center font-display text-lg font-black text-fg">تحديد قسم مطلوب</h3>
+            <p className="mt-2 text-center text-sm leading-7 text-fg-2">
               {writerPrompt.mode === 'row'
                 ? `لا يمكن تحويل «${writerPrompt.user.name}» إلى كاتب دون تحديد قسم واحد على الأقل. اختر الأقسام الموكلة له:`
                 : 'لا يمكن إنشاء حساب كاتب دون تحديد قسم واحد على الأقل. اختر الأقسام الموكلة له:'}
             </p>
 
             {promptError && (
-              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              <p className="mt-3 rounded-xl border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
                 {promptError}
               </p>
             )}
 
-            <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/40 p-3 dark:border-brand-800 dark:bg-[#07160f]">
+            <div className="mt-4 rounded-xl border border-line bg-surface-2/40 p-3">
               <GrantCheckboxes checked={promptCats} onChange={setPromptCats} />
             </div>
 

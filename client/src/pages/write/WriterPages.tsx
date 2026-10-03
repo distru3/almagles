@@ -9,12 +9,12 @@ import AdminScheduleTab from '../admin/AdminScheduleTab';
 function PageHeader({ icon: Icon, title, subtitle }: { icon: typeof PenLine; title: string; subtitle: string }) {
   return (
     <div className="page-header">
-      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold-400 text-brand-950">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-fill text-on-accent">
         <Icon className="h-6 w-6" />
       </span>
       <div>
-        <h1 className="font-display text-2xl font-black text-brand-950">{title}</h1>
-        <p className="text-sm text-stone-500">{subtitle}</p>
+        <h1 className="font-display text-2xl font-black text-fg">{title}</h1>
+        <p className="text-sm text-muted">{subtitle}</p>
       </div>
     </div>
   );
@@ -34,7 +34,7 @@ export function WritePage() {
   if (failed) {
     return (
       <div className="container-site py-8">
-        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-xl border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           تعذّر تحميل الأقسام
         </p>
       </div>
@@ -51,7 +51,7 @@ export function WritePage() {
         subtitle={`أهلاً ${user?.name} — نشر وتحرير منشورات أقسامك الموكلة (${count})`}
       />
       {count === 0 && (
-        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mb-4 rounded-xl border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
           لم تُوكَّل لك أي أقسام بعد — تواصل مع المشرف العام.
         </p>
       )}

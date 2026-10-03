@@ -96,18 +96,18 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-950/60 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl border border-brand-100 dark:border-brand-800/90 dark:bg-[#0b1c15]"
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface shadow-2xl border border-line"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-brand-100 bg-white/95 px-6 py-4 backdrop-blur dark:border-brand-800/80 dark:bg-[#0b1c15]/95">
-          <h3 className="font-display text-lg font-black text-brand-950 dark:text-stone-100">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface/95 px-6 py-4 backdrop-blur">
+          <h3 className="font-display text-lg font-black text-fg">
             {post ? 'تعديل المنشور' : 'منشور جديد'}
           </h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 dark:hover:bg-brand-900/50 dark:hover:text-stone-200 transition"
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-2 transition"
             aria-label="إغلاق"
           >
             <X className="h-5 w-5" />
@@ -116,7 +116,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
 
         <form onSubmit={submit} className="space-y-4 px-6 py-5" encType="multipart/form-data">
           {error && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            <p className="rounded-xl border border-danger bg-danger-soft px-3.5 py-2 text-xs font-bold text-danger">
               {error}
             </p>
           )}
@@ -124,7 +124,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="label !mb-0">العنوان</label>
-              <span className="text-[11px] text-stone-400">{title.length}/200</span>
+              <span className="text-[11px] text-muted">{title.length}/200</span>
             </div>
             <input
               className="input"
@@ -139,7 +139,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="label !mb-0">نص المنشور</label>
-              <span className="text-[11px] text-stone-400">{description.length}/20000</span>
+              <span className="text-[11px] text-muted">{description.length}/20000</span>
             </div>
             <textarea
               className="input min-h-40 resize-y"
@@ -155,7 +155,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
             <div>
               <label className="label">القسم</label>
               {options.length === 0 ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+                <p className="rounded-xl border border-warn bg-warn-soft px-3 py-2 text-xs font-bold text-warn">
                   لم تُوكَّل لك أي أقسام للنشر بعد — تواصل مع المشرف العام.
                 </p>
               ) : (
@@ -180,7 +180,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
               <div className="flex items-center justify-between mb-1">
                 <label className="label !mb-0">تاريخ المنشور</label>
                 {postDate && (
-                  <span className="text-[11px] font-bold text-brand-700 dark:text-gold-300">
+                  <span className="text-[11px] font-bold text-accent">
                     {hijriDate(postDate)}
                   </span>
                 )}
@@ -192,14 +192,14 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
                 onChange={(e) => setPostDate(e.target.value)}
                 required
               />
-              <p className="mt-1 text-[11px] text-stone-400 dark:text-stone-400">سيظهر ضمن منشورات هذا اليوم في الموقع</p>
+              <p className="mt-1 text-[11px] text-muted">سيظهر ضمن منشورات هذا اليوم في الموقع</p>
             </div>
           </div>
 
           <div>
             <label className="label">صورة الغلاف (اختياري)</label>
             {preview && !removeImage ? (
-              <div className="flex items-start gap-3 rounded-xl border border-brand-100 p-3 dark:border-brand-800/80 dark:bg-[#07160f]">
+              <div className="flex items-start gap-3 rounded-xl border border-line p-3">
                 <img src={preview} alt="معاينة" className="h-24 w-40 rounded-xl object-cover" />
                 <div className="space-y-2">
                   <button
@@ -220,16 +220,16 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
                 </div>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-200 bg-brand-50/50 px-4 py-6 text-sm text-brand-700 transition hover:border-brand-300 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#07160f] dark:text-gold-300 dark:hover:border-gold-500/60 dark:hover:bg-brand-900/30">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-surface-2/50 px-4 py-6 text-sm text-accent transition hover:border-line-strong hover:bg-surface-2">
                 <ImageIcon className="h-6 w-6" />
                 <span className="font-bold">اضغط لاختيار صورة الغلاف</span>
-                <span className="text-xs text-stone-400 dark:text-stone-400">JPG / PNG / WebP — يتم ضغطها تلقائياً</span>
+                <span className="text-xs text-muted">JPG / PNG / WebP — يتم ضغطها تلقائياً</span>
                 <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={pickImage} />
               </label>
             )}
           </div>
 
-          <div className="flex gap-3 pt-3 border-t border-brand-100/60 dark:border-brand-800/60">
+          <div className="flex gap-3 pt-3 border-t border-line/60">
             <button type="submit" className="btn-primary flex-1" disabled={busy || !title.trim() || !description.trim()}>
               {busy && <LoaderIcon className="h-4 w-4 animate-spin" />}
               <span>{post ? 'حفظ التعديلات' : 'نشر المنشور'}</span>
