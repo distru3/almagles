@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import type { Category } from '../../lib/types';
 import AdminPostsTab from '../admin/AdminPostsTab';
-import AdminScheduleTab from '../admin/AdminScheduleTab';
+import ScheduleBuilder from '../../components/schedule/ScheduleBuilder';
 
 function PageHeader({ icon: Icon, title, subtitle }: { icon: typeof PenLine; title: string; subtitle: string }) {
   return (
@@ -70,7 +70,7 @@ export function SchedulePage() {
         title="الجدول الأسبوعي"
         subtitle={`أهلاً ${user?.name} — إضافة وتعديل جدول الفعاليات`}
       />
-      <AdminScheduleTab />
+      <ScheduleBuilder />
     </div>
   );
 }

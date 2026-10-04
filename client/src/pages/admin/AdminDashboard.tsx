@@ -18,7 +18,7 @@ import { todayISO, hijriDate } from '../../lib/dates';
 import type { Category } from '../../lib/types';
 import AdminPostsTab from './AdminPostsTab';
 import AdminCategoriesTab from './AdminCategoriesTab';
-import AdminScheduleTab from './AdminScheduleTab';
+import ScheduleBuilder from '../../components/schedule/ScheduleBuilder';
 import AdminCommentsTab from './AdminCommentsTab';
 import AdminUsersTab from './AdminUsersTab';
 import PostFormModal from './PostFormModal';
@@ -250,7 +250,7 @@ export default function AdminDashboard() {
       <div className="min-h-[450px]">
         {tab === 'posts' && <AdminPostsTab categories={categories} />}
         {tab === 'categories' && <AdminCategoriesTab />}
-        {tab === 'schedule' && <AdminScheduleTab />}
+        {tab === 'schedule' && <ScheduleBuilder />}
         {tab === 'comments' && <AdminCommentsTab />}
         {tab === 'users' && <AdminUsersTab categories={categories} />}
       </div>
