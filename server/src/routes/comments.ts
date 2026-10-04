@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth, requireAdmin, canManageCategory } from '../middleware/auth.js';
@@ -11,17 +12,41 @@ const createSchema = z.object({
   parentId: z.string().min(1).max(64).optional(),
 });
 
-router.get('/', requireAdmin, async (_req, res, next) => {
+const adminListSchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  type: z.enum(['all', 'direct', 'reply']).default('all'),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+router.get('/', requireAdmin, validate(adminListSchema, 'query'), async (req, res, next) => {
   try {
-    const comments = await prisma.comment.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 300,
-      include: {
-        author: { select: { id: true, name: true } },
-        post: { select: { id: true, title: true } },
-        _count: { select: { replies: true } },
-      },
-    });
+    const { q, type, page, limit } = req.query as unknown as z.infer<typeof adminListSchema>;
+    const where: Prisma.CommentWhereInput = {};
+    if (type === 'direct') where.parentId = null;
+    if (type === 'reply') where.parentId = { not: null };
+    if (q) {
+      where.OR = [
+        { content: { contains: q, mode: 'insensitive' } },
+        { author: { name: { contains: q, mode: 'insensitive' } } },
+        { post: { title: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [total, comments] = await Promise.all([
+      prisma.comment.count({ where }),
+      prisma.comment.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          author: { select: { id: true, name: true } },
+          post: { select: { id: true, title: true } },
+          _count: { select: { replies: true } },
+        },
+      }),
+    ]);
     return res.json({
       comments: comments.map((c) => ({
         id: c.id,
@@ -34,6 +59,9 @@ router.get('/', requireAdmin, async (_req, res, next) => {
         createdAt: c.createdAt,
         repliesCount: c._count.replies,
       })),
+      total,
+      page,
+      limit,
     });
   } catch (err) {
     next(err);
