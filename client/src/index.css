@@ -7,7 +7,9 @@
  * Components use only these semantic colours; light (paper) and dark (night)
  * values swap on <html class="dark">, so no component needs dark: variants.
  */
-:root {
+/* .theme-light forces the paper palette inside dark mode (e.g. the PDF print layout). */
+:root,
+.theme-light {
   color-scheme: light;
   --canvas: #f5efe3;
   --surface: #fffbf3;
