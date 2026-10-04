@@ -105,18 +105,36 @@ model Reaction {
 }
 
 model ScheduleItem {
-  id         String   @id @default(cuid())
-  date       String
-  weekdayKey String
-  timeLabel  String
-  section    String?
-  title      String
-  notes      String?
-  linkUrl    String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  date         String
+  weekdayKey   String
+  timeLabel    String
+  section      String?
+  title        String
+  notes        String?
+  linkUrl      String?
+  /// Text shown for the link (e.g. "درس الشيخ على يوتيوب"); falls back to a generic label.
+  linkLabel    String?
+  /// Values for admin-defined columns, keyed by ScheduleColumn.id.
+  customValues Json     @default("{}")
+  /// Order of sessions within the same day.
+  sortOrder    Int      @default(0)
+  /// Row id in the old almagles-schedule (Firebase) app; makes the import re-runnable.
+  sourceId     String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([date])
+}
+
+/// Extra columns the schedule managers add to every session (e.g. «الشيخ», «الكمية»).
+model ScheduleColumn {
+  id        String   @id @default(cuid())
+  label     String
+  order     Int      @default(0)
+  sourceId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model VerificationCode {

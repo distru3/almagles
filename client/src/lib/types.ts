@@ -51,6 +51,21 @@ export interface ScheduleItem {
   title: string;
   notes: string | null;
   linkUrl: string | null;
+  linkLabel: string | null;
+  /** Values for custom columns, keyed by ScheduleColumn.id. */
+  customValues: Record<string, string>;
+  sortOrder: number;
+}
+
+export interface ScheduleColumn {
+  id: string;
+  label: string;
+  order: number;
+}
+
+export interface ScheduleResponse {
+  items: ScheduleItem[];
+  columns: ScheduleColumn[];
 }
 
 export interface User {
