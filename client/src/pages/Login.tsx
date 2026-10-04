@@ -29,17 +29,17 @@ export default function Login() {
 
   return (
     <div className="container-site flex justify-center py-12">
-      <div className="card card-editorial w-full max-w-md p-7">
+      <div className="card w-full max-w-md p-7">
         <div className="mb-6 text-center">
-          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-800 text-white">
+          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-fill text-on-accent">
             <LogIn className="h-6 w-6" />
           </span>
-          <h1 className="mt-4 font-display text-2xl font-black text-brand-950">تسجيل الدخول</h1>
-          <p className="mt-1 text-sm text-stone-500">مرحباً بعودتك إلى رجال الأمة</p>
+          <h1 className="mt-4 font-display text-2xl font-black text-fg">تسجيل الدخول</h1>
+          <p className="mt-1 text-sm text-muted">مرحباً بعودتك إلى رجال الأمة</p>
         </div>
 
         {error && (
-          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>
+          <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3 py-2.5 text-sm text-danger">{error}</p>
         )}
 
         <form onSubmit={submit} className="space-y-4">
@@ -74,7 +74,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setShow((v) => !v)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-brand-700"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted hover:text-accent"
                 aria-label={show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
               >
                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -89,15 +89,15 @@ export default function Login() {
         <div className="mt-4 text-center">
           <Link
             to="/forgot-password"
-            className="text-sm font-bold text-stone-500 transition hover:text-brand-700"
+            className="text-sm font-bold text-muted transition hover:text-accent"
           >
             نسيت كلمة المرور؟
           </Link>
         </div>
 
-        <p className="mt-4 text-center text-sm text-stone-500">
+        <p className="mt-4 text-center text-sm text-muted">
           ليس لديك حساب؟{' '}
-          <Link to="/signup" className="font-extrabold text-brand-700 underline underline-offset-2">
+          <Link to="/signup" className="font-extrabold text-accent underline underline-offset-2">
             أنشئ حساباً جديداً
           </Link>
         </p>

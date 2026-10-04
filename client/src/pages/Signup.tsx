@@ -89,15 +89,15 @@ export default function Signup() {
 
   return (
     <div className="container-site flex justify-center py-12">
-      <div className="card card-editorial w-full max-w-md p-7">
+      <div className="card w-full max-w-md p-7">
         <div className="mb-6 text-center">
-          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-800 text-white">
+          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-fill text-on-accent">
             {step === 'details' ? <UserPlus className="h-6 w-6" /> : <MailCheck className="h-6 w-6" />}
           </span>
-          <h1 className="mt-4 font-display text-2xl font-black text-brand-950">
+          <h1 className="mt-4 font-display text-2xl font-black text-fg">
             {step === 'details' ? 'إنشاء حساب جديد' : 'تحقق من بريدك'}
           </h1>
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm text-muted">
             {step === 'details'
               ? 'انضم لتتفاعل مع المنشورات وتشارك بتعليقاتك'
               : `أدخل الرمز المكوّن من ٦ أرقام المرسل إلى ${email}`}
@@ -105,7 +105,7 @@ export default function Signup() {
         </div>
 
         {error && (
-          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>
+          <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3 py-2.5 text-sm text-danger">{error}</p>
         )}
 
         {step === 'details' ? (
@@ -157,13 +157,13 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={() => setShow((v) => !v)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-brand-700"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted hover:text-accent"
                   aria-label={show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                 >
                   {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-stone-400">٨ أحرف على الأقل</p>
+              <p className="mt-1 text-xs text-muted">٨ أحرف على الأقل</p>
             </div>
             <div>
               <label className="label" htmlFor="confirm">
@@ -196,7 +196,7 @@ export default function Signup() {
               className="input !py-4 text-center !text-2xl !tracking-[0.5em] font-mono"
             />
             {devCode && (
-              <p className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+              <p className="flex items-center justify-center gap-1.5 rounded-xl border border-warn bg-warn-soft px-3 py-2 text-center text-xs text-warn">
                 <ShieldCheck className="h-4 w-4" />
                 رمز التطوير (لا يظهر في الإنتاج): {devCode}
               </p>
@@ -209,14 +209,14 @@ export default function Signup() {
                 type="button"
                 onClick={resend}
                 disabled={busy || countdown > 0}
-                className="font-bold text-brand-700 underline underline-offset-2 disabled:text-stone-400 disabled:no-underline"
+                className="font-bold text-accent underline underline-offset-2 disabled:text-muted disabled:no-underline"
               >
                 {countdown > 0 ? `إعادة الإرسال بعد ${countdown} ثانية` : 'إعادة إرسال الرمز'}
               </button>
               <button
                 type="button"
                 onClick={() => setStep('details')}
-                className="text-stone-500 hover:text-brand-700"
+                className="text-muted hover:text-accent"
               >
                 تعديل البيانات
               </button>
@@ -225,9 +225,9 @@ export default function Signup() {
         )}
 
         {step === 'details' && (
-          <p className="mt-5 text-center text-sm text-stone-500">
+          <p className="mt-5 text-center text-sm text-muted">
             لديك حساب بالفعل؟{' '}
-            <Link to="/login" className="font-extrabold text-brand-700 underline underline-offset-2">
+            <Link to="/login" className="font-extrabold text-accent underline underline-offset-2">
               سجّل الدخول
             </Link>
           </p>

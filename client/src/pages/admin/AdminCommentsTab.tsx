@@ -86,7 +86,7 @@ export default function AdminCommentsTab() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-black text-brand-950 dark:text-stone-100">
+          <h2 className="font-display text-xl font-black text-fg">
             إدارة التعليقات
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
@@ -98,7 +98,7 @@ export default function AdminCommentsTab() {
       {/* Search and Filters */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
           <input
             className="input !py-2 pr-9 pl-8 text-xs"
             value={search}
@@ -110,7 +110,7 @@ export default function AdminCommentsTab() {
             <button
               type="button"
               onClick={() => setSearch('')}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-fg-2"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -123,8 +123,8 @@ export default function AdminCommentsTab() {
             onClick={() => setFilterReply('all')}
             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
               filterReply === 'all'
-                ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-                : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+                ? 'bg-accent-fill text-on-accent'
+                : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
             }`}
           >
             الكل
@@ -134,8 +134,8 @@ export default function AdminCommentsTab() {
             onClick={() => setFilterReply('direct')}
             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
               filterReply === 'direct'
-                ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-                : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+                ? 'bg-accent-fill text-on-accent'
+                : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
             }`}
           >
             تعليقات رئيسية
@@ -145,8 +145,8 @@ export default function AdminCommentsTab() {
             onClick={() => setFilterReply('reply')}
             className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
               filterReply === 'reply'
-                ? 'bg-brand-700 text-white dark:bg-gold-500 dark:text-brand-950'
-                : 'border border-brand-200/80 bg-white text-stone-600 hover:bg-brand-50 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300'
+                ? 'bg-accent-fill text-on-accent'
+                : 'border border-line/80 bg-surface text-fg-2 hover:bg-surface-2'
             }`}
           >
             ردود
@@ -155,7 +155,7 @@ export default function AdminCommentsTab() {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3.5 py-2 text-xs font-bold text-danger">
           {error}
         </p>
       )}
@@ -192,25 +192,25 @@ export default function AdminCommentsTab() {
           {comments.map((c) => (
             <div
               key={c.id}
-              className="rounded-2xl border border-brand-100 bg-white p-4 shadow-2xs transition hover:border-brand-300 dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
+              className="rounded-2xl border border-line bg-surface p-4 shadow-2xs transition hover:border-line-strong"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-100/60 dark:border-brand-800/60 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-black text-brand-800 dark:bg-brand-900/60 dark:text-gold-300">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm font-black text-fg">
                     {c.authorName.charAt(0)}
                   </span>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-black text-brand-950 dark:text-stone-100">
+                      <p className="text-xs font-black text-fg">
                         {c.authorName}
                       </p>
                       {c.parentId && (
-                        <span className="rounded-md bg-stone-100 px-1.5 py-0.2 text-[10px] font-bold text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                        <span className="rounded-md bg-surface-2 px-1.5 py-0.2 text-[10px] font-bold text-muted">
                           رد
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-stone-400 dark:text-stone-400">
+                    <p className="text-[10px] text-muted">
                       {timeAgoFull(c.createdAt)}
                     </p>
                   </div>
@@ -221,7 +221,7 @@ export default function AdminCommentsTab() {
                     to={`/post/${c.postId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-800 dark:text-gold-400 dark:hover:text-gold-300"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-accent hover:text-fg"
                     title="فتح المنشور في الموقع"
                   >
                     <MessageSquare className="h-3.5 w-3.5 shrink-0" />
@@ -244,7 +244,7 @@ export default function AdminCommentsTab() {
                 </div>
               </div>
 
-              <p className="mt-3 text-xs leading-6 text-stone-700 dark:text-stone-300">
+              <p className="mt-3 text-xs leading-6 text-fg">
                 {c.content}
               </p>
             </div>

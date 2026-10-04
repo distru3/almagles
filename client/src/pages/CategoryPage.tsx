@@ -71,26 +71,26 @@ export default function CategoryPage() {
     <div className="container-site py-8">
       <div className="page-header flex-wrap justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-800 text-white dark:bg-brand-900 dark:text-gold-400">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-fill text-on-accent">
             <FolderOpen className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="font-display text-2xl font-black text-brand-950 dark:text-stone-100">
+            <h1 className="font-display text-2xl font-black text-fg">
               {category?.name ?? '…'}
             </h1>
-            {!loading && <p className="text-sm text-stone-500 dark:text-stone-400">{total} منشور</p>}
+            {!loading && <p className="text-sm text-muted">{total} منشور</p>}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Sorting Pills */}
-          <div className="inline-flex items-center gap-1 rounded-xl border border-brand-200/80 bg-white p-1 shadow-sm dark:border-brand-800/80 dark:bg-brand-900/60">
+          <div className="inline-flex items-center gap-1 rounded-xl border border-line/80 bg-surface p-1 shadow-sm">
             <button
               onClick={() => setSort('newest')}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 sort === 'newest'
-                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
-                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+                  ? 'bg-accent-fill text-on-accent shadow-sm'
+                  : 'text-fg-2 hover:text-fg'
               }`}
             >
               الأحدث
@@ -99,8 +99,8 @@ export default function CategoryPage() {
               onClick={() => setSort('reactions')}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 sort === 'reactions'
-                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
-                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+                  ? 'bg-accent-fill text-on-accent shadow-sm'
+                  : 'text-fg-2 hover:text-fg'
               }`}
             >
               الأكثر تفاعلاً
@@ -109,8 +109,8 @@ export default function CategoryPage() {
               onClick={() => setSort('oldest')}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 sort === 'oldest'
-                  ? 'bg-brand-700 text-white shadow-sm dark:bg-gold-500 dark:text-brand-950'
-                  : 'text-stone-600 hover:text-brand-900 dark:text-stone-400 dark:hover:text-stone-200'
+                  ? 'bg-accent-fill text-on-accent shadow-sm'
+                  : 'text-fg-2 hover:text-fg'
               }`}
             >
               الأقدم
