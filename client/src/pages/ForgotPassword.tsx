@@ -83,15 +83,15 @@ export default function ForgotPassword() {
 
   return (
     <div className="container-site flex justify-center py-12">
-      <div className="card card-editorial w-full max-w-md p-7">
+      <div className="card w-full max-w-md p-7">
         <div className="mb-6 text-center">
-          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-800 text-white">
+          <span className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-fill text-on-accent">
             {step === 'done' ? <ShieldCheck className="h-6 w-6" /> : step === 'code' ? <MailCheck className="h-6 w-6" /> : <KeyRound className="h-6 w-6" />}
           </span>
-          <h1 className="mt-4 font-display text-2xl font-black text-brand-950">
+          <h1 className="mt-4 font-display text-2xl font-black text-fg">
             {step === 'done' ? 'تم استعادة كلمة المرور' : 'استعادة كلمة المرور'}
           </h1>
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm text-muted">
             {step === 'email'
               ? 'أدخل بريدك وسنرسل لك رمز تحقق'
               : step === 'code'
@@ -101,7 +101,7 @@ export default function ForgotPassword() {
         </div>
 
         {error && (
-          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{error}</p>
+          <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3 py-2.5 text-sm text-danger">{error}</p>
         )}
 
         {step === 'email' && (
@@ -139,7 +139,7 @@ export default function ForgotPassword() {
               className="input !py-4 text-center !text-2xl !tracking-[0.5em] font-mono"
             />
             {devCode && (
-              <p className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+              <p className="flex items-center justify-center gap-1.5 rounded-xl border border-warn bg-warn-soft px-3 py-2 text-center text-xs text-warn">
                 <ShieldCheck className="h-4 w-4" />
                 رمز التطوير (لا يظهر في الإنتاج): {devCode}
               </p>
@@ -158,7 +158,7 @@ export default function ForgotPassword() {
                 maxLength={72}
                 required
               />
-              <p className="mt-1 text-xs text-stone-400">٨ أحرف على الأقل</p>
+              <p className="mt-1 text-xs text-muted">٨ أحرف على الأقل</p>
             </div>
             <div>
               <label className="label" htmlFor="confirm">
@@ -182,7 +182,7 @@ export default function ForgotPassword() {
               type="button"
               onClick={resend}
               disabled={busy || countdown > 0}
-              className="w-full text-center text-sm font-bold text-brand-700 underline underline-offset-2 disabled:text-stone-400 disabled:no-underline"
+              className="w-full text-center text-sm font-bold text-accent underline underline-offset-2 disabled:text-muted disabled:no-underline"
             >
               {countdown > 0 ? `إعادة الإرسال بعد ${countdown} ثانية` : 'إعادة إرسال الرمز'}
             </button>
@@ -196,9 +196,9 @@ export default function ForgotPassword() {
         )}
 
         {step !== 'done' && (
-          <p className="mt-5 text-center text-sm text-stone-500">
+          <p className="mt-5 text-center text-sm text-muted">
             تذكرت كلمة المرور؟{' '}
-            <Link to="/login" className="font-extrabold text-brand-700 underline underline-offset-2">
+            <Link to="/login" className="font-extrabold text-accent underline underline-offset-2">
               سجّل الدخول
             </Link>
           </p>

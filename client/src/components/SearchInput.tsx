@@ -82,11 +82,11 @@ export default function SearchInput({
     <div ref={containerRef} className={`relative ${className}`}>
       {/* Input Field */}
       <div className="relative flex items-center">
-        <Search className="pointer-events-none absolute right-3 h-4 w-4 text-stone-400 dark:text-stone-500" />
+        <Search className="pointer-events-none absolute right-3 h-4 w-4 text-muted" />
         <input
           ref={inputRef}
           type="text"
-          className="w-full rounded-full border border-brand-200/90 bg-brand-50/60 pr-9 pl-8 py-1.5 text-xs font-bold text-brand-950 placeholder:text-stone-400 focus:border-brand-500 focus:bg-white focus:outline-none dark:border-brand-800 dark:bg-[#0c1f17] dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-brand-600 dark:focus:bg-[#081711] transition shadow-2xs"
+          className="w-full rounded-full border border-line/90 bg-surface-2/60 pr-9 pl-8 py-1.5 text-xs font-bold text-fg placeholder:text-muted focus:border-accent focus:bg-surface focus:outline-none transition shadow-2xs"
           placeholder={placeholder}
           value={query}
           onChange={(e) => {
@@ -105,7 +105,7 @@ export default function SearchInput({
               setResults([]);
               inputRef.current?.focus();
             }}
-            className="absolute left-2.5 rounded-full p-0.5 text-stone-400 transition hover:bg-stone-200/60 hover:text-stone-700 dark:hover:bg-brand-900 dark:hover:text-stone-200"
+            className="absolute left-2.5 rounded-full p-0.5 text-muted transition hover:bg-surface-2/60 hover:text-fg"
             aria-label="مسح البحث"
           >
             <X className="h-3.5 w-3.5" />
@@ -115,14 +115,14 @@ export default function SearchInput({
 
       {/* Results Dropdown directly below input */}
       {isOpen && query.trim() && (
-        <div className="absolute top-full right-0 mt-1.5 w-full min-w-[280px] sm:min-w-[340px] max-h-80 overflow-y-auto rounded-2xl border border-brand-200/90 bg-white shadow-xl dark:border-brand-800 dark:bg-[#0c1f17] z-50 p-2 animate-fade-in">
+        <div className="absolute top-full right-0 mt-1.5 w-full min-w-[280px] sm:min-w-[340px] max-h-80 overflow-y-auto rounded-2xl border border-line/90 bg-surface shadow-xl z-50 p-2">
           {loading && results.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 py-6 text-xs text-stone-400">
-              <Loader2 className="h-4 w-4 animate-spin text-brand-600 dark:text-gold-400" />
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted">
+              <Loader2 className="h-4 w-4 animate-spin text-accent" />
               <span>جارِ البحث…</span>
             </div>
           ) : results.length === 0 && hasSearched ? (
-            <div className="py-6 text-center text-xs text-stone-500 dark:text-stone-400">
+            <div className="py-6 text-center text-xs text-muted">
               لا توجد نتائج مطابقة لـ «{query}»
             </div>
           ) : (
@@ -132,21 +132,21 @@ export default function SearchInput({
                   key={post.id}
                   type="button"
                   onClick={() => handleSelect(post.id)}
-                  className="group flex w-full items-center justify-between gap-2.5 rounded-xl p-2.5 text-right transition hover:bg-brand-50/80 dark:hover:bg-[#122e22]"
+                  className="group flex w-full items-center justify-between gap-2.5 rounded-xl p-2.5 text-right transition hover:bg-surface-2/80"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-[10px] text-stone-400">
-                      <span className="font-extrabold text-brand-700 dark:text-gold-400">
+                    <div className="flex items-center gap-1.5 text-[10px] text-muted">
+                      <span className="font-extrabold text-accent">
                         {post.category.name}
                       </span>
                       <span>•</span>
                       <span>{hijriDate(post.postDate)}</span>
                     </div>
-                    <p className="mt-0.5 truncate font-display text-xs font-bold text-brand-950 group-hover:text-brand-700 dark:text-stone-100 dark:group-hover:text-gold-300">
+                    <p className="mt-0.5 truncate font-display text-xs font-bold text-fg group-hover:text-accent">
                       {post.title}
                     </p>
                   </div>
-                  <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-stone-300 transition-transform group-hover:-translate-x-1 group-hover:text-brand-600 dark:text-stone-600 dark:group-hover:text-gold-400" />
+                  <ArrowLeft className="h-3.5 w-3.5 shrink-0 text-muted transition-transform group-hover:-translate-x-1 group-hover:text-accent" />
                 </button>
               ))}
             </div>

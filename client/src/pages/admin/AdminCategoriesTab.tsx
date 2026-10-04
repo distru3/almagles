@@ -78,16 +78,16 @@ export default function AdminCategoriesTab() {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="font-display text-xl font-black text-brand-950 dark:text-stone-100">
+        <h2 className="font-display text-xl font-black text-fg">
           إدارة الأقسام
         </h2>
-        <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+        <p className="text-xs text-muted mt-0.5">
           كل قسم يمثّل تصنيفاً مستقلاً وله صفحته وروابطه الخاصة
         </p>
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+        <p className="mb-4 rounded-xl border border-danger bg-danger-soft px-3.5 py-2 text-xs font-bold text-danger">
           {error}
         </p>
       )}
@@ -98,17 +98,17 @@ export default function AdminCategoriesTab() {
         <div className="lg:col-span-1">
           <form
             onSubmit={save}
-            className="card card-editorial p-4 rounded-2xl border border-brand-100 dark:border-brand-800/80 dark:bg-[#0b1c15] sticky top-4 shadow-sm"
+            className="card p-4 rounded-2xl border border-line sticky top-4 shadow-sm"
           >
-            <div className="flex items-center justify-between mb-3 border-b border-brand-100/60 dark:border-brand-800/60 pb-2.5">
-              <h3 className="font-display text-sm font-black text-brand-950 dark:text-stone-100">
+            <div className="flex items-center justify-between mb-3 border-b border-line/60 pb-2.5">
+              <h3 className="font-display text-sm font-black text-fg">
                 {editingId ? 'تعديل اسم القسم' : 'إضافة قسم جديد'}
               </h3>
               {editingId && (
                 <button
                   type="button"
                   onClick={cancelEdit}
-                  className="text-xs text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 inline-flex items-center gap-1"
+                  className="text-xs text-muted hover:text-fg-2 inline-flex items-center gap-1"
                 >
                   <X className="h-3 w-3" />
                   <span>إلغاء</span>
@@ -131,9 +131,9 @@ export default function AdminCategoriesTab() {
               </div>
 
               {name.trim() && (
-                <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-2.5 dark:border-brand-800 dark:bg-[#07160f] text-xs">
-                  <span className="text-[10px] text-stone-400 block mb-0.5">معاينة مسار الرابط:</span>
-                  <span className="font-mono text-brand-700 dark:text-gold-300 font-bold truncate block" dir="ltr">
+                <div className="rounded-xl border border-line bg-surface-2/50 p-2.5 text-xs">
+                  <span className="text-[10px] text-muted block mb-0.5">معاينة مسار الرابط:</span>
+                  <span className="font-mono text-accent font-bold truncate block" dir="ltr">
                     /category/{name.trim().toLowerCase().replace(/\s+/g, '-')}
                   </span>
                 </div>
@@ -167,27 +167,27 @@ export default function AdminCategoriesTab() {
               {categories.map((c) => (
                 <div
                   key={c.id}
-                  className="group flex flex-col justify-between rounded-2xl border border-brand-100 bg-white p-4 shadow-2xs transition hover:border-brand-300 hover:shadow-sm dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-gold-500/60"
+                  className="group flex flex-col justify-between rounded-2xl border border-line bg-surface p-4 shadow-2xs transition hover:border-line-strong hover:shadow-sm"
                 >
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-900/60 dark:text-gold-300">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-accent">
                         <FolderOpen className="h-4.5 w-4.5" />
                       </span>
-                      <span className="rounded-full bg-brand-100/70 px-2.5 py-0.5 text-[11px] font-black text-brand-800 dark:bg-brand-900/60 dark:text-gold-300">
+                      <span className="rounded-full bg-surface-2/70 px-2.5 py-0.5 text-[11px] font-black text-fg">
                         {c.postCount} منشور
                       </span>
                     </div>
 
-                    <h3 className="font-display text-sm font-black text-brand-950 dark:text-stone-100 group-hover:text-brand-800 dark:group-hover:text-gold-300">
+                    <h3 className="font-display text-sm font-black text-fg group-hover:text-fg">
                       {c.name}
                     </h3>
-                    <p className="mt-1 text-xs text-stone-400 dark:text-stone-400 font-mono truncate" dir="ltr">
+                    <p className="mt-1 text-xs text-muted font-mono truncate" dir="ltr">
                       /category/{c.slug}
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-brand-100/60 dark:border-brand-800/60 flex items-center justify-end gap-1.5">
+                  <div className="mt-4 pt-3 border-t border-line/60 flex items-center justify-end gap-1.5">
                     <Link
                       to={`/category/${c.slug}`}
                       target="_blank"

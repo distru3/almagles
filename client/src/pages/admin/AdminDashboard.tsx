@@ -114,12 +114,12 @@ export default function AdminDashboard() {
   }, [tab]);
 
   const roleBadge = isSuper ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-gold-400/20 px-2.5 py-0.5 text-xs font-black text-gold-700 border border-gold-400/30 dark:text-gold-300">
+    <span className="inline-flex items-center gap-1 rounded-full bg-accent-fill/20 px-2.5 py-0.5 text-xs font-black text-accent border border-accent/30">
       <Sparkles className="h-3 w-3" />
       مشرف عام
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-black text-brand-800 dark:bg-brand-900/60 dark:text-gold-300">
+    <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-black text-fg">
       كاتب معتمد
     </span>
   );
@@ -127,24 +127,24 @@ export default function AdminDashboard() {
   return (
     <div className="container-site py-8">
       {/* Top Header Bar */}
-      <div className="mb-7 flex flex-wrap items-center justify-between gap-4 border-b border-brand-200/80 pb-6 dark:border-brand-800/80">
+      <div className="mb-7 flex flex-wrap items-center justify-between gap-4 border-b border-line/80 pb-6">
         <div className="flex items-center gap-3.5">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 text-brand-950 shadow-md">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-fill to-accent-fill text-fg shadow-md">
             <ShieldCheck className="h-7 w-7" />
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-2xl font-black text-brand-950 dark:text-stone-100">
+              <h1 className="font-display text-2xl font-black text-fg">
                 لوحة التحكم
               </h1>
               {roleBadge}
-              <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2.5 py-0.5 text-[11px] font-bold text-stone-600 dark:bg-[#07160f] dark:border dark:border-brand-800 dark:text-stone-300">
-                <Calendar className="h-3 w-3 text-brand-600 dark:text-gold-400" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-0.5 text-[11px] font-bold text-fg-2">
+                <Calendar className="h-3 w-3 text-accent" />
                 {hijriDate(todayISO())}
               </span>
             </div>
-            <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-              مرحباً <strong className="text-brand-900 dark:text-gold-300">{user?.name}</strong> — إدارة محتوى الموقع وجدول المقرر الدراسي
+            <p className="text-xs text-muted mt-1">
+              مرحباً <strong className="text-fg">{user?.name}</strong> — إدارة محتوى الموقع وجدول المقرر الدراسي
             </p>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function AdminDashboard() {
 
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-brand-200 bg-white px-3.5 py-2 text-xs font-bold text-brand-800 shadow-2xs hover:bg-brand-50 hover:text-brand-950 dark:border-brand-800 dark:bg-[#0d221a] dark:text-stone-300 dark:hover:bg-brand-900/40 dark:hover:text-gold-300 transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-bold text-fg shadow-2xs hover:bg-surface-2 hover:text-fg transition"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">الموقع العام</span>
@@ -197,14 +197,14 @@ export default function AdminDashboard() {
               }}
               className={`group relative flex flex-col justify-between text-right p-4 rounded-2xl border transition-all duration-200 ${
                 isActive
-                  ? 'border-brand-600 bg-brand-50/90 shadow-md ring-1 ring-brand-600/30 dark:border-gold-500/80 dark:bg-[#133023] dark:ring-gold-500/30'
-                  : 'border-brand-100/90 bg-white hover:border-brand-300 hover:bg-brand-50/30 shadow-2xs dark:border-brand-800/80 dark:bg-[#0b1c15] dark:hover:border-brand-700 dark:hover:bg-[#0e241c]'
+                  ? 'border-accent bg-surface-2/90 shadow-md ring-1 ring-accent/30'
+                  : 'border-line/90 bg-surface hover:border-line-strong hover:bg-surface-2/30 shadow-2xs'
               }`}
             >
               <div className="flex items-center justify-between w-full">
                 <span
                   className={`text-xs font-extrabold ${
-                    isActive ? 'text-brand-800 dark:text-gold-300' : 'text-stone-600 dark:text-stone-300'
+                    isActive ? 'text-fg' : 'text-fg-2'
                   }`}
                 >
                   {label}
@@ -212,8 +212,8 @@ export default function AdminDashboard() {
                 <span
                   className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
                     isActive
-                      ? 'bg-brand-600 text-white dark:bg-gold-500 dark:text-brand-950'
-                      : 'bg-brand-50 text-brand-700 dark:bg-brand-900/60 dark:text-gold-400 group-hover:bg-brand-100'
+                      ? 'bg-accent-fill text-on-accent'
+                      : 'bg-surface-2 text-accent group-hover:bg-surface-2'
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -223,12 +223,12 @@ export default function AdminDashboard() {
               <div className="mt-3 flex items-baseline justify-between w-full">
                 <span
                   className={`text-2xl font-black font-display tracking-tight ${
-                    isActive ? 'text-brand-950 dark:text-gold-100' : 'text-brand-900 dark:text-stone-100'
+                    isActive ? 'text-fg' : 'text-fg'
                   }`}
                 >
                   {count}
                 </span>
-                <span className="text-[10px] text-stone-400 dark:text-stone-400">
+                <span className="text-[10px] text-muted">
                   {subtitle}
                 </span>
               </div>
@@ -237,8 +237,8 @@ export default function AdminDashboard() {
               <div
                 className={`mt-2 h-1 w-full rounded-full transition-all ${
                   isActive
-                    ? 'bg-brand-600 dark:bg-gold-400'
-                    : 'bg-transparent group-hover:bg-brand-200/50 dark:group-hover:bg-brand-800/40'
+                    ? 'bg-accent-fill'
+                    : 'bg-transparent group-hover:bg-surface-2/50'
                 }`}
               />
             </button>
