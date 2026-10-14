@@ -49,7 +49,7 @@ function template(purpose: MailPurpose, code: string): string {
             <tr>
               <td style="background-color:#123c3a;padding:28px 32px;text-align:center;">
                 <span style="color:#f6d365;font-size:22px;font-weight:800;letter-spacing:0.5px;">رجال الأمة</span>
-                <span style="display:block;color:#c9d6d4;font-size:12px;margin-top:6px;">مقرّرٌ يبني الإنسان… ومجتمعٌ يقرأ ويتفاعل</span>
+                <span style="display:block;color:#c9d6d4;font-size:12px;margin-top:6px;">مقرّر يبني الإنسان… ومجتمع يقرأ ويتفاعل</span>
               </td>
             </tr>
             <!-- Body -->
