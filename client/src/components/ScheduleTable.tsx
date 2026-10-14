@@ -11,7 +11,8 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import type { ScheduleColumn, ScheduleItem } from '../lib/types';
+import type { CouncilNote, ScheduleColumn, ScheduleItem } from '../lib/types';
+import { CouncilNoteView } from './schedule/CouncilNotes';
 import { customSummary, linkText } from '../lib/schedule';
 import { isInternalPath, normalizeUrl } from '../lib/url';
 import {
@@ -31,10 +32,11 @@ import {
 interface Props {
   items: ScheduleItem[];
   columns?: ScheduleColumn[];
+  notes?: CouncilNote[];
   loading?: boolean;
 }
 
-export default function ScheduleTable({ items, columns = [], loading }: Props) {
+export default function ScheduleTable({ items, columns = [], notes = [], loading }: Props) {
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || (user?.canManageSchedule ?? false);
   // Admins edit from the dashboard; schedule managers have their own page.
@@ -64,7 +66,9 @@ export default function ScheduleTable({ items, columns = [], loading }: Props) {
     return map;
   }, [items]);
 
-  const hasActivities = weekDays.some((d) => (byDate[d.date] ?? []).length > 0);
+  const noteByDate = useMemo(() => new Map(notes.map((n) => [n.date, n])), [notes]);
+  // A day with only a council note still counts — the week isn't empty.
+  const hasActivities = weekDays.some((d) => (byDate[d.date] ?? []).length > 0 || noteByDate.has(d.date));
   const isCurrentWeek = toISODate(weekStart(new Date())) === toISODate(anchor);
   const todayActivities = byDate[todayISO()] ?? [];
 
@@ -294,6 +298,7 @@ export default function ScheduleTable({ items, columns = [], loading }: Props) {
                         </div>
                       ))
                     )}
+                    {noteByDate.get(day.date) && <CouncilNoteView note={noteByDate.get(day.date)!} compact />}
                   </div>
                 </div>
               );
@@ -414,6 +419,7 @@ export default function ScheduleTable({ items, columns = [], loading }: Props) {
                   </div>
                 ))
               )}
+              {noteByDate.get(activeMobileDate) && <CouncilNoteView note={noteByDate.get(activeMobileDate)!} />}
             </div>
           </div>
         </>

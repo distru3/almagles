@@ -22,6 +22,7 @@ model User {
   canManageSchedule Boolean        @default(false)
   managedCategories Category[]     @relation("CategoryAdmins")
   refreshTokens     RefreshToken[]
+  councilNotes      CouncilNote[]
   posts             Post[]
   comments          Comment[]
   reactions         Reaction[]
@@ -125,6 +126,18 @@ model ScheduleItem {
   updatedAt    DateTime @updatedAt
 
   @@index([date])
+}
+
+/// «ملاحظات المجلس» — one note per calendar day, readable by everyone and
+/// written by admins and writers. An empty note is deleted rather than stored.
+model CouncilNote {
+  id          String   @id @default(cuid())
+  date        String   @unique
+  content     String
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 /// Extra columns the schedule managers add to every session (e.g. «الشيخ», «الكمية»).

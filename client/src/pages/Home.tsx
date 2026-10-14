@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Newspaper, PenLine } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import type { Category, Post, ScheduleColumn, ScheduleItem, ScheduleResponse } from '../lib/types';
+import type { Category, CouncilNote, Post, ScheduleColumn, ScheduleItem, ScheduleResponse } from '../lib/types';
 import { customSummary, linkText } from '../lib/schedule';
 import { todayISO, hijriDate, hijriShort, weekStart, addDays, toISODate, weekdayKey, WEEKDAY_NAMES } from '../lib/dates';
 import { normalizeUrl, isInternalPath } from '../lib/url';
@@ -12,11 +12,22 @@ import ScheduleTable from '../components/ScheduleTable';
 import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
 import { StarPattern } from '../components/Logo';
+import { CouncilNoteView } from '../components/schedule/CouncilNotes';
 
 const dayName = (iso: string) => WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))];
 
 /** The hero card: today's sessions, else the next upcoming one. */
-function LessonCard({ schedule, columns, loading }: { schedule: ScheduleItem[]; columns: ScheduleColumn[]; loading: boolean }) {
+function LessonCard({
+  schedule,
+  columns,
+  todayNote,
+  loading,
+}: {
+  schedule: ScheduleItem[];
+  columns: ScheduleColumn[];
+  todayNote?: CouncilNote;
+  loading: boolean;
+}) {
   const today = todayISO();
   const todays = schedule.filter((i) => i.date === today);
   const next = schedule.filter((i) => i.date > today).sort((a, b) => a.date.localeCompare(b.date))[0];
@@ -53,6 +64,11 @@ function LessonCard({ schedule, columns, loading }: { schedule: ScheduleItem[]; 
                 </li>
               ))}
             </ul>
+          )}
+          {todayNote && (
+            <div className="mt-4">
+              <CouncilNoteView note={todayNote} />
+            </div>
           )}
           <div className="mt-5 flex flex-wrap gap-2">
             {lead.linkUrl ? (
@@ -131,6 +147,7 @@ export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [scheduleColumns, setScheduleColumns] = useState<ScheduleColumn[]>([]);
+  const [councilNotes, setCouncilNotes] = useState<CouncilNote[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isFallback, setIsFallback] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -148,6 +165,7 @@ export default function Home() {
         setCategories(catRes.categories);
         setSchedule(schedRes.items);
         setScheduleColumns(schedRes.columns ?? []);
+        setCouncilNotes(schedRes.notes ?? []);
 
         if (todayRes.items.length > 0) {
           setPosts(todayRes.items);
@@ -187,7 +205,12 @@ export default function Home() {
             <p className="mt-2.5 text-[20px] text-fg-2 sm:text-[22px]">ومجتمعٌ يقرأ ويتفاعل</p>
           </div>
           <div className="lg:col-span-5">
-            <LessonCard schedule={schedule} columns={scheduleColumns} loading={loading} />
+            <LessonCard
+              schedule={schedule}
+              columns={scheduleColumns}
+              todayNote={councilNotes.find((n) => n.date === todayISO())}
+              loading={loading}
+            />
           </div>
         </div>
       </section>
@@ -249,7 +272,7 @@ export default function Home() {
 
       {/* Full schedule with week navigation */}
       <section id="schedule" className="container-site scroll-mt-24">
-        <ScheduleTable items={schedule} columns={scheduleColumns} loading={loading} />
+        <ScheduleTable items={schedule} columns={scheduleColumns} notes={councilNotes} loading={loading} />
       </section>
     </div>
   );
