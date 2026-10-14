@@ -63,9 +63,18 @@ export interface ScheduleColumn {
   order: number;
 }
 
+/** «ملاحظات المجلس» for one day. */
+export interface CouncilNote {
+  date: string;
+  content: string;
+  updatedAt: string;
+  updatedByName: string | null;
+}
+
 export interface ScheduleResponse {
   items: ScheduleItem[];
   columns: ScheduleColumn[];
+  notes: CouncilNote[];
 }
 
 export interface User {

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireAuth, requireScheduleManager } from '../middleware/auth.js';
+import { requireAuth, requireScheduleManager, requireWriterOrAdmin } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 
@@ -118,11 +118,20 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   try {
     const { from, to } = req.query as unknown as z.infer<typeof listQuerySchema>;
     const where = from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {};
-    const [items, columns] = await Promise.all([
+    const [items, columns, notes] = await Promise.all([
       prisma.scheduleItem.findMany({ where, orderBy: ORDER }),
       prisma.scheduleColumn.findMany({ orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] }),
+      prisma.councilNote.findMany({
+        where,
+        orderBy: { date: 'asc' },
+        select: { date: true, content: true, updatedAt: true, updatedBy: { select: { name: true } } },
+      }),
     ]);
-    return res.json({ items, columns });
+    return res.json({
+      items,
+      columns,
+      notes: notes.map((n) => ({ date: n.date, content: n.content, updatedAt: n.updatedAt, updatedByName: n.updatedBy?.name ?? null })),
+    });
   } catch (err) {
     next(err);
   }
@@ -278,6 +287,34 @@ router.delete('/:id', ...manage, async (req, res, next) => {
     if (!existing) return res.status(404).json({ message: 'العنصر غير موجود' });
     await prisma.scheduleItem.delete({ where: { id } });
     return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------- «ملاحظات المجلس»
+
+const noteSchema = z.object({ content: z.string().max(5000, 'الملاحظات طويلة جداً') });
+
+/** Save the note for one day; empty content deletes it. Any writer or admin. */
+router.put('/notes/:date', requireWriterOrAdmin, validate(noteSchema), async (req, res, next) => {
+  try {
+    const { date } = req.params;
+    if (!parseDate(date)) throw new HttpError(400, 'تاريخ غير صالح');
+    const content = (req.body as z.infer<typeof noteSchema>).content.trim();
+    if (!content) {
+      await prisma.councilNote.deleteMany({ where: { date } });
+      return res.json({ note: null });
+    }
+    const note = await prisma.councilNote.upsert({
+      where: { date },
+      create: { date, content, updatedById: req.user!.id },
+      update: { content, updatedById: req.user!.id },
+      select: { date: true, content: true, updatedAt: true, updatedBy: { select: { name: true } } },
+    });
+    return res.json({
+      note: { date: note.date, content: note.content, updatedAt: note.updatedAt, updatedByName: note.updatedBy?.name ?? null },
+    });
   } catch (err) {
     next(err);
   }
