@@ -183,8 +183,8 @@ export default function Home() {
             <p className="font-display text-base text-accent">
               {dayName(todayISO())} · {hijriDate(todayISO())}
             </p>
-            <h1 className="mt-2.5 font-display text-[44px] font-bold leading-[1.2] sm:text-[64px]">مقرّرٌ يبني الإنسان</h1>
-            <p className="mt-2.5 text-[20px] text-fg-2 sm:text-[22px]">ومجتمعٌ يقرأ ويتفاعل</p>
+            <h1 className="mt-2.5 font-display text-[44px] font-bold leading-[1.2] sm:text-[64px]">مقرّر يبني الإنسان</h1>
+            <p className="mt-2.5 text-[20px] text-fg-2 sm:text-[22px]">ومجتمع يقرأ ويتفاعل</p>
           </div>
           <div className="lg:col-span-5">
             <LessonCard schedule={schedule} columns={scheduleColumns} loading={loading} />
