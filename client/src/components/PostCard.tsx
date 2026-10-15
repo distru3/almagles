@@ -1,59 +1,181 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageSquare, Sparkles } from 'lucide-react';
+import { Check, MessageCircle, Share2 } from 'lucide-react';
 import type { Post } from '../lib/types';
-import { hijriDate, gregorianLong } from '../lib/dates';
+import { hijriDate } from '../lib/dates';
 import { cloudinaryUrl } from '../lib/image';
 import AyahText from './AyahText';
+import { REACTIONS, arNumber, useReaction } from './reactions';
 
-const arNumber = new Intl.NumberFormat('ar-EG');
+const relative = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
 
-/** Editorial post entry: category, title, excerpt, meta. `featured` is the lead story. */
-export default function PostCard({ post, featured = false }: { post: Post; featured?: boolean }) {
-  const totalReactions = Object.values(post.reactionCounts ?? {}).reduce((s, v) => s + v, 0);
-  const image = post.imageUrl ? cloudinaryUrl(post.imageUrl, featured ? 1100 : 700) : null;
+/** "منذ ٣ ساعات" for the last week, the Hijri date after that. */
+function timeAgo(createdAt: string, postDate: string): string {
+  const seconds = (Date.now() - new Date(createdAt).getTime()) / 1000;
+  if (seconds < 60) return 'الآن';
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), 'minute');
+  if (seconds < 86400) return relative.format(-Math.floor(seconds / 3600), 'hour');
+  if (seconds < 7 * 86400) return relative.format(-Math.floor(seconds / 86400), 'day');
+  return hijriDate(postDate);
+}
+
+const ROLE_BADGE: Record<string, string> = { writer: 'كاتب', admin: 'مشرف' };
+
+function commentsLabel(n: number): string {
+  if (n === 0) return '';
+  if (n === 1) return 'تعليق واحد';
+  if (n === 2) return 'تعليقان';
+  return `${arNumber.format(n)} ${n <= 10 ? 'تعليقات' : 'تعليقًا'}`;
+}
+
+interface Props {
+  post: Post;
+  /** Keeps the list's copy in sync after an on-card reaction. */
+  onChange?: (post: Post) => void;
+}
+
+/** Social-style post card for the feed: author, text, counts, actions, newest comment. */
+export default function PostCard({ post, onChange }: Props) {
+  const [copied, setCopied] = useState(false);
+  const { normalized, mine, total, react, busy, signedIn } = useReaction(
+    post.id,
+    post.reactionCounts,
+    post.myReaction,
+    (reactionCounts, myReaction) => onChange?.({ ...post, reactionCounts, myReaction }),
+  );
+  const image = post.imageUrl ? cloudinaryUrl(post.imageUrl, 1000) : null;
+  const href = `/post/${post.id}`;
+  const badge = post.author.role ? ROLE_BADGE[post.author.role] : undefined;
+  const long = post.description.length > 260;
+
+  const share = async () => {
+    const url = `${window.location.origin}${href}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: post.title, url });
+      } catch {
+        /* cancelled */
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked: nothing to do */
+    }
+  };
+
+  const action = 'flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-display text-sm transition';
 
   return (
-    <article className={`group flex flex-col ${featured ? 'border-b border-line pb-8' : ''}`}>
+    <article className="overflow-hidden rounded-2xl border border-line bg-surface">
+      <div className="px-4 pt-4 sm:px-5 sm:pt-5">
+        <header className="flex items-center gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-display text-lg font-bold text-accent"
+            aria-hidden="true"
+          >
+            {post.author.name.trim().charAt(0)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1.5 font-display text-[15px]">
+              <span className="truncate">{post.author.name}</span>
+              {badge && <span className="shrink-0 rounded-full bg-accent-soft px-2 text-[11px] text-accent">{badge}</span>}
+            </p>
+            <p className="text-[13px] text-muted">
+              <Link to={`/category/${post.category.slug}`} className="text-accent hover:text-accent-strong">
+                {post.category.name}
+              </Link>{' '}
+              · <time dateTime={post.createdAt} title={hijriDate(post.postDate)}>{timeAgo(post.createdAt, post.postDate)}</time>
+            </p>
+          </div>
+        </header>
+
+        <h3 className="mt-3.5 font-display text-[21px] font-semibold leading-[1.4] sm:text-[22px]">
+          <Link to={href} className="hover:text-accent">
+            {post.title}
+          </Link>
+        </h3>
+        <p className="mt-1.5 line-clamp-4 text-[16px] leading-[1.95] text-fg-2 sm:text-[17px]">
+          <AyahText text={post.description} />
+        </p>
+        {long && (
+          <Link to={href} className="mt-1 inline-block font-display text-sm text-accent hover:text-accent-strong">
+            اقرأ المزيد
+          </Link>
+        )}
+      </div>
+
       {image && (
-        <Link to={`/post/${post.id}`} className="mb-4 block overflow-hidden rounded-sm" tabIndex={-1} aria-hidden="true">
-          <img
-            src={image}
-            alt=""
-            loading="lazy"
-            className="aspect-[16/9] w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
+        <Link to={href} className="mt-3 block" tabIndex={-1} aria-hidden="true">
+          <img src={image} alt="" loading="lazy" className="max-h-[420px] w-full object-cover" />
         </Link>
       )}
-      <Link to={`/category/${post.category.slug}`} className="self-start font-display text-sm text-accent hover:text-accent-strong">
-        {post.category.name}
-      </Link>
-      <h3
-        className={`mt-1 font-display font-semibold text-fg transition group-hover:text-accent ${
-          featured ? 'text-[30px] leading-[1.35] sm:text-[34px]' : 'text-[22px] leading-[1.4]'
-        }`}
-      >
-        <Link to={`/post/${post.id}`}>{post.title}</Link>
-      </h3>
-      <p
-        className={`mt-2.5 text-fg-2 ${
-          featured ? 'line-clamp-4 text-[19px] leading-[2]' : 'line-clamp-2 text-[16px] leading-[1.9]'
-        }`}
-      >
-        <AyahText text={post.description} />
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-        <span title={gregorianLong(post.postDate)}>{hijriDate(post.postDate)}</span>
-        <span>{post.author.name}</span>
-        {totalReactions > 0 && (
-          <span className="inline-flex items-center gap-1" aria-label={`${totalReactions} تفاعل`}>
-            <Sparkles className="h-3.5 w-3.5" />
-            {arNumber.format(totalReactions)}
-          </span>
+
+      <div className="px-4 sm:px-5">
+        <div className="flex items-center justify-between py-3 text-[13px] text-muted">
+          <span>{total > 0 ? `${arNumber.format(total)} تفاعل` : 'كن أول من يتفاعل'}</span>
+          {post.commentsCount > 0 && (
+            <Link to={`${href}#comments`} className="hover:text-fg">
+              {commentsLabel(post.commentsCount)}
+            </Link>
+          )}
+        </div>
+
+        <div className="flex gap-1 border-t border-line py-1.5" role="group" aria-label="التفاعل مع المنشور">
+          {REACTIONS.map(({ key, label, icon: Icon }) => {
+            const active = mine === key;
+            const count = normalized[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => react(key)}
+                disabled={busy}
+                aria-pressed={active}
+                aria-label={`${label}${count ? ` (${arNumber.format(count)})` : ''}`}
+                title={signedIn ? label : 'سجّل الدخول للتفاعل'}
+                className={`${action} ${active ? 'bg-accent-soft font-semibold text-accent' : 'text-fg-2 hover:bg-surface-2 hover:text-fg'}`}
+              >
+                <Icon className={`h-[17px] w-[17px] ${active ? 'fill-current' : ''}`} aria-hidden="true" />
+                <span className="hidden sm:inline">{label}</span>
+                {count > 0 && <span className="text-xs">{arNumber.format(count)}</span>}
+              </button>
+            );
+          })}
+          <Link to={`${href}#comments`} className={`${action} text-fg-2 hover:bg-surface-2 hover:text-fg`} aria-label="تعليق">
+            <MessageCircle className="h-[17px] w-[17px]" aria-hidden="true" />
+            <span className="hidden sm:inline">تعليق</span>
+          </Link>
+          <button type="button" onClick={share} className={`${action} text-fg-2 hover:bg-surface-2 hover:text-fg`} aria-label={copied ? 'تم نسخ الرابط' : 'مشاركة'}>
+            {copied ? <Check className="h-[17px] w-[17px]" aria-hidden="true" /> : <Share2 className="h-[17px] w-[17px]" aria-hidden="true" />}
+            <span className="hidden sm:inline">{copied ? 'نُسخ الرابط' : 'مشاركة'}</span>
+          </button>
+        </div>
+
+        {post.topComment && (
+          <div className="border-t border-line pb-4 pt-3">
+            <div className="flex gap-2.5">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-display text-sm text-accent"
+                aria-hidden="true"
+              >
+                {post.topComment.authorName.trim().charAt(0)}
+              </span>
+              <div className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3 py-2">
+                <p className="font-display text-[13px]">{post.topComment.authorName}</p>
+                <p className="line-clamp-2 text-[14px] leading-[1.8] text-fg-2">{post.topComment.content}</p>
+              </div>
+            </div>
+            {post.commentsCount > 1 && (
+              <Link to={`${href}#comments`} className="mt-1.5 block pr-10 font-display text-[13px] text-muted hover:text-fg">
+                عرض كل التعليقات ({arNumber.format(post.commentsCount)})
+              </Link>
+            )}
+          </div>
         )}
-        <span className="inline-flex items-center gap-1" aria-label={`${post.commentsCount} تعليق`}>
-          <MessageSquare className="h-3.5 w-3.5" />
-          {arNumber.format(post.commentsCount)}
-        </span>
       </div>
     </article>
   );

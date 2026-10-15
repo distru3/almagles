@@ -9,6 +9,7 @@ export interface Category {
 export interface Author {
   id: string;
   name: string;
+  role?: 'visitor' | 'writer' | 'admin';
 }
 
 export interface Post {
@@ -24,6 +25,8 @@ export interface Post {
   reactionCounts: Record<string, number>;
   myReaction: string | null;
   commentsCount: number;
+  /** Newest top-level comment, for the feed card preview (list endpoint only). */
+  topComment?: { content: string; authorName: string } | null;
   totalReactions?: number;
   prevPost?: { id: string; title: string; postDate: string } | null;
   nextPost?: { id: string; title: string; postDate: string } | null;
