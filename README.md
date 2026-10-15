@@ -33,10 +33,10 @@
    - الواجهة: http://localhost:5173 (الخادم يتحكم بـ `/api` عبر Vite proxy)
    - الخادم: http://localhost:4000
 
-## الحسابات الجاهزة (بعد `db:seed`)
+## البيانات الأولية (Seed)
 
-- مشرف: `admin@almagles.app` — كلمة المرور من `SEED_ADMIN_PASSWORD`
-- زائر تجريبي: `demo@almagles.app` — كلمة المرور من `SEED_DEMO_PASSWORD` أو `SEED_ADMIN_PASSWORD`
+- `npm run db:seed` — ينشئ الأقسام، وينشئ حساب مشرف **فقط إذا لم يكن في الموقع أي مشرف** (من `SEED_ADMIN_EMAIL` و`SEED_ADMIN_PASSWORD`). آمن على قاعدة البيانات الحية ولا يغيّر أي حساب موجود.
+- `npm run db:seed:demo` — يضيف بيانات تجريبية (حسابات `demo@almagles.app` و`writer@almagles.app` بكلمة مرور `SEED_DEMO_PASSWORD`، ومنشورات وتعليقات وتفاعلات وأسبوعين من الجدول). **يرفض العمل على أي قاعدة بيانات غير محلية** حتى لا تصل البيانات التجريبية إلى الموقع الحي؛ للتجاوز على قاعدة بعيدة مؤقتة فقط: `ALLOW_REMOTE_DEMO_SEED=1`.
 
 ## الأدوار والصلاحيات
 
@@ -77,7 +77,8 @@ npm run db:import-schedule -- --apply            # الاستيراد الفعل
 | `JWT_SECRET` | نعم | لتوقيع التوكنات |
 | `PORT` | لا | الافتراضي 4000 |
 | `CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET` | لا | تفعيل رفع الصور |
-| `SEED_ADMIN_PASSWORD` | للبذر فقط | كلمة مرور المشرف عند تشغيل `db:seed` (لا يحتاجها الخادم) |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | للبذر فقط | حساب المشرف الأول إن لم يوجد مشرف (لا يحتاجهما الخادم) |
+| `SEED_DEMO_PASSWORD` | للبيانات التجريبية فقط | كلمة مرور الحسابات التجريبية في `db:seed:demo` (محلياً فقط) |
 | `ACCESS_TTL_MINUTES` | لا | مدة صلاحية رمز الدخول بالدقائق (الافتراضي 15) |
 | `BREVO_API_KEY` | نعم في الإنتاج* | إرسال رموز التحقق عبر واجهة Brevo (HTTPS) |
 | `EMAIL_FROM` | نعم في الإنتاج | عنوان المرسل الموثّق في Brevo (مثلاً بريدك على Gmail) |

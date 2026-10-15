@@ -15,7 +15,8 @@
     "db:migrate": "npm run prisma:migrate -w server",
     "db:deploy": "npm run prisma:deploy -w server",
     "db:seed": "npm run seed -w server",
-    "db:import-schedule": "npm run import:schedule -w server --"
+    "db:import-schedule": "npm run import:schedule -w server --",
+    "db:seed:demo": "npm run seed:demo -w server"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
