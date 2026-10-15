@@ -271,7 +271,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
   );
 
   return (
-    <section aria-label="التعليقات">
+    <section id="comments" aria-label="التعليقات" className="scroll-mt-24">
       <h2 className="mb-4 flex items-center gap-2 font-display text-[22px] font-semibold">
         <MessageSquare className="h-5 w-5 text-accent" aria-hidden="true" />
         التعليقات ({comments.length})

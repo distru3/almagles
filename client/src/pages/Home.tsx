@@ -170,7 +170,9 @@ export default function Home() {
     };
   }, []);
 
-  const [lead, ...rest] = posts;
+  const canPublish = user?.role === 'admin' || user?.role === 'writer';
+  const publishHref = user?.role === 'admin' ? '/admin?tab=posts' : '/write';
+  const updatePost = (next: Post) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
   const visibleCategories = useMemo(() => categories.filter((c) => c.postCount > 0), [categories]);
 
   return (
@@ -194,7 +196,7 @@ export default function Home() {
 
       <div className="container-site flex flex-wrap gap-12 py-14">
         {/* Posts */}
-        <section id="postList" className="min-w-0 flex-[999_1_560px]">
+        <section id="postList" className="min-w-0 max-w-[680px] flex-[999_1_560px]">
           <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="font-display text-[26px] font-semibold">{isFallback ? 'أحدث المنشورات' : 'منشورات اليوم'}</h2>
             {visibleCategories.length > 0 && (
@@ -216,31 +218,34 @@ export default function Home() {
             <div className="flex justify-center py-12">
               <Spinner />
             </div>
-          ) : !lead ? (
-            <EmptyState
-              icon={Newspaper}
-              title="لا توجد منشورات بعد"
-              description="لم يُنشر أي محتوى حتى الآن — عد لاحقاً"
-              action={
-                user?.role === 'admin' ? (
-                  <Link to="/admin" className="btn-primary">
-                    <PenLine className="h-4 w-4" />
-                    إضافة منشور
-                  </Link>
-                ) : undefined
-              }
-            />
           ) : (
-            <>
-              <PostCard post={lead} featured />
-              {rest.length > 0 && (
-                <div className="mt-8 grid grid-cols-1 gap-x-9 gap-y-8 sm:grid-cols-2">
-                  {rest.map((post) => (
-                    <PostCard key={post.id} post={post} />
-                  ))}
+            <div className="flex flex-col gap-4">
+              {/* Compose prompt, like a social feed — writers and admins only. */}
+              {canPublish && (
+                <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3.5">
+                  <span
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-display font-bold text-accent"
+                    aria-hidden="true"
+                  >
+                    {user!.name.trim().charAt(0)}
+                  </span>
+                  <Link
+                    to={publishHref}
+                    className="flex min-h-11 flex-1 items-center rounded-full bg-surface-2 px-4 text-muted transition hover:text-fg"
+                  >
+                    شارك فائدة اليوم…
+                  </Link>
+                  <Link to={publishHref} className="btn-primary !min-h-10 !px-3" aria-label="منشور جديد">
+                    <PenLine className="h-4 w-4" />
+                  </Link>
                 </div>
               )}
-            </>
+              {posts.length === 0 ? (
+                <EmptyState icon={Newspaper} title="لا توجد منشورات بعد" description="لم يُنشر أي محتوى حتى الآن — عد لاحقاً" />
+              ) : (
+                posts.map((post) => <PostCard key={post.id} post={post} onChange={updatePost} />)
+              )}
+            </div>
           )}
         </section>
 

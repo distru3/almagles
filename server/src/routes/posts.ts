@@ -111,13 +111,13 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         take: limit,
         include: {
           category: { select: { id: true, name: true, slug: true } },
-          author: { select: { id: true, name: true } },
+          author: { select: { id: true, name: true, role: true } },
         },
       }),
     ]);
 
     const postIds = posts.map((p) => p.id);
-    const [commentRows, { counts, mine }] = await Promise.all([
+    const [commentRows, { counts, mine }, latestComments] = await Promise.all([
       postIds.length > 0
         ? prisma.comment.groupBy({
             by: ['postId'],
@@ -126,7 +126,17 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
           })
         : Promise.resolve([]),
       reactionData(postIds, userId),
+      // Newest top-level comment per post, for the card's comment preview — one query.
+      postIds.length > 0
+        ? prisma.comment.findMany({
+            where: { postId: { in: postIds }, parentId: null },
+            orderBy: { createdAt: 'desc' },
+            distinct: ['postId'],
+            select: { postId: true, content: true, author: { select: { name: true } } },
+          })
+        : Promise.resolve([]),
     ]);
+    const topComment = new Map(latestComments.map((c) => [c.postId, { content: c.content, authorName: c.author.name }]));
 
     const commentCounts = new Map<string, number>();
     for (const c of commentRows) commentCounts.set(c.postId, c._count._all);
@@ -145,6 +155,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         reactionCounts: counts.get(p.id) ?? {},
         myReaction: mine.get(p.id) ?? null,
         commentsCount: commentCounts.get(p.id) ?? 0,
+        topComment: topComment.get(p.id) ?? null,
       })),
       total,
       page,
