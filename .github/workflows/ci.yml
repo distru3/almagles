@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Type-check, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate --schema=server/prisma/schema.prisma
+
+      - name: Type-check server
+        run: npx tsc --noEmit -p server/tsconfig.json
+
+      # API tests run against an in-memory Postgres (PGlite) with every
+      # migration applied — no database service needed.
+      - name: Test
+        run: npm test
+
+      - name: Build (server + client, includes client type-check)
+        run: npm run build
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Only what ships to production; fails on high or critical advisories.
+      - run: npm audit --omit=dev --audit-level=high
