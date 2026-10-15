@@ -3,8 +3,8 @@
  *
  *   npm run db:seed          categories, plus a first admin if the site has none
  *                            (safe on the live database; never touches existing data)
- *   npm run db:seed:demo     also demo accounts, sample posts, comments, reactions
- *                            and two demo schedule weeks — LOCAL DATABASES ONLY
+ *   npm run db:seed:demo     also demo accounts and two demo schedule weeks
+ *                            — LOCAL DATABASES ONLY (no sample posts)
  *
  * Demo seeding refuses any database that isn't on this machine, because a
  * local .env pointing at the live database once filled the live site with demo
@@ -82,44 +82,6 @@ const WEEK_2 = [
   { date: '2026-07-31', weekday: 'fri', section: 'استدراك وتسميع', title: 'تسميع سورة الأنعام', notes: 'الآيات من ١ إلى ٣٨ — تسميع ما تم حفظه' },
 ];
 
-const SAMPLE_POSTS: Array<{ title: string; description: string; category: string; daysFromNow: number }> = [
-  {
-    title: 'عظمة أمر الإسلام بالعدل',
-    category: 'مفاهيم شرعية',
-    description:
-      'العدل في الإسلام قيمة راسخة تكفّل بها الله في كتابه، قال تعالى: ﴿يَا أَيُّهَا الَّذِينَ آمَنُوا كُونُوا قَوَّامِينَ بِالْقِسْطِ﴾، وهو عدلٌ ينسحب على المسلم مع نفسه وأهله، ومع من يحب ويكره.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'من أخلاقه عليه الصلاة والسلام',
-    category: 'حديث عن الرسول',
-    description:
-      'عُرف النبي ﷺ قبل البعثة بالصادق الأمين، وكانت قريش تستودعه أماناتها، فلما هاجر خلّف عليّاً رضي الله عنه في مكة ليردّها إلى أصحابها.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'بيعة الرضوان',
-    category: 'معلومة من السيرة',
-    description:
-      'في الحديبية سنة ست للهجرة بايع الصحابةُ النبيَّ ﷺ تحت الشجرة، فسُمّيت بيعة الرضوان، ونزل فيها قول الله تعالى: ﴿لَّقَدْ رَضِيَ اللَّهُ عَنِ الْمُؤْمِنِينَ إِذْ يُبَايِعُونَكَ تَحْتَ الشَّجَرَةِ﴾.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'من أدب فتح مكة',
-    category: 'معلومة تاريخية',
-    description:
-      'دخل النبي ﷺ مكة فاتحاً في رمضان سنة ثمان للهجرة متواضعاً لربه، فأمّن أهلها وعفا عنهم، وطهّر البيت الحرام من الأصنام.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'الإسلام ينبوع حضارة لا شقاق',
-    category: 'الفكر الإسلامي',
-    description:
-      'نظرة الفكر الإسلامي إلى الحضارة تنظر إليها على أنها مبنية على العلم النافع والسياسة العادلة، وقد ارتبط اكتشاف أوروبا الحديثة بتراث الأندلس الإسلامي.',
-    daysFromNow: 0,
-  },
-];
-
 function slugify(name: string): string {
   return name
     .trim()
@@ -147,11 +109,6 @@ function currentWeekStart(): Date {
   return start;
 }
 
-function isoDaysFromNow(n: number): string {
-  const d = new Date(today);
-  d.setDate(d.getDate() + n);
-  return isoDate(d);
-}
 
 async function seedCategories(): Promise<Record<string, string>> {
   const categories: Record<string, string> = {};
@@ -186,7 +143,7 @@ async function ensureAdmin() {
   return admin;
 }
 
-async function seedDemo(categories: Record<string, string>, adminId: string) {
+async function seedDemo() {
   const weekRows = [...WEEK_1, ...WEEK_2].map((row, index) => {
     const date = currentWeekStart();
     date.setDate(date.getDate() + index);
@@ -239,62 +196,13 @@ async function seedDemo(categories: Record<string, string>, adminId: string) {
     data: { managedCategories: { connect: CATEGORIES.slice(0, 2).map((c) => ({ slug: slugify(c.name) })) } },
   });
   console.log('- demo accounts: demo@almagles.app, writer@almagles.app (password from SEED_DEMO_PASSWORD)');
-
-  const todayISO = isoDaysFromNow(0);
-  const samplePosts: { id: string }[] = [];
-  let created = 0;
-  for (const post of SAMPLE_POSTS) {
-    const categoryId = categories[post.category];
-    if (!categoryId) continue;
-    const existing = await prisma.post.findFirst({ where: { title: post.title, categoryId, postDate: todayISO } });
-    const row =
-      existing ??
-      (await prisma.post.create({
-        data: {
-          title: post.title,
-          description: post.description,
-          postDate: todayISO,
-          categoryId,
-          authorId: post.category === 'الفكر الإسلامي' ? adminId : writer.id,
-        },
-      }));
-    if (!existing) created += 1;
-    samplePosts.push({ id: row.id });
-  }
-  console.log(`- ${created} sample posts (dated today)`);
-
-  const first = samplePosts[0];
-  if (first) {
-    const comment =
-      (await prisma.comment.findFirst({ where: { postId: first.id, authorId: demo.id, parentId: null } })) ??
-      (await prisma.comment.create({
-        data: { postId: first.id, authorId: demo.id, content: 'طرح جميل ومختصر، خصوصاً الربط بين العدل والمعاملة اليومية.' },
-      }));
-    // The reply hangs off the comment above (it used to be created top-level).
-    const hasReply = await prisma.comment.findFirst({ where: { postId: first.id, parentId: comment.id } });
-    if (!hasReply) {
-      await prisma.comment.create({
-        data: { postId: first.id, authorId: adminId, parentId: comment.id, content: 'جزاك الله خيراً على الإضافة الطيبة.' },
-      });
-    }
-  }
-  for (const [index, post] of samplePosts.entries()) {
-    const userId = index % 2 === 0 ? demo.id : adminId;
-    const type = index % 2 === 0 ? 'love' : 'like';
-    await prisma.reaction.upsert({
-      where: { postId_userId: { postId: post.id, userId } },
-      update: { type },
-      create: { postId: post.id, userId, type },
-    });
-  }
-  console.log('- demo comment, reply and reactions');
 }
 
 async function main() {
   console.log(DEMO ? 'Seeding (with demo content)...' : 'Seeding...');
-  const categories = await seedCategories();
-  const admin = await ensureAdmin();
-  if (DEMO) await seedDemo(categories, admin.id);
+  await seedCategories();
+  await ensureAdmin();
+  if (DEMO) await seedDemo();
   console.log('Done ✓');
 }
 
