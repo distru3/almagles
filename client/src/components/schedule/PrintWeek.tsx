@@ -1,4 +1,4 @@
-import type { ScheduleColumn, ScheduleItem } from '../../lib/types';
+import type { CouncilNote, ScheduleColumn, ScheduleItem } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort } from '../../lib/dates';
 import { weekDates, linkText } from '../../lib/schedule';
 import { normalizeUrl } from '../../lib/url';
@@ -12,10 +12,12 @@ export default function PrintWeek({
   weekKey,
   items,
   columns,
+  notes = [],
 }: {
   weekKey: string;
   items: ScheduleItem[];
   columns: ScheduleColumn[];
+  notes?: CouncilNote[];
 }) {
   const days = weekDates(weekKey);
   const cell = 'border border-line-strong px-2.5 py-2 align-top';
@@ -100,6 +102,25 @@ export default function PrintWeek({
           })}
         </tbody>
       </table>
+
+      {days.some((iso) => notes.some((n) => n.date === iso)) && (
+        <div className="mt-5">
+          <p data-pdf-row className="mb-2 border-b border-line-strong pb-1 font-display text-[15px] text-accent">ملاحظات المجلس</p>
+          {days.map((iso) => {
+            const note = notes.find((n) => n.date === iso);
+            if (!note) return null;
+            return (
+              <div key={iso} data-pdf-row className="mb-2 grid grid-cols-[110px_1fr] gap-3">
+                <p className="font-display text-[13px]">
+                  {WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))]}
+                  <span className="block text-[11px] text-muted">{hijriShort(iso)}</span>
+                </p>
+                <p className="whitespace-pre-line">{note.content}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

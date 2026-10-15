@@ -58,6 +58,16 @@ export function requirePublisher(req: Request, res: Response, next: NextFunction
   next();
 }
 
+/** Admin or any writer — e.g. «ملاحظات المجلس», which isn't tied to a category or the schedule permission. */
+export function requireWriterOrAdmin(req: Request, res: Response, next: NextFunction) {
+  const user = req.user;
+  if (!user) return res.status(401).json({ message: 'يرجى تسجيل الدخول أولاً' });
+  if (user.role !== 'admin' && user.role !== 'writer') {
+    return res.status(403).json({ message: 'هذا الإجراء متاح للكتّاب والمشرفين فقط' });
+  }
+  next();
+}
+
 /** True when the user is super admin or manages the given category. */
 export function canManageCategory(user: AuthUser | undefined, categoryId: string): boolean {
   return user?.role === 'admin' || (user?.managedCategoryIds.includes(categoryId) ?? false);

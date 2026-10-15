@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 import { ChevronLeft, ChevronRight, Columns3, Copy, Download, FileSpreadsheet, Plus, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import type { ScheduleColumn, ScheduleItem, ScheduleResponse } from '../../lib/types';
+import type { CouncilNote, ScheduleColumn, ScheduleItem, ScheduleResponse } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort, todayISO } from '../../lib/dates';
 import {
   weekKeyOf,
@@ -18,6 +18,7 @@ import {
 import Spinner from '../Spinner';
 import SessionRow, { type SessionFields } from './SessionRow';
 import PrintWeek from './PrintWeek';
+import { CouncilNoteField } from './CouncilNotes';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'exporting' | 'error';
 
@@ -60,6 +61,7 @@ export default function ScheduleBuilder() {
   const editId = searchParams.get('edit');
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [columns, setColumns] = useState<ScheduleColumn[]>([]);
+  const [notes, setNotes] = useState<CouncilNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [week, setWeek] = useState(() => weekKeyOf(searchParams.get('date') ?? todayISO()));
@@ -81,6 +83,7 @@ export default function ScheduleBuilder() {
       const res = await api<ScheduleResponse>('/schedule');
       setItems(sortItems(res.items));
       setColumns(res.columns);
+      setNotes(res.notes ?? []);
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'تعذّر تحميل الجدول');
@@ -489,6 +492,11 @@ export default function ScheduleBuilder() {
                     ))}
                   </>
                 )}
+                <CouncilNoteField
+                  date={iso}
+                  note={notes.find((n) => n.date === iso)}
+                  onSaved={(date, note) => setNotes((prev) => [...prev.filter((n) => n.date !== date), ...(note ? [note] : [])])}
+                />
               </section>
             );
           })}
@@ -512,7 +520,7 @@ export default function ScheduleBuilder() {
       <div ref={printRef} aria-hidden="true" className="pointer-events-none fixed -left-[20000px] top-0">
         {printWeeks.map((w) => (
           <div key={w} data-print-week>
-            <PrintWeek weekKey={w} columns={columns} items={items.filter((i) => weekKeyOf(i.date) === w)} />
+            <PrintWeek weekKey={w} columns={columns} items={items.filter((i) => weekKeyOf(i.date) === w)} notes={notes} />
           </div>
         ))}
       </div>
