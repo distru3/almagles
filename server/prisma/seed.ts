@@ -1,6 +1,44 @@
+/**
+ * Seeds the database.
+ *
+ *   npm run db:seed          categories, plus a first admin if the site has none
+ *                            (safe on the live database; never touches existing data)
+ *   npm run db:seed:demo     also demo accounts and two demo schedule weeks
+ *                            — LOCAL DATABASES ONLY (no sample posts)
+ *
+ * Demo seeding refuses any database that isn't on this machine, because a
+ * local .env pointing at the live database once filled the live site with demo
+ * content. Override only for a disposable remote database:
+ *   ALLOW_REMOTE_DEMO_SEED=1 npm run db:seed:demo
+ */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from '../src/lib/password.js';
+
+const DEMO = process.argv.includes('--demo');
+
+function databaseHost(): string {
+  try {
+    return new URL(process.env.DATABASE_URL ?? '').hostname;
+  } catch {
+    return '';
+  }
+}
+
+function isLocalDatabase(): boolean {
+  const host = databaseHost();
+  return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) || host.endsWith('.localhost');
+}
+
+// Refuse before the first query, so a refused run cannot touch the database.
+if (DEMO && !isLocalDatabase() && process.env.ALLOW_REMOTE_DEMO_SEED !== '1') {
+  console.error(
+    `Refusing to seed demo content into a non-local database (${databaseHost() || 'unknown host'}).\n` +
+      'Demo accounts and posts must never reach the live site. Point DATABASE_URL at a local database,\n' +
+      'or set ALLOW_REMOTE_DEMO_SEED=1 if this remote database is disposable.',
+  );
+  process.exit(1);
+}
 
 const prisma = new PrismaClient();
 
@@ -44,44 +82,6 @@ const WEEK_2 = [
   { date: '2026-07-31', weekday: 'fri', section: 'استدراك وتسميع', title: 'تسميع سورة الأنعام', notes: 'الآيات من ١ إلى ٣٨ — تسميع ما تم حفظه' },
 ];
 
-const SAMPLE_POSTS: Array<{ title: string; description: string; category: string; daysFromNow: number }> = [
-  {
-    title: 'عظمة أمر الإسلام بالعدل',
-    category: 'مفاهيم شرعية',
-    description:
-      'العدل في الإسلام قيمة راسخة تكفّل بها الله في كتابه، قال تعالى: ﴿يَا أَيُّهَا الَّذِينَ آمَنُوا كُونُوا قَوَّامِينَ بِالْقِسْطِ﴾، وهو عدلٌ ينسحب على المسلم مع نفسه وأهله، ومع من يحب ويكره.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'من أخلاقه عليه الصلاة والسلام',
-    category: 'حديث عن الرسول',
-    description:
-      'كان ﷺ أميناً صادقاً قبل البعثة يُلقّب بالصادق الأمين، فبلّغوا الأمانة في كل تعاملاته، وقد أتاه رجل بخفرٍ فأعطاه فوق طلبه إكراماً لأمانته.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'الرضوان — عهد الخندق',
-    category: 'معلومة من السيرة',
-    description:
-      'بعد صلح الحديبية بايع المسلمون النبي ﷺ تحت الشجرة على ألاّ يفروا، فسمي ذلك الجيش أسير الرضوان، ونزل قول الله: ﴿لقد رضي الله عن المؤمنين إذ يبايعونك تحت الشجرة﴾.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'من أدب فتح مكة',
-    category: 'معلومة تاريخية',
-    description:
-      'دخل النبي ﷺ مكة فاتحاً يوم العاشر من رمضان، ووهب أهلها الأمن والعفو العام، ثم تطهير البيت من الأصنام، فما نال أحداً أذى ممن آمنوه شيئاً.',
-    daysFromNow: 0,
-  },
-  {
-    title: 'الإسلام ينبوع حضارة لا شقاق',
-    category: 'الفكر الإسلامي',
-    description:
-      'نظرة الفكر الإسلامي إلى الحضارة تنظر إليها على أنها مبنية على العلم النافع والسياسة العادلة، وقد ارتبط اكتشاف أوروبا الحديثة بتراث الأندلس الإسلامي.',
-    daysFromNow: 0,
-  },
-];
-
 function slugify(name: string): string {
   return name
     .trim()
@@ -109,15 +109,8 @@ function currentWeekStart(): Date {
   return start;
 }
 
-function isoDaysFromNow(n: number): string {
-  const d = new Date(today);
-  d.setDate(d.getDate() + n);
-  return isoDate(d);
-}
 
-async function main() {
-  console.log('Seeding...');
-
+async function seedCategories(): Promise<Record<string, string>> {
   const categories: Record<string, string> = {};
   for (const c of CATEGORIES) {
     const created = await prisma.category.upsert({
@@ -128,7 +121,29 @@ async function main() {
     categories[c.name] = created.id;
   }
   console.log(`- ${CATEGORIES.length} categories`);
+  return categories;
+}
 
+/** Creates the first admin only when the site has none — never resets an existing account. */
+async function ensureAdmin() {
+  const existing = await prisma.user.findFirst({ where: { role: 'admin' } });
+  if (existing) {
+    console.log('- admin: an admin account already exists (left unchanged)');
+    return existing;
+  }
+  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@almagles.app').toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  if (!password) throw new Error('No admin exists yet: set SEED_ADMIN_PASSWORD (and optionally SEED_ADMIN_EMAIL)');
+  const admin = await prisma.user.upsert({
+    where: { email },
+    update: { role: 'admin' },
+    create: { name: 'مدير الموقع', email, passwordHash: await hashPassword(password), role: 'admin' },
+  });
+  console.log(`- admin: created ${email} (password from SEED_ADMIN_PASSWORD)`);
+  return admin;
+}
+
+async function seedDemo() {
   const weekRows = [...WEEK_1, ...WEEK_2].map((row, index) => {
     const date = currentWeekStart();
     date.setDate(date.getDate() + index);
@@ -136,11 +151,9 @@ async function main() {
       ...row,
       id: `${isoDate(date)}-${row.weekday}`,
       date: isoDate(date),
-      weekdayKey: row.weekday,
       timeLabel: index % 2 === 0 ? 'فجر' : 'بعد المغرب',
     };
   });
-
   for (const row of weekRows) {
     await prisma.scheduleItem.upsert({
       where: { id: row.id },
@@ -156,36 +169,16 @@ async function main() {
       },
     });
   }
-  console.log(`- ${weekRows.length} activities in the weekly schedule`);
+  console.log(`- ${weekRows.length} demo schedule sessions`);
 
-  // Accounts
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
-  if (!adminPassword) throw new Error('Missing required environment variable: SEED_ADMIN_PASSWORD');
-  const adminHash = await hashPassword(adminPassword);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@almagles.app' },
-    update: {},
-    create: {
-      name: 'مدير الموقع',
-      email: 'admin@almagles.app',
-      passwordHash: adminHash,
-      role: 'admin',
-    },
-  });
-
-  // Keep demo credentials outside the repository. In local development they can
-  // reuse SEED_ADMIN_PASSWORD unless SEED_DEMO_PASSWORD is provided.
-  const demoPassword = process.env.SEED_DEMO_PASSWORD ?? adminPassword;
+  // Demo accounts get their own password — never the admin's.
+  const demoPassword = process.env.SEED_DEMO_PASSWORD;
+  if (!demoPassword) throw new Error('Set SEED_DEMO_PASSWORD for the demo accounts');
   const demoHash = await hashPassword(demoPassword);
   const demo = await prisma.user.upsert({
     where: { email: 'demo@almagles.app' },
     update: {},
-    create: {
-      name: 'زائر تجريبي',
-      email: 'demo@almagles.app',
-      passwordHash: demoHash,
-      role: 'visitor',
-    },
+    create: { name: 'زائر تجريبي', email: 'demo@almagles.app', passwordHash: demoHash, role: 'visitor' },
   });
   const writer = await prisma.user.upsert({
     where: { email: 'writer@almagles.app' },
@@ -202,67 +195,21 @@ async function main() {
     where: { id: writer.id },
     data: { managedCategories: { connect: CATEGORIES.slice(0, 2).map((c) => ({ slug: slugify(c.name) })) } },
   });
-  console.log(`- admin: admin@almagles.app / ${adminPassword}`);
-  console.log(`- demo : demo@almagles.app / ${demoPassword}`);
-  console.log(`- writer: writer@almagles.app / ${demoPassword}`);
-
-  const todayISO = isoDaysFromNow(0);
-  let sampleCount = 0;
-  const samplePosts: Array<{ id: string; title: string }> = [];
-  for (const post of SAMPLE_POSTS) {
-    const catId = categories[post.category];
-    if (!catId) continue;
-    const exists = await prisma.post.findFirst({
-      where: { title: post.title, categoryId: catId, postDate: todayISO },
-    });
-    const created = exists ?? (await prisma.post.create({
-        data: {
-          title: post.title,
-          description: post.description,
-          postDate: todayISO,
-          categoryId: catId,
-          authorId: post.category === 'الفكر الإسلامي' ? admin.id : demo.id,
-        },
-      }));
-    if (!exists) sampleCount += 1;
-    samplePosts.push({ id: created.id, title: created.title });
-  }
-  console.log(`- ${sampleCount} sample posts (scheduled for today)`);
-
-  const firstPost = samplePosts[0];
-  if (firstPost) {
-    const existingComment = await prisma.comment.findFirst({ where: { postId: firstPost.id, authorId: demo.id } });
-    if (!existingComment) {
-      await prisma.comment.create({
-        data: { postId: firstPost.id, authorId: demo.id, content: 'طرح جميل ومختصر، خصوصاً الربط بين العدل والمعاملة اليومية.' },
-      });
-    }
-    const existingReply = await prisma.comment.findFirst({ where: { postId: firstPost.id, authorId: admin.id } });
-    if (!existingReply) {
-      await prisma.comment.create({
-        data: { postId: firstPost.id, authorId: admin.id, content: 'جزاك الله خيراً على الإضافة الطيبة.', parentId: existingComment?.id ?? undefined },
-      });
-    }
-  }
-
-  for (const [index, post] of samplePosts.entries()) {
-    const userId = index % 2 === 0 ? demo.id : admin.id;
-    await prisma.reaction.upsert({
-      where: { postId_userId: { postId: post.id, userId } },
-      update: { type: index % 2 === 0 ? '❤️' : '👍' },
-      create: { postId: post.id, userId, type: index % 2 === 0 ? '❤️' : '👍' },
-    });
-  }
-  console.log('- demo comments and reactions');
-
-  console.log('Done ✓');
+  console.log('- demo accounts: demo@almagles.app, writer@almagles.app (password from SEED_DEMO_PASSWORD)');
 }
 
-void isoDaysFromNow;
+async function main() {
+  console.log(DEMO ? 'Seeding (with demo content)...' : 'Seeding...');
+  await seedCategories();
+  await ensureAdmin();
+  if (DEMO) await seedDemo();
+  console.log('Done ✓');
+}
 
 main()
   .catch((err) => {
     console.error(err);
-    process.exit(1);
+    // Exit code, not process.exit(): let the finally below close the connection.
+    process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());

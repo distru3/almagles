@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
-    "import:schedule": "tsx scripts/import-firebase-schedule.ts"
+    "import:schedule": "tsx scripts/import-firebase-schedule.ts",
+    "seed:demo": "tsx prisma/seed.ts --demo"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
