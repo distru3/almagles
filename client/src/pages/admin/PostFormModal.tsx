@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Image as ImageIcon, Loader as LoaderIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { compressImage } from '../../lib/image';
 import { todayISO, hijriDate } from '../../lib/dates';
 import { useAuth } from '../../context/AuthContext';
+import AyahButton from '../../components/AyahButton';
 import type { Category, Post } from '../../lib/types';
 
 interface Props {
@@ -22,6 +23,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
 
   const [title, setTitle] = useState(post?.title ?? '');
   const [description, setDescription] = useState(post?.description ?? '');
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const [categoryId, setCategoryId] = useState(post?.category.id ?? options[0]?.id ?? '');
   const [postDate, setPostDate] = useState(post?.postDate ?? todayISO());
   const [file, setFile] = useState<File | null>(null);
@@ -137,11 +139,16 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="label !mb-0">نص المنشور</label>
-              <span className="text-[11px] text-muted">{description.length}/20000</span>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label htmlFor="post-description" className="label !mb-0">نص المنشور</label>
+              <div className="flex items-center gap-3">
+                <AyahButton target={descriptionRef} value={description} onChange={setDescription} />
+                <span className="text-[11px] text-muted">{description.length}/20000</span>
+              </div>
             </div>
             <textarea
+              id="post-description"
+              ref={descriptionRef}
               className="input min-h-40 resize-y"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

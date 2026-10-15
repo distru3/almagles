@@ -5,6 +5,7 @@ import type { CouncilNote, ScheduleResponse } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort, todayISO } from '../../lib/dates';
 import { weekDates, weekKeyOf, shiftWeek } from '../../lib/schedule';
 import AyahText from '../AyahText';
+import AyahButton from '../AyahButton';
 import Spinner from '../Spinner';
 
 const timeFormat = new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
@@ -32,6 +33,7 @@ export function CouncilNoteField({
   const [error, setError] = useState<string | null>(null);
   // Latest typed value, readable synchronously on blur (see SessionRow).
   const latest = useRef(text);
+  const box = useRef<HTMLTextAreaElement>(null);
   const id = `council-note-${date}`;
 
   useEffect(() => {
@@ -56,12 +58,23 @@ export function CouncilNoteField({
 
   return (
     <div className="border-t border-line bg-surface-2/40 px-4 py-3">
-      <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 font-display text-sm text-accent">
-        <NotebookPen className="h-4 w-4" aria-hidden="true" />
-        ملاحظات المجلس
-      </label>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label htmlFor={id} className="flex items-center gap-1.5 font-display text-sm text-accent">
+          <NotebookPen className="h-4 w-4" aria-hidden="true" />
+          ملاحظات المجلس
+        </label>
+        <AyahButton
+          target={box}
+          value={text}
+          onChange={(next) => {
+            latest.current = next;
+            setText(next);
+          }}
+        />
+      </div>
       <textarea
         id={id}
+        ref={box}
         rows={Math.min(8, Math.max(2, text.split('\n').length + 1))}
         className="input resize-y !py-2 text-[15px] leading-[1.9]"
         placeholder="ما دار في مجلس هذا اليوم من فوائد وملاحظات…"
