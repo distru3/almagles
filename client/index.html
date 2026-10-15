@@ -15,9 +15,10 @@
     <title>رجال الأمة</title>
     <script>
       // Night («السَّحَر») is the default; light only when the visitor chose it.
+      // The _v2 key resets earlier saved choices so everyone starts on night.
       (function () {
         var t = null;
-        try { t = localStorage.getItem('almagles_theme'); } catch (e) {}
+        try { t = localStorage.getItem('almagles_theme_v2'); } catch (e) {}
         if (t !== 'light') {
           document.documentElement.classList.add('dark');
         } else {

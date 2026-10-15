@@ -17,7 +17,7 @@ function setTheme(dark: boolean) {
   document.documentElement.classList.toggle('dark', dark);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0e1513' : '#f5efe3');
   try {
-    localStorage.setItem('almagles_theme', dark ? 'dark' : 'light');
+    localStorage.setItem('almagles_theme_v2', dark ? 'dark' : 'light');
   } catch {
     /* private mode: the choice just won't persist */
   }
