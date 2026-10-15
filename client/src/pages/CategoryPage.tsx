@@ -140,9 +140,13 @@ export default function CategoryPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto flex max-w-[680px] flex-col gap-4">
             {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard
+                key={post.id}
+                post={post}
+                onChange={(next) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)))}
+              />
             ))}
           </div>
           {posts.length < total && (
