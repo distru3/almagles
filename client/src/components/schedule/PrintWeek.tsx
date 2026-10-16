@@ -3,6 +3,7 @@ import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort } from
 import { weekDates, linkText } from '../../lib/schedule';
 import { normalizeUrl } from '../../lib/url';
 import Logo from '../Logo';
+import NoteText from './NoteText';
 
 /**
  * Fixed-width, always-light layout of one week, captured into the PDF.
@@ -115,7 +116,7 @@ export default function PrintWeek({
                   {WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))]}
                   <span className="block text-[11px] text-muted">{hijriShort(iso)}</span>
                 </p>
-                <p className="whitespace-pre-line">{note.content}</p>
+                <NoteText content={note.content} pdfRows />
               </div>
             );
           })}
