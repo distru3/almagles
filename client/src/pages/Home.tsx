@@ -44,6 +44,12 @@ function LessonCard({
         <>
           <p className="font-display text-sm text-accent">الدرس القادم</p>
           <p className="mt-2 text-fg-2">لا توجد دروس مجدولة حالياً.</p>
+          {/* Today's council note still matters on a day without a lesson. */}
+          {todayNote && (
+            <div className="mt-4">
+              <CouncilNoteView note={todayNote} />
+            </div>
+          )}
         </>
       ) : (
         <>
