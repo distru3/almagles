@@ -294,7 +294,7 @@ router.delete('/:id', ...manage, async (req, res, next) => {
 
 // ---------------------------------------------------------------- «ملاحظات المجلس»
 
-const noteSchema = z.object({ content: z.string().max(5000, 'الملاحظات طويلة جداً') });
+const noteSchema = z.object({ content: z.string().max(20000, 'الملاحظات طويلة جداً') });
 
 /** Save the note for one day; empty content deletes it. Any writer or admin. */
 router.put('/notes/:date', requireWriterOrAdmin, validate(noteSchema), async (req, res, next) => {
