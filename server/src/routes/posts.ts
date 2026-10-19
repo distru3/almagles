@@ -37,6 +37,7 @@ const listQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   date: z.string().regex(DATE_REGEX, 'التاريخ غير صالح').optional(),
   category: z.string().min(1).optional(),
+  author: z.string().min(1).max(40).optional(),
   sort: z.enum(['newest', 'oldest', 'reactions']).default('newest'),
   managed: z
     .string()
@@ -77,7 +78,7 @@ async function reactionData(postIds: string[], userId?: string) {
 
 router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
   try {
-    const { q, date, category, sort, managed, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
+    const { q, date, category, author, sort, managed, page, limit } = req.query as unknown as z.infer<typeof listQuerySchema>;
     const user = req.user;
     let userId = user?.id;
 
@@ -95,6 +96,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
       ];
     }
     if (date) where.postDate = date;
+    if (author) where.authorId = author;
     if (managed === '1' && user && user.role !== 'admin') where.categoryId = { in: user.managedCategoryIds };
     if (category) {
       const cat = await prisma.category.findUnique({ where: { slug: category } });
@@ -120,7 +122,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         take: limit,
         include: {
           category: { select: { id: true, name: true, slug: true } },
-          author: { select: { id: true, name: true, role: true } },
+          author: { select: { id: true, name: true, role: true, avatarUrl: true } },
         },
       }),
     ]);
@@ -141,11 +143,13 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
             where: { postId: { in: postIds }, parentId: null },
             orderBy: { createdAt: 'desc' },
             distinct: ['postId'],
-            select: { postId: true, content: true, author: { select: { name: true } } },
+            select: { postId: true, content: true, author: { select: { id: true, name: true, avatarUrl: true } } },
           })
         : Promise.resolve([]),
     ]);
-    const topComment = new Map(latestComments.map((c) => [c.postId, { content: c.content, authorName: c.author.name }]));
+    const topComment = new Map(
+      latestComments.map((c) => [c.postId, { content: c.content, authorId: c.author.id, authorName: c.author.name, authorAvatarUrl: c.author.avatarUrl }]),
+    );
 
     const commentCounts = new Map<string, number>();
     for (const c of commentRows) commentCounts.set(c.postId, c._count._all);
@@ -187,7 +191,7 @@ router.get('/:id', async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         category: { select: { id: true, name: true, slug: true } },
-        author: { select: { id: true, name: true } },
+        author: { select: { id: true, name: true, role: true, avatarUrl: true } },
         _count: { select: { comments: true } },
       },
     });

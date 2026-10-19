@@ -9,6 +9,8 @@ export interface AuthUser {
   role: Role;
   managedCategoryIds: string[];
   canManageSchedule: boolean;
+  avatarUrl: string | null;
+  bio: string | null;
 }
 
 declare global {

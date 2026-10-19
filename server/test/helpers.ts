@@ -44,7 +44,7 @@ export async function createCategory(name = `قسم ${++counter}`) {
 export async function client() {
   const agent = request.agent(app);
   const csrf: string = (await agent.get('/api/auth/csrf')).body.token;
-  const send = (method: 'post' | 'put' | 'delete', url: string, body?: unknown) => {
+  const send = (method: 'post' | 'put' | 'patch' | 'delete', url: string, body?: unknown) => {
     const req = agent[method](url).set('X-CSRF-Token', csrf);
     return body === undefined ? req : req.send(body as object);
   };
@@ -54,6 +54,7 @@ export async function client() {
     get: (url: string) => agent.get(url),
     post: (url: string, body?: unknown) => send('post', url, body),
     put: (url: string, body?: unknown) => send('put', url, body),
+    patch: (url: string, body?: unknown) => send('patch', url, body),
     del: (url: string) => send('delete', url),
   };
 }

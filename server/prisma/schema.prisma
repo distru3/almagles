@@ -20,6 +20,10 @@ model User {
   passwordHash      String
   role              Role           @default(visitor)
   canManageSchedule Boolean        @default(false)
+  /// Profile photo in Cloudinary (512px square WebP) and a short bio, set by the user.
+  avatarUrl         String?
+  avatarPublicId    String?
+  bio               String?
   managedCategories Category[]     @relation("CategoryAdmins")
   refreshTokens     RefreshToken[]
   councilNotes      CouncilNote[]

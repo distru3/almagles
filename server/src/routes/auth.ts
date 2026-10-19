@@ -61,6 +61,8 @@ function publicUser(user: {
   role: string;
   canManageSchedule?: boolean;
   managedCategories?: { id: string }[];
+  avatarUrl?: string | null;
+  bio?: string | null;
 }) {
   return {
     id: user.id,
@@ -69,10 +71,12 @@ function publicUser(user: {
     role: user.role,
     canManageSchedule: user.canManageSchedule ?? false,
     managedCategoryIds: user.managedCategories?.map((c) => c.id) ?? [],
+    avatarUrl: user.avatarUrl ?? null,
+    bio: user.bio ?? null,
   };
 }
 
-async function attachSession(user: { id: string; role: string; email: string; name: string }, req: Request, res: Response) {
+export async function attachSession(user: { id: string; role: string; email: string; name: string }, req: Request, res: Response) {
   const access = signAccessToken({ uid: user.id, role: user.role });
   const raw = await createSession(user.id);
 

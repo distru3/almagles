@@ -56,7 +56,7 @@ describe('feed list', () => {
     expect(item.author).toMatchObject({ name: 'كاتب', role: 'writer' });
     expect(item.myReaction).toBe('insight');
     expect(item.commentsCount).toBe(3);
-    expect(item.topComment).toEqual({ content: 'الأحدث', authorName: 'زائر' }); // replies never preview
+    expect(item.topComment).toEqual({ authorId: expect.any(String), authorAvatarUrl: null, content: 'الأحدث', authorName: 'زائر' }); // replies never preview
   });
 });
 

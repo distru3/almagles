@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Check, MessageCircle, Share2 } from 'lucide-react';
 import type { Post } from '../lib/types';
 import { hijriDate } from '../lib/dates';
 import { cloudinaryUrl } from '../lib/image';
 import RichText from './RichText';
+import Avatar from './Avatar';
 import { LinkPreviewCard, PostVideo } from './PostMedia';
 import { REACTIONS, arNumber, useReaction } from './reactions';
 
@@ -38,6 +39,7 @@ interface Props {
 /** Social-style post card for the feed: author, text, counts, actions, newest comment. */
 export default function PostCard({ post, onChange }: Props) {
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
   const { normalized, mine, total, react, busy, signedIn } = useReaction(
     post.id,
     post.reactionCounts,
@@ -68,21 +70,35 @@ export default function PostCard({ post, onChange }: Props) {
     }
   };
 
+  /**
+   * The whole card opens the post, except its own controls (links, buttons,
+   * the video and YouTube player) and when the reader is selecting text.
+   */
+  const openPost = (e: React.MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest('a, button, video, iframe, input, textarea, select, label, [role="button"]')) return;
+    if (window.getSelection()?.toString()) return;
+    if (e.metaKey || e.ctrlKey || e.button === 1) window.open(href, '_blank', 'noopener');
+    else navigate(href);
+  };
+
   const action = 'flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg font-display text-sm transition';
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-surface">
+    <article
+      className="cursor-pointer overflow-hidden rounded-2xl border border-line bg-surface transition hover:border-line-strong"
+      onClick={openPost}
+      onAuxClick={(e) => e.button === 1 && openPost(e)}
+    >
       <div className="px-4 pt-4 sm:px-5 sm:pt-5">
         <header className="flex items-center gap-3">
-          <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-display text-lg font-bold text-accent"
-            aria-hidden="true"
-          >
-            {post.author.name.trim().charAt(0)}
-          </span>
+          <Link to={`/u/${post.author.id}`} tabIndex={-1} aria-hidden="true" className="shrink-0">
+            <Avatar name={post.author.name} src={post.author.avatarUrl} size="md" />
+          </Link>
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 font-display text-[15px]">
-              <span className="truncate">{post.author.name}</span>
+              <Link to={`/u/${post.author.id}`} className="truncate hover:text-accent">
+                {post.author.name}
+              </Link>
               {badge && <span className="shrink-0 rounded-full bg-accent-soft px-2 text-[11px] text-accent">{badge}</span>}
             </p>
             <p className="text-[13px] text-muted">
@@ -166,12 +182,7 @@ export default function PostCard({ post, onChange }: Props) {
         {post.topComment && (
           <div className="border-t border-line pb-4 pt-3">
             <div className="flex gap-2.5">
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-2 font-display text-sm text-accent"
-                aria-hidden="true"
-              >
-                {post.topComment.authorName.trim().charAt(0)}
-              </span>
+              <Avatar name={post.topComment.authorName} src={post.topComment.authorAvatarUrl} size="sm" />
               <div className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3 py-2">
                 <p className="font-display text-[13px]">{post.topComment.authorName}</p>
                 <p className="line-clamp-2 text-[14px] leading-[1.8] text-fg-2">

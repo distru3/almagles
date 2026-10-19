@@ -10,6 +10,7 @@ import CommentSection from '../components/CommentSection';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
 import RichText from '../components/RichText';
+import Avatar from '../components/Avatar';
 import { LinkPreviews, PostVideo } from '../components/PostMedia';
 
 const TEXT_SIZES = [
@@ -193,11 +194,17 @@ export default function PostPage() {
         </div>
 
         <h1 className="mt-2 font-display text-[32px] font-semibold leading-[1.4] sm:text-[40px]">{post.title}</h1>
-        <p className="mt-2 flex flex-wrap gap-x-3 text-sm text-muted">
-          <span title={gregorianLong(post.postDate)}>{hijriDate(post.postDate)}</span>
-          <span aria-hidden="true">·</span>
-          <span>{post.author.name}</span>
-        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <Link to={`/u/${post.author.id}`} tabIndex={-1} aria-hidden="true">
+            <Avatar name={post.author.name} src={post.author.avatarUrl} size="md" />
+          </Link>
+          <p className="text-sm leading-tight text-muted">
+            <Link to={`/u/${post.author.id}`} className="block font-display text-[15px] text-fg hover:text-accent">
+              {post.author.name}
+            </Link>
+            <span title={gregorianLong(post.postDate)}>{hijriDate(post.postDate)}</span>
+          </p>
+        </div>
 
         {image && (
           <button

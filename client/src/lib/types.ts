@@ -10,6 +10,19 @@ export interface Author {
   id: string;
   name: string;
   role?: 'visitor' | 'writer' | 'admin';
+  avatarUrl?: string | null;
+}
+
+/** What anyone can see about a member (never their email). */
+export interface PublicProfile {
+  id: string;
+  name: string;
+  role: 'visitor' | 'writer' | 'admin';
+  avatarUrl: string | null;
+  bio: string | null;
+  createdAt: string;
+  postsCount: number;
+  commentsCount: number;
 }
 
 export interface LinkPreview {
@@ -43,7 +56,7 @@ export interface Post {
   myReaction: string | null;
   commentsCount: number;
   /** Newest top-level comment, for the feed card preview (list endpoint only). */
-  topComment?: { content: string; authorName: string } | null;
+  topComment?: { content: string; authorId?: string; authorName: string; authorAvatarUrl?: string | null } | null;
   totalReactions?: number;
   prevPost?: { id: string; title: string; postDate: string } | null;
   nextPost?: { id: string; title: string; postDate: string } | null;
@@ -58,6 +71,7 @@ export interface CommentItem {
   authorId: string;
   authorName: string;
   authorRole?: string;
+  authorAvatarUrl?: string | null;
   createdAt: string;
   repliesCount: number;
 }
@@ -104,6 +118,8 @@ export interface User {
   role: 'visitor' | 'writer' | 'admin';
   canManageSchedule: boolean;
   managedCategoryIds: string[];
+  avatarUrl: string | null;
+  bio: string | null;
 }
 
 export interface AdminUser {

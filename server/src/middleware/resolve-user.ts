@@ -22,6 +22,8 @@ export async function resolveUser(req: Request, res: Response, next: NextFunctio
         email: true,
         role: true,
         canManageSchedule: true,
+        avatarUrl: true,
+        bio: true,
         managedCategories: { select: { id: true } },
       },
     });
@@ -33,6 +35,8 @@ export async function resolveUser(req: Request, res: Response, next: NextFunctio
         role: user.role,
         canManageSchedule: user.canManageSchedule,
         managedCategoryIds: user.managedCategories.map((c) => c.id),
+        avatarUrl: user.avatarUrl,
+        bio: user.bio,
       };
     }
   } catch {

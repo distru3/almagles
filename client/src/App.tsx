@@ -14,6 +14,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import { WritePage, SchedulePage } from './pages/write/WriterPages';
 import AccessDenied from './pages/AccessDenied';
 import NotFound from './pages/NotFound';
+import { ProfileSettingsPage, PublicProfilePage } from './pages/ProfilePage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -21,6 +22,13 @@ function ScrollToTop() {
     window.scrollTo(0, 0);
   }, [pathname]);
   return null;
+}
+
+function RequireLogin({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <Spinner full />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 function RequireAdmin({ children }: { children: ReactNode }) {
@@ -64,6 +72,15 @@ export default function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/access-denied" element={<AccessDenied />} />
+          <Route path="/u/:id" element={<PublicProfilePage />} />
+          <Route
+            path="/profile"
+            element={
+              <RequireLogin>
+                <ProfileSettingsPage />
+              </RequireLogin>
+            }
+          />
           <Route
             path="/admin"
             element={
