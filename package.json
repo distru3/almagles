@@ -17,7 +17,8 @@
     "db:seed": "npm run seed -w server",
     "db:import-schedule": "npm run import:schedule -w server --",
     "db:backfill-previews": "npm run backfill:previews -w server --",
-    "db:seed:demo": "npm run seed:demo -w server"
+    "db:seed:demo": "npm run seed:demo -w server",
+    "test": "npm run test -w server"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
