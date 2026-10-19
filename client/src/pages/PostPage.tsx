@@ -113,6 +113,16 @@ export default function PostPage() {
     };
   }, [id, loadComments]);
 
+  // The tab (and bookmarks) carry the post's title, as shared links do.
+  useEffect(() => {
+    if (!post) return;
+    const previous = document.title;
+    document.title = `${post.title} — رجال الأمة`;
+    return () => {
+      document.title = previous;
+    };
+  }, [post?.title]);
+
   useEffect(() => {
     if (!zoomed) return;
     const onKey = (e: KeyboardEvent) => {
