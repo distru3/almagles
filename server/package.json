@@ -12,6 +12,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
     "import:schedule": "tsx scripts/import-firebase-schedule.ts",
+    "backfill:previews": "tsx scripts/backfill-link-previews.ts",
     "seed:demo": "tsx prisma/seed.ts --demo"
   },
   "dependencies": {

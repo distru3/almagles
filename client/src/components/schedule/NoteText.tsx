@@ -1,4 +1,5 @@
-import AyahText, { splitAyah } from '../AyahText';
+import RichText from '../RichText';
+import { splitRich, type OpenMark } from '../../lib/richText';
 import { parseNote } from '../../lib/noteFormat';
 
 /**
@@ -9,11 +10,11 @@ import { parseNote } from '../../lib/noteFormat';
  */
 export default function NoteText({ content, compact = false, pdfRows = false }: { content: string; compact?: boolean; pdfRows?: boolean }) {
   const row = pdfRows ? { 'data-pdf-row': '' } : {};
-  let inside = false;
+  let open: OpenMark = null;
   const ayah = (text: string) => {
-    const start = inside;
-    inside = splitAyah(text, start).inside;
-    return <AyahText text={text} inside={start} />;
+    const start = open;
+    open = splitRich(text, start).open;
+    return <RichText text={text} open={start} />;
   };
 
   return (

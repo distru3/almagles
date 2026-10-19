@@ -32,6 +32,7 @@
   --success-soft: #e2efe6;
   --warn: #7a4e05;
   --warn-soft: #fbebc9;
+  --hadith: #1f5878;
 }
 
 .dark {
@@ -57,6 +58,7 @@
   --success-soft: #17291f;
   --warn: #e9c277;
   --warn-soft: #33280f;
+  --hadith: #93c8e8;
 }
 
 @theme inline {
@@ -167,6 +169,18 @@ body {
   /* Quranic text set inside ﴿ ﴾ */
   .ayah {
     @apply text-accent-strong;
+  }
+
+  /* Hadith set inside (( )) */
+  .hadith {
+    color: var(--hadith);
+  }
+
+  /* Links inside written text: readable in a paragraph, and long ones wrap. */
+  .rich-link {
+    @apply text-accent underline decoration-accent/40 underline-offset-4 transition hover:decoration-accent;
+    overflow-wrap: anywhere;
+    unicode-bidi: isolate;
   }
 
   .site-header {

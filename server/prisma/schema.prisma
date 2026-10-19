@@ -58,20 +58,29 @@ model Category {
 }
 
 model Post {
-  id            String     @id @default(cuid())
-  title         String
-  description   String
-  postDate      String
-  imagePublicId String?
-  imageUrl      String?
-  category      Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  categoryId    String
-  author        User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  authorId      String
-  comments      Comment[]
-  reactions     Reaction[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  title          String
+  description    String
+  postDate       String
+  imagePublicId  String?
+  imageUrl       String?
+  /// Video stored in Cloudinary (compressed in the browser before upload); only its address lives here.
+  videoPublicId  String?
+  videoUrl       String?
+  videoPosterUrl String?
+  videoWidth     Int?
+  videoHeight    Int?
+  videoDuration  Float?
+  /// Previews (title, image, YouTube id) for the links in the description, fetched when the post is saved.
+  linkPreviews   Json?
+  category       Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId     String
+  author         User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId       String
+  comments       Comment[]
+  reactions      Reaction[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   @@index([postDate])
   @@index([categoryId])

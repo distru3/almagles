@@ -9,7 +9,8 @@ import ReactionBar from '../components/ReactionBar';
 import CommentSection from '../components/CommentSection';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
-import AyahText from '../components/AyahText';
+import RichText from '../components/RichText';
+import { LinkPreviews, PostVideo } from '../components/PostMedia';
 
 const TEXT_SIZES = [
   { label: 'عادي', className: '' },
@@ -202,9 +203,13 @@ export default function PostPage() {
           </button>
         )}
 
-        <div className={`prose-ar mt-7 whitespace-pre-line ${TEXT_SIZES[textSize].className}`}>
-          <AyahText text={post.description} />
+        {post.videoUrl && <PostVideo post={post} className="mt-7 rounded-sm border border-line" />}
+
+        <div className={`prose-ar mt-7 whitespace-pre-line [overflow-wrap:anywhere] ${TEXT_SIZES[textSize].className}`}>
+          <RichText text={post.description} />
         </div>
+
+        <LinkPreviews previews={post.linkPreviews} className="mt-7" />
 
         <div className="mt-10">
           <ReactionBar
