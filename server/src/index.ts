@@ -32,7 +32,14 @@ app.use(
             scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
             fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
-            imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+            // Link-preview images come from whatever site a post links to.
+            imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+            mediaSrc: ["'self'", 'blob:', 'https://res.cloudinary.com'],
+            // Videos upload straight from the browser to Cloudinary.
+            connectSrc: ["'self'", 'https://api.cloudinary.com'],
+            frameSrc: ['https://www.youtube-nocookie.com'],
+            // The video compressor runs a tiny timer worker from a blob: URL.
+            workerSrc: ["'self'", 'blob:'],
             objectSrc: ["'none'"],
             frameAncestors: ["'none'"],
             baseUri: ["'self'"],

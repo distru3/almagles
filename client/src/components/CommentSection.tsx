@@ -4,6 +4,7 @@ import { MessageSquare, Send, Pencil, Trash2, Reply, X, Check, ShieldCheck, PenT
 import type { CommentItem } from '../lib/types';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import RichText from './RichText';
 
 interface Props {
   postId: string;
@@ -206,7 +207,9 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
             </div>
           </div>
         ) : (
-          <p className="mt-2 whitespace-pre-line text-[16px] leading-[1.9] text-fg-2">{c.content}</p>
+          <p className="mt-2 whitespace-pre-line text-[16px] leading-[1.9] text-fg-2">
+            <RichText text={c.content} ugc />
+          </p>
         )}
 
         {!isReply && user && editingId !== c.id && (

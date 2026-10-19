@@ -5,7 +5,7 @@ import type { CouncilNote, ScheduleResponse } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort, todayISO } from '../../lib/dates';
 import { weekDates, weekKeyOf, shiftWeek } from '../../lib/schedule';
 import { NOTE_MAX, continueList, toggleList } from '../../lib/noteFormat';
-import AyahButton from '../AyahButton';
+import AyahButton, { HadithButton } from '../AyahButton';
 import NoteText from './NoteText';
 import Spinner from '../Spinner';
 
@@ -176,6 +176,7 @@ export function CouncilNoteField({
             ترقيم
           </button>
           <AyahButton target={box} value={text} onChange={update} />
+          <HadithButton target={box} value={text} onChange={update} />
         </div>
       </div>
       <textarea
