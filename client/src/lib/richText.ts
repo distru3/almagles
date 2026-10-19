@@ -43,9 +43,22 @@ export function hrefFor(raw: string): string | null {
   }
 }
 
-/** "https://www.example.com/a/b/" → "example.com/a/b", decoded and shortened for reading. */
+/** Share-tracking parameters that only add noise to a displayed link (the href keeps them). */
+const TRACKING = /^(si|feature|pp|utm_[a-z]+|fbclid|gclid|igsh|igshid|mibextid|ref_src)$/i;
+
+/** "https://www.example.com/a/b/?si=x" → "example.com/a/b", decoded and shortened for reading. */
 export function displayUrl(href: string, max = 48): string {
-  let text = href.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+  let shown = href;
+  try {
+    const u = new URL(href);
+    for (const key of [...u.searchParams.keys()]) {
+      if (TRACKING.test(key)) u.searchParams.delete(key);
+    }
+    shown = u.toString();
+  } catch {
+    /* keep as is */
+  }
+  let text = shown.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
   try {
     text = decodeURI(text);
   } catch {
