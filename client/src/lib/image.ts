@@ -69,3 +69,19 @@ export function cloudinaryUrl(secureUrl: string, w = 900, q = 'auto', f = 'auto'
   if (idx === -1) return secureUrl;
   return secureUrl.slice(0, idx + marker.length) + `w_${w},q_${q},f_${f}/` + secureUrl.slice(idx + marker.length);
 }
+/**
+ * The picture that stands for a post in lists: its photo, else its video's
+ * poster, else the thumbnail of its first YouTube link, else a linked page's image.
+ */
+export function postThumbnail(post: {
+  imageUrl: string | null;
+  videoPosterUrl?: string | null;
+  linkPreviews?: { kind: string; youtubeId?: string; image: string | null }[] | null;
+}, width = 600): { src: string; video: boolean } | null {
+  if (post.imageUrl) return { src: cloudinaryUrl(post.imageUrl, width), video: false };
+  if (post.videoPosterUrl) return { src: post.videoPosterUrl, video: true };
+  const yt = post.linkPreviews?.find((p) => p.kind === 'youtube' && p.youtubeId);
+  if (yt) return { src: `https://i.ytimg.com/vi/${yt.youtubeId}/hqdefault.jpg`, video: true };
+  const page = post.linkPreviews?.find((p) => p.image);
+  return page?.image ? { src: page.image, video: false } : null;
+}
