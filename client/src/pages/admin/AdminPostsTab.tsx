@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   List,
   ArrowUpDown,
+  Play,
 } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +22,8 @@ import { hijriDate } from '../../lib/dates';
 import Spinner from '../../components/Spinner';
 import EmptyState from '../../components/EmptyState';
 import PostFormModal from './PostFormModal';
+import RichText from '../../components/RichText';
+import { postThumbnail } from '../../lib/image';
 
 // The list endpoint returns per-type counts, not totalReactions.
 function reactionTotal(post: Post): number {
@@ -291,17 +294,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
             >
               {/* Card Image Banner */}
               <div className="relative aspect-video w-full overflow-hidden bg-surface-2 border-b border-line/60">
-                {post.imageUrl ? (
-                  <img
-                    src={post.imageUrl}
-                    alt=""
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-muted">
-                    <ImageIcon className="h-8 w-8" />
-                  </div>
-                )}
+                <Thumb post={post} large />
                 <span className="absolute top-2.5 right-2.5 rounded-md bg-accent-fill/80 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-on-accent shadow-sm">
                   {post.category.name}
                 </span>
@@ -317,8 +310,8 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
                     {post.title}
                   </h3>
                   {post.description && (
-                    <p className="mt-1.5 text-xs text-muted line-clamp-2 leading-relaxed">
-                      {post.description}
+                    <p className="mt-1.5 text-xs text-muted line-clamp-2 leading-relaxed [overflow-wrap:anywhere]">
+                      <RichText text={post.description} />
                     </p>
                   )}
                 </div>
@@ -384,11 +377,7 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
             >
               {/* Thumbnail preview */}
               <div className="h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-surface-2 flex items-center justify-center border border-line/60">
-                {post.imageUrl ? (
-                  <img src={post.imageUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <ImageIcon className="h-5 w-5 text-muted" />
-                )}
+                <Thumb post={post} />
               </div>
 
               {/* Post Details */}
@@ -467,6 +456,37 @@ export default function AdminPosts({ categories }: { categories: Category[] }) {
             load();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** The post's photo, video poster or YouTube thumbnail; a placeholder only when it has none. */
+function Thumb({ post, large = false }: { post: Post; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const thumb = postThumbnail(post, large ? 600 : 200);
+  if (!thumb || failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-muted">
+        <ImageIcon className={large ? 'h-8 w-8' : 'h-5 w-5'} />
+      </div>
+    );
+  }
+  return (
+    <div className="relative h-full w-full">
+      <img
+        src={thumb.src}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+      {thumb.video && (
+        <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+          <span className={`flex items-center justify-center rounded-full bg-black/60 text-white ${large ? 'h-11 w-11' : 'h-7 w-7'}`}>
+            <Play className={`${large ? 'h-5 w-5' : 'h-3.5 w-3.5'} translate-x-[-1px] fill-current`} />
+          </span>
+        </span>
       )}
     </div>
   );
