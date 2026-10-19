@@ -6,6 +6,7 @@ import { compressVideo, uploadVideo, discardUploadedVideo, formatBytes, formatDu
 import { todayISO, hijriDate } from '../../lib/dates';
 import { useAuth } from '../../context/AuthContext';
 import AyahButton, { HadithButton } from '../../components/AyahButton';
+import DetectedLinks from '../../components/DetectedLinks';
 import type { Category, Post } from '../../lib/types';
 
 interface Props {
@@ -376,6 +377,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
               rows={6}
               required
             />
+            <DetectedLinks text={description} />
           </div>
 
           {/* ── Media ── */}
