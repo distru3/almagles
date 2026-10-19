@@ -32,13 +32,21 @@ export function isCloudinaryConfigured(): boolean {
 }
 
 export function uploadPostImage(buffer: Buffer): Promise<UploadedImage> {
+  return uploadImage(buffer, 'posts');
+}
+
+export function uploadAvatar(buffer: Buffer): Promise<UploadedImage> {
+  return uploadImage(buffer, 'avatars');
+}
+
+function uploadImage(buffer: Buffer, folder: string): Promise<UploadedImage> {
   const c = getCloud();
   if (!c) {
     return Promise.reject(new Error('خدمة الصور غير مكوّنة على الخادم'));
   }
   return new Promise((resolve, reject) => {
     const stream = c.uploader.upload_stream(
-      { folder: 'posts', resource_type: 'image' },
+      { folder, resource_type: 'image' },
       (error, result) => {
         if (error) return reject(error);
         if (!result) return reject(new Error('فشل رفع الصورة'));
@@ -53,7 +61,8 @@ export async function deletePostImage(publicId: string): Promise<void> {
   const c = getCloud();
   if (!c) return;
   try {
-    await c.uploader.destroy(publicId);
+    // invalidate: also clear the CDN copy, so a removed photo stops showing everywhere.
+    await c.uploader.destroy(publicId, { invalidate: true });
   } catch {
     // Non-fatal: orphaned asset cleanup can be retried from the dashboard.
   }

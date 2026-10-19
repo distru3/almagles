@@ -16,6 +16,7 @@ import commentRoutes from './routes/comments.js';
 import reactionRoutes from './routes/reactions.js';
 import scheduleRoutes from './routes/schedule.js';
 import userRoutes from './routes/users.js';
+import profileRoutes from './routes/profile.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 
 const app = express();
@@ -90,6 +91,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/profile', profileRoutes);
 app.use('/api/posts/:postId/reactions', reactionRoutes);
 app.use('/api/comments', commentRoutes);
 

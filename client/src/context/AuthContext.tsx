@@ -10,6 +10,8 @@ interface AuthContextValue {
   signup: (name: string, email: string, password: string, code: string) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** Replace the signed-in user after a profile change. */
+  setCurrentUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -54,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, refresh, setCurrentUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

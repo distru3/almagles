@@ -5,6 +5,7 @@ import type { CommentItem } from '../lib/types';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import RichText from './RichText';
+import Avatar from './Avatar';
 
 interface Props {
   postId: string;
@@ -128,12 +129,14 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
       <div className={isReply ? 'py-2' : ''}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-sm font-extrabold text-accent">
-              {c.authorName.charAt(0)}
-            </span>
+            <Link to={`/u/${c.authorId}`} tabIndex={-1} aria-hidden="true">
+              <Avatar name={c.authorName} src={c.authorAvatarUrl} size="sm" />
+            </Link>
             <div className="leading-tight">
               <div className="flex flex-wrap items-center gap-1.5">
-                <p className="font-display text-[15px] text-fg">{c.authorName}</p>
+                <Link to={`/u/${c.authorId}`} className="font-display text-[15px] text-fg hover:text-accent">
+                  {c.authorName}
+                </Link>
                 {postAuthorId && c.authorId === postAuthorId && (
                   <span className="inline-flex items-center gap-1 rounded-md bg-warn-soft px-1.5 py-0.5 text-[10px] font-bold text-warn border border-warn/20">
                     <PenTool className="h-2.5 w-2.5" />

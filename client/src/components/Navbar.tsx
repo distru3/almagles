@@ -4,6 +4,7 @@ import { Menu, X, LogOut, Shield, PenLine, CalendarDays, Search, Moon, Sun } fro
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 import SearchInput from './SearchInput';
+import Avatar from './Avatar';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `inline-flex items-center gap-1.5 py-2 font-display text-[16px] transition ${
@@ -111,7 +112,10 @@ export default function Navbar() {
 
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
-              <span className="hidden px-1 font-display text-sm text-fg-2 md:inline">{user.name}</span>
+              <Link to="/profile" className="flex items-center gap-2 rounded-full py-1 pe-1 ps-3 font-display text-sm text-fg-2 transition hover:bg-surface-2 hover:text-fg" title="الملف الشخصي">
+                <span className="hidden md:inline">{user.name}</span>
+                <Avatar name={user.name} src={user.avatarUrl} size="sm" />
+              </Link>
               <button onClick={handleLogout} className="btn-outline !min-h-10 !px-4 !text-sm">
                 <LogOut className="h-4 w-4" />
                 خروج
@@ -161,10 +165,13 @@ export default function Navbar() {
             <div className="my-2 h-px bg-line" />
             {user ? (
               <div className="flex items-center justify-between py-2">
-                <span className="flex items-center gap-1.5 font-display text-fg-2">
-                  {user.role === 'admin' && <Shield className="h-4 w-4 text-accent" />}
-                  {user.name}
-                </span>
+                <Link to="/profile" onClick={() => setOpen(false)} className="flex items-center gap-2.5 font-display text-fg-2">
+                  <Avatar name={user.name} src={user.avatarUrl} size="sm" />
+                  <span>
+                    {user.name}
+                    <span className="block text-xs text-muted">الملف الشخصي</span>
+                  </span>
+                </Link>
                 <button onClick={handleLogout} className="btn-outline !min-h-10 !px-4 !text-sm">
                   <LogOut className="h-4 w-4" />
                   خروج

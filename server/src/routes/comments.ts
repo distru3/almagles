@@ -78,7 +78,7 @@ router.get('/post/:postId', async (req, res, next) => {
       where: { postId },
       orderBy: { createdAt: 'asc' },
       include: {
-        author: { select: { id: true, name: true, role: true } },
+        author: { select: { id: true, name: true, role: true, avatarUrl: true } },
         _count: { select: { replies: true } },
       },
     });
@@ -91,6 +91,7 @@ router.get('/post/:postId', async (req, res, next) => {
         authorId: c.authorId,
         authorName: c.author.name,
         authorRole: c.author.role,
+        authorAvatarUrl: c.author.avatarUrl,
         createdAt: c.createdAt,
         repliesCount: c._count.replies,
       })),
@@ -125,7 +126,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
         authorId: req.user!.id,
         parentId: finalParent,
       },
-      include: { author: { select: { id: true, name: true, role: true } } },
+      include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
     });
     return res.status(201).json({
       comment: {
@@ -136,6 +137,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
         authorId: comment.authorId,
         authorName: comment.author.name,
         authorRole: comment.author.role,
+        authorAvatarUrl: comment.author.avatarUrl,
         createdAt: comment.createdAt,
         repliesCount: 0,
       },
@@ -163,13 +165,14 @@ router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) =
     const updated = await prisma.comment.update({
       where: { id },
       data: { content },
-      include: { author: { select: { id: true, name: true, role: true } } },
+      include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
     });
     return res.json({
       comment: {
         ...updated,
         authorName: updated.author.name,
         authorRole: updated.author.role,
+        authorAvatarUrl: updated.author.avatarUrl,
       },
     });
   } catch (err) {
