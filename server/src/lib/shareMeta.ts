@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { findLinks } from './links.js';
 
 /**
  * Link previews for OUR pages when they're shared (WhatsApp, Telegram, X,
@@ -39,10 +40,15 @@ function escapeHtml(s: string): string {
 
 /** First ~200 characters of a post as one line: no links, no line breaks, cut at a word. */
 export function excerpt(text: string, max = 200): string {
-  const plain = text
-    .replace(/(?:https?:\/\/|www\.)\S+/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Remove links exactly as the site detects them (bare youtu.be/… too).
+  let withoutLinks = '';
+  let at = 0;
+  for (const link of findLinks(text)) {
+    withoutLinks += text.slice(at, link.index);
+    at = link.index + link.raw.length;
+  }
+  withoutLinks += text.slice(at);
+  const plain = withoutLinks.replace(/\s+/g, ' ').trim();
   if (plain.length <= max) return plain;
   const cut = plain.slice(0, max);
   const space = cut.lastIndexOf(' ');
@@ -65,8 +71,22 @@ interface PostForMeta {
   category: { name: string };
 }
 
+/**
+ * The line under the title. A post that is only a link has no words of its
+ * own: then describe what it links to (the video's title), else its section.
+ * Never the long site tagline: apps cut it to one line («رجال الأم…»).
+ */
+function postDescription(post: PostForMeta): string {
+  const own = excerpt(post.description);
+  if (own) return own;
+  const previews = Array.isArray(post.linkPreviews) ? (post.linkPreviews as { kind?: string; title?: string | null }[]) : [];
+  const linked = previews.find((p) => p?.title);
+  if (linked?.title) return linked.kind === 'youtube' ? `فيديو: ${linked.title}` : linked.title;
+  return `${post.category.name} · ${SITE_NAME}`;
+}
+
 export function postMeta(post: PostForMeta): ShareMeta {
-  const base = { title: post.title, description: excerpt(post.description) || SITE_DESCRIPTION, type: 'article' as const, publishedTime: post.createdAt.toISOString(), section: post.category.name, imageAlt: post.title };
+  const base = { title: post.title, description: postDescription(post), type: 'article' as const, publishedTime: post.createdAt.toISOString(), section: post.category.name, imageAlt: post.title };
   if (post.imageUrl?.includes('/image/upload/')) return { ...base, image: cloudinaryCard(post.imageUrl), imageWidth: 1200, imageHeight: 630 };
   if (post.imageUrl) return { ...base, image: post.imageUrl };
   if (post.videoPosterUrl) return { ...base, image: post.videoPosterUrl };
