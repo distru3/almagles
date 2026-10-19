@@ -4,6 +4,10 @@
  * the text itself, so nothing writers type can inject HTML.
  */
 
+import { nextLink } from './links';
+
+export { hrefFor } from './links';
+
 export type RichKind = 'plain' | 'ayah' | 'hadith' | 'link';
 export interface RichPart {
   kind: RichKind;
@@ -17,31 +21,6 @@ export const AYAH_OPEN = '﴿';
 export const AYAH_CLOSE = '﴾';
 export const HADITH_OPEN = '((';
 export const HADITH_CLOSE = '))';
-
-// Same rules as the server's extractUrls (server/src/lib/linkPreview.ts).
-const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"'«»﴿﴾]+/giu;
-const TRAILING = /[.,،؛:;!?؟'"\])}]+$/u;
-
-/** Drop punctuation that ends the sentence rather than the link. */
-function trimUrl(raw: string): string {
-  while (TRAILING.test(raw)) {
-    const last = raw.at(-1)!;
-    // Keep a closing bracket that belongs to the link, e.g. a Wikipedia "(…)" page.
-    if (last === ')' && (raw.match(/\(/g)?.length ?? 0) >= (raw.match(/\)/g)?.length ?? 0)) break;
-    raw = raw.slice(0, -1);
-  }
-  return raw;
-}
-
-export function hrefFor(raw: string): string | null {
-  const href = /^www\./i.test(raw) ? `https://${raw}` : raw;
-  try {
-    const u = new URL(href);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
 /** Share-tracking parameters that only add noise to a displayed link (the href keeps them). */
 const TRACKING = /^(si|feature|pp|utm_[a-z]+|fbclid|gclid|igsh|igshid|mibextid|ref_src)$/i;
@@ -104,13 +83,8 @@ export function splitRich(text: string, open: OpenMark = null): { parts: RichPar
 
     const ayah = text.indexOf(AYAH_OPEN, i);
     const hadith = text.indexOf(HADITH_OPEN, i);
-    URL_RE.lastIndex = i;
-    const url = URL_RE.exec(text);
-    const candidates = [
-      ayah === -1 ? Infinity : ayah,
-      hadith === -1 ? Infinity : hadith,
-      url ? url.index : Infinity,
-    ];
+    const link = nextLink(text, i);
+    const candidates = [ayah === -1 ? Infinity : ayah, hadith === -1 ? Infinity : hadith, link ? link.index : Infinity];
     const next = Math.min(...candidates);
     if (next === Infinity) {
       push('plain', text.slice(i));
@@ -124,11 +98,8 @@ export function splitRich(text: string, open: OpenMark = null): { parts: RichPar
       open = 'hadith';
       searchFrom = i + HADITH_OPEN.length;
     } else {
-      const raw = trimUrl(url![0]);
-      const href = hrefFor(raw);
-      if (href) push('link', raw, href);
-      else push('plain', raw);
-      i += raw.length || 1;
+      push('link', link!.raw, link!.href);
+      i += link!.raw.length;
     }
   }
   return { parts, open };

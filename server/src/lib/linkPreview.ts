@@ -3,6 +3,7 @@ import https from 'node:https';
 import dns from 'node:dns';
 import net from 'node:net';
 import type { LookupFunction } from 'node:net';
+import { findLinks, youtubeId } from './links.js';
 
 /**
  * Link previews for post text: the title, description and image a page
@@ -31,51 +32,12 @@ const MAX_HTML_BYTES = 768 * 1024;
 const MAX_REDIRECTS = 3;
 const USER_AGENT = 'Mozilla/5.0 (compatible; RijalAlUmmahBot/1.0; link preview)';
 
-// Same rules as the client's linkifier (client/src/lib/richText.ts).
-const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"'«»﴿﴾]+/giu;
-const TRAILING = /[.,،؛:;!?؟'"\])}]+$/u;
-
-/** Links in the order they appear, de-duplicated, trailing punctuation trimmed. */
+/** Links in the order they appear, de-duplicated. */
 export function extractUrls(text: string): string[] {
-  const seen = new Set<string>();
-  for (const match of text.matchAll(URL_RE)) {
-    let raw = match[0];
-    // Keep a closing bracket that belongs to the link, e.g. a Wikipedia "(…)" page.
-    while (TRAILING.test(raw)) {
-      const last = raw.at(-1)!;
-      if (last === ')' && (raw.match(/\(/g)?.length ?? 0) >= (raw.match(/\)/g)?.length ?? 0)) break;
-      raw = raw.slice(0, -1);
-    }
-    const href = /^www\./i.test(raw) ? `https://${raw}` : raw;
-    try {
-      const u = new URL(href);
-      if (u.protocol === 'http:' || u.protocol === 'https:') seen.add(u.toString());
-    } catch {
-      /* not a URL after all */
-    }
-  }
-  return [...seen];
+  return [...new Set(findLinks(text).map((l) => l.href))];
 }
 
-export function youtubeId(url: string): string | null {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return null;
-  }
-  const host = u.hostname.replace(/^(www\.|m\.|music\.)/, '');
-  let id: string | null = null;
-  if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
-  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
-    if (u.pathname === '/watch') id = u.searchParams.get('v');
-    else {
-      const m = /^\/(?:shorts|live|embed|v)\/([^/?#]+)/.exec(u.pathname);
-      id = m?.[1] ?? null;
-    }
-  }
-  return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
-}
+export { youtubeId };
 
 // ── Address checks ────────────────────────────────────────────────────────
 
