@@ -25,6 +25,42 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.82): 
   }
 }
 
+export class ImageError extends Error {}
+
+/** Originals can be big (phone cameras); what we upload is the compressed copy. */
+const MAX_ORIGINAL_BYTES = 40 * 1024 * 1024;
+/** The server's limit for the compressed upload. */
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const UPLOADABLE = ['image/jpeg', 'image/png', 'image/webp'];
+
+/**
+ * Turn whatever the writer picked (a 12 MB phone photo, an iPhone HEIC, a
+ * screenshot) into a ≤1600px WebP/JPEG the server accepts, with a friendly
+ * error when the browser can't read it.
+ */
+export async function prepareImage(file: File): Promise<File> {
+  if (file.type && !file.type.startsWith('image/')) throw new ImageError('هذا الملف ليس صورة');
+  if (file.size > MAX_ORIGINAL_BYTES) throw new ImageError('الصورة كبيرة جداً (أكثر من ٤٠ ميغابايت)');
+  const heic = /hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+  try {
+    const blob = await compressImage(file);
+    const ext = blob.type === 'image/webp' ? '.webp' : blob.type === 'image/png' ? '.png' : '.jpg';
+    const out = new File([blob], (file.name.replace(/\.[^.]+$/, '') || 'image') + ext, { type: blob.type || 'image/jpeg' });
+    if (!UPLOADABLE.includes(out.type)) throw new Error('unexpected output type');
+    if (out.size > MAX_UPLOAD_BYTES) throw new ImageError('تعذّر تصغير الصورة بما يكفي — اختر صورة أصغر');
+    return out;
+  } catch (err) {
+    if (err instanceof ImageError) throw err;
+    // Couldn't decode/re-encode here (very old browser): send the original if the server can take it.
+    if (UPLOADABLE.includes(file.type) && file.size <= MAX_UPLOAD_BYTES) return file;
+    throw new ImageError(
+      heic
+        ? 'لا يستطيع هذا المتصفح قراءة صور HEIC — افتح الصفحة في Safari، أو غيّر إعداد الكاميرا إلى «الأكثر توافقاً»'
+        : 'تعذّرت قراءة هذه الصورة — جرّب صورة أخرى (JPG أو PNG)',
+    );
+  }
+}
+
 /** Resize a Cloudinary secure URL to a nice display size using on-the-fly transforms. */
 export function cloudinaryUrl(secureUrl: string, w = 900, q = 'auto', f = 'auto'): string {
   if (!secureUrl) return secureUrl;
@@ -32,4 +68,20 @@ export function cloudinaryUrl(secureUrl: string, w = 900, q = 'auto', f = 'auto'
   const idx = secureUrl.indexOf(marker);
   if (idx === -1) return secureUrl;
   return secureUrl.slice(0, idx + marker.length) + `w_${w},q_${q},f_${f}/` + secureUrl.slice(idx + marker.length);
+}
+/**
+ * The picture that stands for a post in lists: its photo, else its video's
+ * poster, else the thumbnail of its first YouTube link, else a linked page's image.
+ */
+export function postThumbnail(post: {
+  imageUrl: string | null;
+  videoPosterUrl?: string | null;
+  linkPreviews?: { kind: string; youtubeId?: string; image: string | null }[] | null;
+}, width = 600): { src: string; video: boolean } | null {
+  if (post.imageUrl) return { src: cloudinaryUrl(post.imageUrl, width), video: false };
+  if (post.videoPosterUrl) return { src: post.videoPosterUrl, video: true };
+  const yt = post.linkPreviews?.find((p) => p.kind === 'youtube' && p.youtubeId);
+  if (yt) return { src: `https://i.ytimg.com/vi/${yt.youtubeId}/hqdefault.jpg`, video: true };
+  const page = post.linkPreviews?.find((p) => p.image);
+  return page?.image ? { src: page.image, video: false } : null;
 }

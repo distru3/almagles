@@ -4,7 +4,8 @@ import { Check, MessageCircle, Share2 } from 'lucide-react';
 import type { Post } from '../lib/types';
 import { hijriDate } from '../lib/dates';
 import { cloudinaryUrl } from '../lib/image';
-import AyahText from './AyahText';
+import RichText from './RichText';
+import { LinkPreviewCard, PostVideo } from './PostMedia';
 import { REACTIONS, arNumber, useReaction } from './reactions';
 
 const relative = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
@@ -98,8 +99,8 @@ export default function PostCard({ post, onChange }: Props) {
             {post.title}
           </Link>
         </h3>
-        <p className="mt-1.5 line-clamp-4 text-[16px] leading-[1.95] text-fg-2 sm:text-[17px]">
-          <AyahText text={post.description} />
+        <p className="mt-1.5 line-clamp-4 whitespace-pre-line text-[16px] leading-[1.95] text-fg-2 [overflow-wrap:anywhere] sm:text-[17px]">
+          <RichText text={post.description} />
         </p>
         {long && (
           <Link to={href} className="mt-1 inline-block font-display text-sm text-accent hover:text-accent-strong">
@@ -108,11 +109,18 @@ export default function PostCard({ post, onChange }: Props) {
         )}
       </div>
 
-      {image && (
+      {post.videoUrl ? (
+        <PostVideo post={post} className="mt-3" />
+      ) : image ? (
         <Link to={href} className="mt-3 block" tabIndex={-1} aria-hidden="true">
           <img src={image} alt="" loading="lazy" className="max-h-[420px] w-full object-cover" />
         </Link>
-      )}
+      ) : post.linkPreviews?.[0] ? (
+        // Like a social feed: a post with no media of its own shows its first link.
+        <div className="mt-3 px-4 sm:px-5">
+          <LinkPreviewCard preview={post.linkPreviews[0]} compact={post.linkPreviews[0].kind !== 'youtube'} />
+        </div>
+      ) : null}
 
       <div className="px-4 sm:px-5">
         <div className="flex items-center justify-between py-3 text-[13px] text-muted">
@@ -166,7 +174,9 @@ export default function PostCard({ post, onChange }: Props) {
               </span>
               <div className="min-w-0 flex-1 rounded-xl bg-surface-2 px-3 py-2">
                 <p className="font-display text-[13px]">{post.topComment.authorName}</p>
-                <p className="line-clamp-2 text-[14px] leading-[1.8] text-fg-2">{post.topComment.content}</p>
+                <p className="line-clamp-2 text-[14px] leading-[1.8] text-fg-2">
+                  <RichText text={post.topComment.content} ugc />
+                </p>
               </div>
             </div>
             {post.commentsCount > 1 && (

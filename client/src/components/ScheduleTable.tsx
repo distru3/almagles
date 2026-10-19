@@ -237,7 +237,8 @@ export default function ScheduleTable({ items, columns = [], notes = [], loading
 
                   {/* Day Activities */}
                   <div className="flex-1 space-y-2.5 p-2 min-h-[140px]">
-                    {activities.length === 0 ? (
+                    {/* A day with a council note isn't empty: skip the placeholder, which fills the column. */}
+                    {activities.length === 0 && noteByDate.has(day.date) ? null : activities.length === 0 ? (
                       <div className="flex h-full items-center justify-center py-8">
                         <span className="text-[11px] font-medium text-muted">
                           لا توجد أنشطة

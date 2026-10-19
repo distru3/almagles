@@ -16,6 +16,7 @@ import commentRoutes from './routes/comments.js';
 import reactionRoutes from './routes/reactions.js';
 import scheduleRoutes from './routes/schedule.js';
 import userRoutes from './routes/users.js';
+import { metaForPath, renderShell } from './lib/shareMeta.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -32,7 +33,14 @@ app.use(
             scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
             fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
-            imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+            // Link-preview images come from whatever site a post links to.
+            imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+            mediaSrc: ["'self'", 'blob:', 'https://res.cloudinary.com'],
+            // Videos upload straight from the browser to Cloudinary.
+            connectSrc: ["'self'", 'https://api.cloudinary.com'],
+            frameSrc: ['https://www.youtube-nocookie.com'],
+            // The video compressor runs a tiny timer worker from a blob: URL.
+            workerSrc: ["'self'", 'blob:'],
             objectSrc: ["'none'"],
             frameAncestors: ["'none'"],
             baseUri: ["'self'"],
@@ -92,8 +100,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(__dirname, '../../client/dist');
 if (isProd && fs.existsSync(clientDist)) {
   app.use(express.static(clientDist, { index: false }));
-  app.get(/^(?!\/api\/).*/ , (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
+  const shell = fs.readFileSync(path.join(clientDist, 'index.html'), 'utf8');
+  app.get(/^(?!\/api\/).*/, async (req, res) => {
+    // Shared links (WhatsApp, Telegram…) get the post's own title, excerpt and image.
+    const origin = `${req.protocol}://${req.get('host')}`;
+    let html = shell;
+    try {
+      html = renderShell(shell, await metaForPath(req.path), origin + req.path, origin);
+    } catch (err) {
+      console.error('[share-meta]', err);
+    }
+    res.set('Cache-Control', 'no-cache').type('html').send(html);
   });
 }
 

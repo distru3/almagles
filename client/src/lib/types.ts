@@ -12,6 +12,16 @@ export interface Author {
   role?: 'visitor' | 'writer' | 'admin';
 }
 
+export interface LinkPreview {
+  url: string;
+  kind: 'youtube' | 'page';
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+  youtubeId?: string;
+}
+
 export interface Post {
   id: string;
   title: string;
@@ -19,6 +29,13 @@ export interface Post {
   postDate: string;
   imagePublicId: string | null;
   imageUrl: string | null;
+  videoUrl?: string | null;
+  videoPosterUrl?: string | null;
+  videoWidth?: number | null;
+  videoHeight?: number | null;
+  videoDuration?: number | null;
+  /** Previews of the links in the description, fetched when the post was saved. */
+  linkPreviews?: LinkPreview[] | null;
   category: Category;
   author: Author;
   createdAt: string;

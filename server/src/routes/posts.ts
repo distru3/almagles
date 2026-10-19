@@ -5,7 +5,16 @@ import { prisma } from '../db.js';
 import { requireAuth, requirePublisher, canManageCategory } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { optimizeImage, ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
-import { uploadPostImage, deletePostImage } from '../lib/cloudinary.js';
+import {
+  uploadPostImage,
+  deletePostImage,
+  signVideoUpload,
+  findVideo,
+  deletePostVideo,
+  isOwnVideoId,
+  isCloudinaryConfigured,
+} from '../lib/cloudinary.js';
+import { previewsFor } from '../lib/linkPreview.js';
 import { HttpError } from '../middleware/error.js';
 import { CANONICAL_REACTIONS } from './reactions.js';
 
@@ -149,6 +158,12 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         postDate: p.postDate,
         imagePublicId: p.imagePublicId,
         imageUrl: p.imageUrl,
+        videoUrl: p.videoUrl,
+        videoPosterUrl: p.videoPosterUrl,
+        videoWidth: p.videoWidth,
+        videoHeight: p.videoHeight,
+        videoDuration: p.videoDuration,
+        linkPreviews: p.linkPreviews ?? [],
         category: p.category,
         author: p.author,
         createdAt: p.createdAt,
@@ -254,6 +269,51 @@ function parsePostFields(raw: any) {
   return parsed.data;
 }
 
+/** A signed, one-off ticket for uploading one video straight from the browser to Cloudinary. */
+router.post('/video-upload', requirePublisher, (req, res) => {
+  if (!isCloudinaryConfigured()) return res.status(503).json({ message: 'خدمة الوسائط غير مكوّنة على الخادم' });
+  return res.json(signVideoUpload(req.user!.id));
+});
+
+/** Throw away a video this user uploaded but didn't publish (form cancelled or video replaced). */
+router.delete('/video-upload/:publicId(*)', requirePublisher, async (req, res, next) => {
+  try {
+    const publicId = req.params.publicId;
+    if (!isOwnVideoId(publicId, req.user!.id)) return res.status(403).json({ message: 'لا يمكنك حذف هذا الملف' });
+    const inUse = await prisma.post.findFirst({ where: { videoPublicId: publicId }, select: { id: true } });
+    if (!inUse) await deletePostVideo(publicId);
+    return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** The video fields for a newly uploaded video, after checking it's this user's and really in Cloudinary. */
+async function videoFields(publicId: unknown, userId: string) {
+  if (typeof publicId !== 'string' || !isOwnVideoId(publicId, userId)) {
+    throw new HttpError(400, 'ملف الفيديو غير صالح');
+  }
+  const video = await findVideo(publicId);
+  if (!video) throw new HttpError(400, 'لم يكتمل رفع الفيديو — أعد المحاولة');
+  return {
+    videoPublicId: video.publicId,
+    videoUrl: video.url,
+    videoPosterUrl: video.posterUrl,
+    videoWidth: video.width,
+    videoHeight: video.height,
+    videoDuration: video.duration,
+  };
+}
+
+const NO_VIDEO = {
+  videoPublicId: null,
+  videoUrl: null,
+  videoPosterUrl: null,
+  videoWidth: null,
+  videoHeight: null,
+  videoDuration: null,
+};
+
 router.post('/', requirePublisher, upload.single('image'), async (req, res, next) => {
   try {
     const user = req.user!;
@@ -273,6 +333,9 @@ router.post('/', requirePublisher, upload.single('image'), async (req, res, next
       imageUrl = uploaded.secureUrl;
     }
 
+    const video = req.body?.videoPublicId ? await videoFields(req.body.videoPublicId, user.id) : NO_VIDEO;
+    const linkPreviews = await previewsFor(data.description, null);
+
     const post = await prisma.post.create({
       data: {
         title: data.title,
@@ -282,6 +345,8 @@ router.post('/', requirePublisher, upload.single('image'), async (req, res, next
         authorId: user.id,
         imagePublicId,
         imageUrl,
+        ...video,
+        linkPreviews: linkPreviews as any,
       },
       include: {
         category: { select: { id: true, name: true, slug: true } },
@@ -325,6 +390,19 @@ router.put('/:id', requirePublisher, upload.single('image'), async (req, res, ne
       removedOld = existing.imagePublicId;
     }
 
+    let removedVideo: string | null = null;
+    if (req.body?.videoPublicId && req.body.videoPublicId !== existing.videoPublicId) {
+      Object.assign(data, await videoFields(req.body.videoPublicId, user.id));
+      removedVideo = existing.videoPublicId;
+    } else if (req.body?.removeVideo === 'true' || req.body?.removeVideo === true) {
+      Object.assign(data, NO_VIDEO);
+      removedVideo = existing.videoPublicId;
+    }
+
+    if (typeof data.description === 'string' && data.description !== existing.description) {
+      data.linkPreviews = await previewsFor(data.description, existing.linkPreviews);
+    }
+
     const post = await prisma.post.update({
       where: { id: existing.id },
       data,
@@ -335,6 +413,7 @@ router.put('/:id', requirePublisher, upload.single('image'), async (req, res, ne
     });
 
     if (removedOld) await deletePostImage(removedOld);
+    if (removedVideo) await deletePostVideo(removedVideo);
 
     return res.json({ post });
   } catch (err) {
@@ -350,6 +429,7 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
       return res.status(403).json({ message: 'لا يمكنك إدارة هذا المنشور' });
     }
     if (existing.imagePublicId) await deletePostImage(existing.imagePublicId);
+    if (existing.videoPublicId) await deletePostVideo(existing.videoPublicId);
     await prisma.post.delete({ where: { id: existing.id } });
     return res.json({ ok: true });
   } catch (err) {
