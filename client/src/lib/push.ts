@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, ApiError } from './api';
 
 /**
  * Where this device stands with phone/desktop popups:
@@ -6,9 +6,10 @@ import { api } from './api';
  * - needs-install: iPhone/iPad, which only allow push once the site is added to the home screen
  * - unavailable: the server has no push keys configured
  * - denied: the user blocked notifications for this site
- * - off / on: ready to be turned on, or already on
+ * - error: allowed and subscribed in the browser, but the server couldn't save this device
+ * - off / on: ready to be turned on, or on (the server has this device)
  */
-export type PushState = 'unsupported' | 'needs-install' | 'unavailable' | 'denied' | 'off' | 'on';
+export type PushState = 'unsupported' | 'needs-install' | 'unavailable' | 'denied' | 'error' | 'off' | 'on';
 
 export function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -54,11 +55,45 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? reg.pushManager.getSubscription() : null;
 }
 
+/** The endpoint the server has confirmed saving during this visit, and the last reason it couldn't. */
+let confirmedEndpoint: string | null = null;
+let lastError: string | null = null;
+
+/** Why the last attempt failed, in words for the person (shown under the card). */
+export function pushError(): string | null {
+  return lastError;
+}
+
+function describe(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'رفض المتصفح الاشتراك في الإشعارات';
+  if (err instanceof Error && err.message) return err.message;
+  return 'تعذّر تفعيل الإشعارات';
+}
+
+async function saveOnServer(sub: PushSubscription): Promise<void> {
+  const json = sub.toJSON();
+  await api('/push/subscribe', { method: 'POST', body: { endpoint: json.endpoint, keys: json.keys } });
+  confirmedEndpoint = sub.endpoint;
+}
+
 export async function getPushState(): Promise<PushState> {
   if (!hasPush()) return isIOS() && !isStandalone() ? 'needs-install' : 'unsupported';
   if (!(await serverKey())) return 'unavailable';
   if (Notification.permission === 'denied') return 'denied';
-  return Notification.permission === 'granted' && (await currentSubscription()) ? 'on' : 'off';
+  if (Notification.permission !== 'granted') return 'off';
+  const sub = await currentSubscription();
+  if (!sub) return 'off';
+  if (sub.endpoint === confirmedEndpoint) return 'on';
+  // Allowed in the browser: make sure the server really has this device (once per visit).
+  try {
+    await saveOnServer(sub);
+    lastError = null;
+    return 'on';
+  } catch (err) {
+    lastError = describe(err);
+    return 'error';
+  }
 }
 
 function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
@@ -69,26 +104,31 @@ function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-async function saveOnServer(sub: PushSubscription): Promise<void> {
-  const json = sub.toJSON();
-  await api('/push/subscribe', { method: 'POST', body: { endpoint: json.endpoint, keys: json.keys } });
-}
-
-/** Asks for permission (must run from a tap/click) and registers this device. */
+/**
+ * Asks for permission and registers this device. Must run straight from a tap:
+ * Safari (iPhone) only shows the permission prompt when it is the very first
+ * thing the tap does, so nothing is awaited before it.
+ */
 export async function enablePush(): Promise<PushState> {
   if (!hasPush()) return getPushState();
-  const key = await serverKey();
-  if (!key) return 'unavailable';
+  lastError = null;
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';
 
-  const reg = await registerServiceWorker();
-  if (!reg) return 'unsupported';
-  const sub =
-    (await reg.pushManager.getSubscription()) ??
-    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }));
-  await saveOnServer(sub);
-  return 'on';
+  try {
+    const key = await serverKey();
+    if (!key) return 'unavailable';
+    const reg = await registerServiceWorker();
+    if (!reg) return 'unsupported';
+    const sub =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }));
+    await saveOnServer(sub);
+    return 'on';
+  } catch (err) {
+    lastError = describe(err);
+    return 'error';
+  }
 }
 
 /** Stops popups on this device (the account's other devices keep theirs). */
@@ -98,15 +138,18 @@ export async function disablePush(): Promise<PushState> {
     await api('/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } }).catch(() => undefined);
     await sub.unsubscribe().catch(() => undefined);
   }
+  confirmedEndpoint = null;
+  lastError = null;
   return getPushState();
 }
 
-/**
- * After login: a device that already has popups on is (re)linked to this
- * account, in case the server dropped it or keys changed.
- */
-export async function resyncPush(): Promise<void> {
-  if (!hasPush() || Notification.permission !== 'granted') return;
-  const sub = await currentSubscription();
-  if (sub) await saveOnServer(sub).catch(() => undefined);
+export interface TestReport {
+  devices: number;
+  sent: number;
+  failures: { service: string; status: number | null; reason: string }[];
+}
+
+/** Sends a test popup to every device of this account; resolves with what each push service said. */
+export function sendTestPush(): Promise<TestReport> {
+  return api<TestReport>('/push/test', { method: 'POST' });
 }

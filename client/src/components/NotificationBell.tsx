@@ -95,7 +95,7 @@ export default function NotificationBell({ className = '' }: { className?: strin
             )}
           </div>
 
-          {(pushState === 'off' || pushState === 'needs-install') && (
+          {(pushState === 'off' || pushState === 'error' || pushState === 'needs-install') && (
             <Link
               to="/notifications"
               onClick={() => setIsOpen(false)}
