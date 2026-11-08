@@ -5,6 +5,9 @@
 const ICON = '/icons/icon-192.png';
 // Android's status bar shows only this silhouette.
 const BADGE = '/icons/badge-96.png';
+// «حان وقت المجلس»: long buzzes. Android only — iPhones play their normal notification sound and
+// ignore this. A web app can't choose its own ringtone or ring until answered like an alarm.
+const RING_VIBRATION = [800, 300, 800, 300, 800, 300, 800];
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
@@ -30,6 +33,10 @@ self.addEventListener('push', (event) => {
         badge: BADGE,
         tag: data.tag,
         renotify: Boolean(data.tag),
+        // Stays on screen until dismissed (desktop, Android) instead of sliding away.
+        requireInteraction: Boolean(data.ring),
+        vibrate: data.ring ? RING_VIBRATION : undefined,
+        silent: false,
         lang: 'ar',
         dir: 'rtl',
         data: { url: data.url || '/' },

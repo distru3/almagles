@@ -86,6 +86,8 @@ export function templateCsv(columns: ScheduleColumn[]): string {
         linkLabel: null,
         customValues: Object.fromEntries(columns.map((c) => [c.id, 'مثال'])),
         sortOrder: 0,
+        startTime: null,
+        timeZone: null,
       },
     ],
     columns,

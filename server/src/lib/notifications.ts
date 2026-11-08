@@ -17,7 +17,7 @@ async function safely(label: string, fn: () => Promise<unknown>): Promise<void> 
 const SITE_NAME = 'رجال الأمة';
 const EXCERPT_LENGTH = 120;
 
-/** Same wording as the site's list (client/src/lib/notifications.ts). */
+/** Same wording as the site's list (client/src/lib/notifications.ts). Schedule ones: scheduleNotifications.ts. */
 function sentence(type: NotificationType, actorName: string | null, postTitle: string): string {
   const who = actorName ?? 'أحد الأعضاء';
   const title = `«${postTitle}»`;
@@ -32,6 +32,8 @@ function sentence(type: NotificationType, actorName: string | null, postTitle: s
       return `${who} تفاعل مع تعليقك في ${title}`;
     case 'new_post':
       return `منشور جديد: ${title}`;
+    default:
+      return title;
   }
 }
 

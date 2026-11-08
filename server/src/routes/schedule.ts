@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { requireAuth, requireScheduleManager, requireWriterOrAdmin } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
+import { isTimeZone, noteScheduleChange, reminderFields } from '../lib/scheduleNotifications.js';
 
 const router = Router();
 const manage = [requireAuth, requireScheduleManager];
@@ -79,10 +80,27 @@ const itemFields = {
   linkLabel: z.string().trim().max(100).nullish(),
   customValues: customValuesSchema.optional(),
   sortOrder: z.number().int().min(0).max(100000).optional(),
+  /** "HH:MM" (24h) for the «حان وقت المجلس» reminder; empty = no reminder. */
+  startTime: z
+    .string()
+    .trim()
+    .nullish()
+    .transform((v) => v || null)
+    .refine((v) => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), { message: 'وقت التنبيه غير صالح' }),
+  /** The zone startTime was typed in (the browser's), e.g. "Africa/Casablanca". */
+  timeZone: z.string().trim().max(64).refine(isTimeZone, { message: 'المنطقة الزمنية غير صالحة' }).nullish(),
 };
 const createSchema = z.object(itemFields);
 const updateSchema = z.object(itemFields).partial();
 type CreateInput = z.infer<typeof createSchema>;
+
+/** startTime, timeZone and the reminder they schedule, as stored on a new session. */
+function timing(data: { date: string; startTime?: string | null; timeZone?: string | null }) {
+  const startTime = data.startTime ?? null;
+  if (startTime && !data.timeZone) throw new HttpError(400, 'المنطقة الزمنية مطلوبة مع وقت التنبيه');
+  const timeZone = startTime ? data.timeZone! : null;
+  return { startTime, timeZone, ...reminderFields({ date: data.date, startTime, timeZone }) };
+}
 
 async function nextSortOrder(date: string): Promise<number> {
   const last = await prisma.scheduleItem.findFirst({
@@ -97,6 +115,7 @@ async function createItem(data: CreateInput) {
   return prisma.scheduleItem.create({
     data: {
       ...data,
+      ...timing(data),
       // Derived from the date so the two can never disagree.
       weekdayKey: weekdayKeyOf(data.date),
       customValues: data.customValues ?? {},
@@ -142,6 +161,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
 router.post('/', ...manage, validate(createSchema), async (req, res, next) => {
   try {
     const item = await createItem(req.body as CreateInput);
+    noteScheduleChange(req.user!.id, [item.date]);
     return res.status(201).json({ item });
   } catch (err) {
     next(err);
@@ -170,12 +190,19 @@ router.post('/bulk', ...manage, validate(bulkSchema), async (req, res, next) => 
         nextOrder.set(data.date, Math.max(nextOrder.get(data.date)!, order + 1));
         out.push(
           await tx.scheduleItem.create({
-            data: { ...data, weekdayKey: weekdayKeyOf(data.date), customValues: data.customValues ?? {}, sortOrder: order },
+            data: {
+              ...data,
+              ...timing(data),
+              weekdayKey: weekdayKeyOf(data.date),
+              customValues: data.customValues ?? {},
+              sortOrder: order,
+            },
           }),
         );
       }
       return out;
     });
+    noteScheduleChange(req.user!.id, created.map((i) => i.date));
     return res.status(201).json({ items: created });
   } catch (err) {
     next(err);
@@ -232,12 +259,16 @@ router.post('/copy-week', ...manage, validate(copyWeekSchema), async (req, res, 
               linkLabel: s.linkLabel,
               customValues: s.customValues ?? {},
               sortOrder: s.sortOrder,
+              startTime: s.startTime,
+              timeZone: s.timeZone,
+              ...reminderFields({ date, startTime: s.startTime, timeZone: s.timeZone }),
             },
           }),
         );
       }
       return out;
     });
+    noteScheduleChange(req.user!.id, created.map((i) => i.date));
     return res.status(201).json({ from, to, items: created });
   } catch (err) {
     next(err);
@@ -250,17 +281,28 @@ router.put('/:id', ...manage, validate(updateSchema), async (req, res, next) => 
     const existing = await prisma.scheduleItem.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: 'العنصر غير موجود' });
 
-    const data = req.body as z.infer<typeof updateSchema>;
+    const { timeZone, ...data } = req.body as z.infer<typeof updateSchema>;
     const moved = data.date !== undefined && data.date !== existing.date;
+    const retimed = data.startTime !== undefined && data.startTime !== existing.startTime;
+    // The zone only follows a newly typed time: someone abroad fixing a title mustn't shift it.
+    const zone = retimed ? (data.startTime ? (timeZone ?? existing.timeZone) : null) : existing.timeZone;
+    if (retimed && data.startTime && !zone) throw new HttpError(400, 'المنطقة الزمنية مطلوبة مع وقت التنبيه');
     const item = await prisma.scheduleItem.update({
       where: { id },
       data: {
         ...data,
+        ...(moved || retimed
+          ? {
+              timeZone: zone,
+              ...reminderFields({ date: data.date ?? existing.date, startTime: data.startTime ?? existing.startTime, timeZone: zone }),
+            }
+          : {}),
         ...(data.date !== undefined ? { weekdayKey: weekdayKeyOf(data.date) } : {}),
         // Moving to another day appends to that day unless an order was given.
         ...(moved && data.sortOrder === undefined ? { sortOrder: await nextSortOrder(data.date!) } : {}),
       },
     });
+    noteScheduleChange(req.user!.id, new Set([existing.date, item.date]));
     return res.json({ item });
   } catch (err) {
     next(err);
@@ -271,9 +313,10 @@ router.delete('/week/:start', ...manage, async (req, res, next) => {
   try {
     if (!parseDate(req.params.start)) throw new HttpError(400, 'تاريخ الأسبوع غير صالح');
     const start = weekStartIso(req.params.start);
-    const { count } = await prisma.scheduleItem.deleteMany({
-      where: { date: { gte: start, lte: addDaysIso(start, 6) } },
-    });
+    const where = { date: { gte: start, lte: addDaysIso(start, 6) } };
+    const days = await prisma.scheduleItem.findMany({ where, select: { date: true }, distinct: ['date'] });
+    const { count } = await prisma.scheduleItem.deleteMany({ where });
+    noteScheduleChange(req.user!.id, days.map((d) => d.date));
     return res.json({ ok: true, deleted: count });
   } catch (err) {
     next(err);
@@ -286,6 +329,7 @@ router.delete('/:id', ...manage, async (req, res, next) => {
     const existing = await prisma.scheduleItem.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: 'العنصر غير موجود' });
     await prisma.scheduleItem.delete({ where: { id } });
+    noteScheduleChange(req.user!.id, [existing.date]);
     return res.json({ ok: true });
   } catch (err) {
     next(err);

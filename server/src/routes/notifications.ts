@@ -32,6 +32,7 @@ router.get('/', validate(listSchema, 'query'), async (req, res, next) => {
         actor: { select: { id: true, name: true, avatarUrl: true } },
         post: { select: { id: true, title: true } },
         comment: { select: { content: true } },
+        scheduleItem: { select: { id: true, date: true, title: true, section: true, timeLabel: true } },
       },
     });
     const page = rows.slice(0, limit);
@@ -46,6 +47,8 @@ router.get('/', validate(listSchema, 'query'), async (req, res, next) => {
         post: n.post,
         commentId: n.commentId,
         excerpt: n.comment ? n.comment.content.slice(0, EXCERPT_LENGTH) : null,
+        scheduleItem: n.scheduleItem,
+        scheduleDates: n.scheduleDates,
       })),
       nextCursor: rows.length > limit ? page[page.length - 1].id : null,
       unreadCount: await unreadCount(userId),

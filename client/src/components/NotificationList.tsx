@@ -1,7 +1,7 @@
-import { Heart, MessageSquare, Reply, FileText } from 'lucide-react';
+import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NotificationItem, NotificationType } from '../lib/types';
-import { notificationText } from '../lib/notifications';
+import { notificationExcerpt, notificationText } from '../lib/notifications';
 import { timeAgo } from '../lib/dates';
 import Avatar from './Avatar';
 
@@ -11,6 +11,8 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   reaction: Heart,
   comment_reaction: Heart,
   new_post: FileText,
+  schedule_change: CalendarDays,
+  schedule_reminder: BellRing,
 };
 
 export default function NotificationList({
@@ -26,6 +28,7 @@ export default function NotificationList({
     <ul className="divide-y divide-line">
       {items.map((n) => {
         const Icon = ICONS[n.type];
+        const excerpt = notificationExcerpt(n);
         return (
           <li key={n.id}>
             <button
@@ -36,7 +39,7 @@ export default function NotificationList({
               }`}
             >
               <span className="relative shrink-0">
-                <Avatar name={n.actor?.name ?? 'ع'} src={n.actor?.avatarUrl} size="md" />
+                <Avatar name={n.actor?.name ?? 'ع'} src={n.actor?.avatarUrl ?? (n.type === 'schedule_reminder' ? '/icons/icon-192.png' : undefined)} size="md" />
                 <span className="absolute -bottom-1 -start-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-surface bg-accent-fill text-on-accent">
                   <Icon className="h-3 w-3" aria-hidden="true" />
                 </span>
@@ -45,9 +48,9 @@ export default function NotificationList({
                 <span className={`block text-[15px] leading-7 ${n.read ? 'text-fg-2' : 'font-semibold text-fg'}`}>
                   {notificationText(n)}
                 </span>
-                {n.excerpt && (
+                {excerpt && (
                   <span className={`mt-0.5 block text-sm leading-6 text-muted ${compact ? 'line-clamp-1' : 'line-clamp-2'}`}>
-                    {n.excerpt}
+                    {excerpt}
                   </span>
                 )}
                 <span className="mt-1 block text-xs text-muted">{timeAgo(n.createdAt)}</span>
