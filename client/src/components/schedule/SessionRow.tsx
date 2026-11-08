@@ -3,6 +3,7 @@ import { ArrowLeftRight, BellRing, Link2, Trash2 } from 'lucide-react';
 import type { ScheduleColumn, ScheduleItem } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort } from '../../lib/dates';
 import { linkText } from '../../lib/schedule';
+import { REMINDER_PRESETS, presetLabel } from '../../lib/reminderMessages';
 
 /** The editable fields of a session. */
 export interface SessionFields {
@@ -15,6 +16,8 @@ export interface SessionFields {
   customValues: Record<string, string>;
   /** "HH:MM" for «حان وقت المجلس», or '' for no reminder. */
   startTime: string;
+  /** Sent under the reminder (a verse, a hadith or the manager's words); '' for none. */
+  reminderMessage: string;
 }
 
 export function fieldsOf(item?: ScheduleItem): SessionFields {
@@ -27,6 +30,7 @@ export function fieldsOf(item?: ScheduleItem): SessionFields {
     linkLabel: item?.linkLabel ?? '',
     customValues: { ...(item?.customValues ?? {}) },
     startTime: item?.startTime ?? '',
+    reminderMessage: item?.reminderMessage ?? '',
   };
 }
 
@@ -38,6 +42,7 @@ const sameFields = (a: SessionFields, b: SessionFields) =>
   a.linkUrl === b.linkUrl &&
   a.linkLabel === b.linkLabel &&
   a.startTime === b.startTime &&
+  a.reminderMessage === b.reminderMessage &&
   JSON.stringify(a.customValues) === JSON.stringify(b.customValues);
 
 const input =
@@ -226,6 +231,48 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
           <p className="basis-full text-xs leading-5 text-muted">
             عند هذا الوقت يصل إشعار «حان وقت المجلس» لكل الأعضاء الذين فعّلوا الإشعارات. الوقت بتوقيت جهازك.
           </p>
+          <div className="basis-full">
+            <label className="mb-0.5 block font-display text-xs text-muted" htmlFor={`${date}-${item?.id ?? 'new'}-preset`}>
+              رسالة مع التنبيه
+            </label>
+            <select
+              id={`${date}-${item?.id ?? 'new'}-preset`}
+              className={input}
+              value={
+                !fields.reminderMessage
+                  ? 'none'
+                  : String(REMINDER_PRESETS.findIndex((p) => p.text === fields.reminderMessage)).replace(/^-1$/, 'custom')
+              }
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'none') set({ reminderMessage: '' });
+                else if (v !== 'custom') set({ reminderMessage: REMINDER_PRESETS[Number(v)].text });
+                else document.getElementById(`${date}-${item?.id ?? 'new'}-message`)?.focus();
+              }}
+            >
+              <option value="none">بدون رسالة</option>
+              <optgroup label="آيات">
+                {REMINDER_PRESETS.map((p, i) => (p.kind === 'آية' ? <option key={i} value={i}>{presetLabel(p)}</option> : null))}
+              </optgroup>
+              <optgroup label="أحاديث">
+                {REMINDER_PRESETS.map((p, i) => (p.kind === 'حديث' ? <option key={i} value={i}>{presetLabel(p)}</option> : null))}
+              </optgroup>
+              <option value="custom">رسالة من كتابتك…</option>
+            </select>
+            <textarea
+              id={`${date}-${item?.id ?? 'new'}-message`}
+              rows={3}
+              maxLength={500}
+              className="mt-2 w-full min-w-0 rounded border border-line bg-surface px-2.5 py-2 text-[15px] leading-7 text-fg transition placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+              placeholder="اختر آية أو حديثاً من القائمة، أو اكتب ما تريد إرساله مع التنبيه"
+              value={fields.reminderMessage}
+              onChange={(e) => set({ reminderMessage: e.target.value })}
+              aria-label="نص رسالة التنبيه"
+            />
+            {fields.reminderMessage && !fields.startTime && (
+              <p className="mt-1 text-xs text-danger">اختر وقت التنبيه أعلاه حتى تُرسل هذه الرسالة.</p>
+            )}
+          </div>
         </div>
       )}
 

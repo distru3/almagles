@@ -87,6 +87,13 @@ const itemFields = {
     .nullish()
     .transform((v) => v || null)
     .refine((v) => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), { message: 'وقت التنبيه غير صالح' }),
+  /** Sent under the reminder: a preset verse/hadith or the manager's own words. */
+  reminderMessage: z
+    .string()
+    .trim()
+    .max(500, 'رسالة التنبيه طويلة جداً')
+    .nullish()
+    .transform((v) => v || null),
   /** The zone startTime was typed in (the browser's), e.g. "Africa/Casablanca". */
   timeZone: z.string().trim().max(64).refine(isTimeZone, { message: 'المنطقة الزمنية غير صالحة' }).nullish(),
 };
@@ -261,6 +268,7 @@ router.post('/copy-week', ...manage, validate(copyWeekSchema), async (req, res, 
               sortOrder: s.sortOrder,
               startTime: s.startTime,
               timeZone: s.timeZone,
+              reminderMessage: s.reminderMessage,
               ...reminderFields({ date, startTime: s.startTime, timeZone: s.timeZone }),
             },
           }),

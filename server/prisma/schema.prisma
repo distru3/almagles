@@ -159,34 +159,36 @@ model CommentReaction {
 }
 
 model ScheduleItem {
-  id            String         @id @default(cuid())
-  date          String
-  weekdayKey    String
-  timeLabel     String
-  section       String?
-  title         String
-  notes         String?
-  linkUrl       String?
+  id              String         @id @default(cuid())
+  date            String
+  weekdayKey      String
+  timeLabel       String
+  section         String?
+  title           String
+  notes           String?
+  linkUrl         String?
   /// Text shown for the link (e.g. "درس الشيخ على يوتيوب"); falls back to a generic label.
-  linkLabel     String?
+  linkLabel       String?
   /// Values for admin-defined columns, keyed by ScheduleColumn.id.
-  customValues  Json           @default("{}")
+  customValues    Json           @default("{}")
   /// Order of sessions within the same day.
-  sortOrder     Int            @default(0)
+  sortOrder       Int            @default(0)
   /// Clock time the session starts ("HH:MM", 24h) for the «حان وقت المجلس» reminder;
   /// timeLabel stays free text («فجر», «بعد العصر») and can't be scheduled on.
-  startTime     String?
+  startTime       String?
   /// IANA zone startTime was entered in (the manager's browser), e.g. "Africa/Casablanca".
-  timeZone      String?
+  timeZone        String?
   /// When the reminder goes out: date + startTime in timeZone. Null = no reminder.
-  remindAt      DateTime?
+  remindAt        DateTime?
+  /// Sent with the reminder: a verse, a hadith or the manager's own words.
+  reminderMessage String?
   /// Set once the reminder was sent; cleared when the date or time changes.
-  remindedAt    DateTime?
+  remindedAt      DateTime?
   /// Row id in the old almagles-schedule (Firebase) app; makes the import re-runnable.
-  sourceId      String?        @unique
-  notifications Notification[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  sourceId        String?        @unique
+  notifications   Notification[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@index([date])
   @@index([remindAt])

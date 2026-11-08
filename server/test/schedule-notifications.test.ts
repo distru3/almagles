@@ -126,6 +126,12 @@ describe('«حان وقت المجلس»', () => {
     expect(cleared).toMatchObject({ startTime: null, timeZone: null, remindAt: null });
   });
 
+  it('rejects a reminder message over 500 characters and stores an empty one as none', async () => {
+    const m = await manager();
+    expect((await m.post('/api/schedule', { date: soon(), title: 'د', reminderMessage: 'ا'.repeat(501) })).status).toBe(400);
+    expect((await m.post('/api/schedule', { date: soon(), title: 'د', reminderMessage: '  ' })).body.item.reminderMessage).toBeNull();
+  });
+
   it('rejects a bad time or zone, and a time without a zone', async () => {
     const m = await manager();
     expect((await m.post('/api/schedule', { date: soon(), title: 'د', startTime: '25:00', timeZone: 'UTC' })).status).toBe(400);
@@ -136,7 +142,10 @@ describe('«حان وقت المجلس»', () => {
   it('rings everyone once when the time comes, and again only if the time is changed', async () => {
     const v = await member('v@test.local');
     const m = await manager();
-    const item = (await m.post('/api/schedule', { date: '2026-12-01', title: 'درس التفسير', section: 'القسم الأول', startTime: '20:30', timeZone: 'UTC' })).body.item;
+    const message = '﴿وَإِن تَتَوَلَّوْا يَسْتَبْدِلْ قَوْمًا غَيْرَكُمْ ثُمَّ لَا يَكُونُوا أَمْثَالَكُم﴾ [محمد: 38]';
+    const item = (
+      await m.post('/api/schedule', { date: '2026-12-01', title: 'درس التفسير', section: 'القسم الأول', startTime: '20:30', timeZone: 'UTC', reminderMessage: message })
+    ).body.item;
     await flushScheduleChanges();
     await flushPushes();
     sent = [];
@@ -147,11 +156,12 @@ describe('«حان وقت المجلس»', () => {
     await flushPushes();
 
     expect(sent).toHaveLength(1);
-    expect(sent[0].payload).toMatchObject({ title: 'حان وقت المجلس', body: '«درس التفسير» · القسم الأول', ring: true, tag: `reminder:${item.id}` });
+    expect(sent[0].payload).toMatchObject({ title: 'حان وقت المجلس', body: `«درس التفسير» · القسم الأول
+${message}`, ring: true, tag: `reminder:${item.id}` });
     const forV = await inbox(v);
     expect(forV.notifications.find((n: any) => n.type === 'schedule_reminder')).toMatchObject({
       post: null,
-      scheduleItem: { id: item.id, title: 'درس التفسير', date: '2026-12-01' },
+      scheduleItem: { id: item.id, title: 'درس التفسير', date: '2026-12-01', reminderMessage: message },
     });
     // The manager is a member too and gets the reminder.
     expect((await inbox(m)).notifications.map((n: any) => n.type)).toContain('schedule_reminder');
@@ -169,8 +179,8 @@ describe('«حان وقت المجلس»', () => {
 
   it('copying a week carries the time to the new days', async () => {
     const m = await manager();
-    await m.post('/api/schedule', { date: '2026-12-05', title: 'درس', startTime: '06:00', timeZone: 'UTC' });
+    await m.post('/api/schedule', { date: '2026-12-05', title: 'درس', startTime: '06:00', timeZone: 'UTC', reminderMessage: 'هيا' });
     const copied = (await m.post('/api/schedule/copy-week', { to: '2026-12-12' })).body.items;
-    expect(copied[0]).toMatchObject({ date: '2026-12-12', startTime: '06:00', remindAt: '2026-12-12T06:00:00.000Z' });
+    expect(copied[0]).toMatchObject({ date: '2026-12-12', startTime: '06:00', remindAt: '2026-12-12T06:00:00.000Z', reminderMessage: 'هيا' });
   });
 });

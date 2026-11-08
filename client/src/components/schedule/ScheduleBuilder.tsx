@@ -36,6 +36,7 @@ const toPayload = (f: SessionFields) => ({
   linkLabel: f.linkUrl.trim() ? f.linkLabel.trim() || null : null,
   customValues: f.customValues,
   startTime: f.startTime || null,
+  reminderMessage: f.reminderMessage.trim() || null,
   // The reminder fires at startTime in the zone it was typed in.
   timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 });
@@ -53,6 +54,7 @@ const restorable = (i: ScheduleItem) => ({
   sortOrder: i.sortOrder,
   startTime: i.startTime,
   timeZone: i.timeZone,
+  reminderMessage: i.reminderMessage,
 });
 
 const sortItems = (list: ScheduleItem[]) =>
