@@ -31,3 +31,11 @@ services:
         sync: false
       - key: APP_BASE_URL
         sync: false
+      # Web push (phone notifications). Generate once with: npx web-push generate-vapid-keys
+      # Never change them after launch: every subscribed phone would stop receiving.
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@almagles.app

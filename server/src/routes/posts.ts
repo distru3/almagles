@@ -17,6 +17,7 @@ import {
 import { previewsFor } from '../lib/linkPreview.js';
 import { HttpError } from '../middleware/error.js';
 import { CANONICAL_REACTIONS } from './reactions.js';
+import { notifyNewPost } from '../lib/notifications.js';
 
 const router = Router();
 
@@ -357,6 +358,7 @@ router.post('/', requirePublisher, upload.single('image'), async (req, res, next
         author: { select: { id: true, name: true } },
       },
     });
+    await notifyNewPost(post);
     return res.status(201).json({ post });
   } catch (err) {
     next(err);

@@ -36,11 +36,11 @@ function normalizeCounts(raw: Record<string, number>): Record<ReactionType, numb
 }
 
 /**
- * Reacting to a post: optimistic update, server confirmation, rollback on
- * failure. Shared by the post page's ReactionBar and the feed card.
+ * Reacting to a post or a comment: optimistic update, server confirmation,
+ * rollback on failure. `endpoint` is the reactions URL, e.g. `/posts/:id/reactions`.
  */
 export function useReaction(
-  postId: string,
+  endpoint: string,
   counts: Record<string, number>,
   myReaction: string | null,
   onChange?: (counts: Record<string, number>, myReaction: string | null) => void,
@@ -73,7 +73,7 @@ export function useReaction(
 
     setBusy(true);
     try {
-      const res = await api<{ removed: boolean; type: string }>(`/posts/${postId}/reactions`, {
+      const res = await api<{ removed: boolean; type: string }>(endpoint, {
         method: 'PUT',
         body: { type },
       });

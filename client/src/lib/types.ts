@@ -74,6 +74,9 @@ export interface CommentItem {
   authorAvatarUrl?: string | null;
   createdAt: string;
   repliesCount: number;
+  /** Missing on comments that come from places other than a post's comment list. */
+  reactionCounts?: Record<string, number>;
+  myReaction?: string | null;
 }
 
 export interface ScheduleItem {
@@ -137,4 +140,22 @@ export interface PostsResponse {
   total: number;
   page: number;
   limit: number;
+}
+export type NotificationType = 'comment' | 'reply' | 'reaction' | 'comment_reaction' | 'new_post';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  read: boolean;
+  createdAt: string;
+  actor: { id: string; name: string; avatarUrl: string | null } | null;
+  post: { id: string; title: string };
+  commentId: string | null;
+  excerpt: string | null;
+}
+
+export interface NotificationsResponse {
+  notifications: NotificationItem[];
+  nextCursor: string | null;
+  unreadCount: number;
 }

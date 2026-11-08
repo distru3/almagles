@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../lib/api';
+import { disablePush } from '../lib/push';
 import type { User } from '../lib/types';
 
 interface AuthContextValue {
@@ -46,6 +47,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Popups on this device belong to this account; the next person to sign in here shouldn't get them.
+    await disablePush().catch(() => undefined);
     try {
       await api('/auth/logout', { method: 'POST' });
     } catch {

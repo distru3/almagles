@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, Shield, PenLine, CalendarDays, Search, Moon, Sun } from 'lucide-react';
+import { Menu, X, LogOut, Shield, PenLine, CalendarDays, Search, Moon, Sun, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 import SearchInput from './SearchInput';
 import Avatar from './Avatar';
+import NotificationBell from './NotificationBell';
+import { useNotifications } from '../context/NotificationsContext';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `inline-flex items-center gap-1.5 py-2 font-display text-[16px] transition ${
@@ -26,6 +28,7 @@ function setTheme(dark: boolean) {
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const [open, setOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -110,6 +113,8 @@ export default function Navbar() {
             {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
           </button>
 
+          {user && <NotificationBell />}
+
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
               <Link to="/profile" className="flex items-center gap-2 rounded-full py-1 pe-1 ps-3 font-display text-sm text-fg-2 transition hover:bg-surface-2 hover:text-fg" title="الملف الشخصي">
@@ -162,6 +167,17 @@ export default function Navbar() {
               الجدول
             </a>
             {roleLinks(() => setOpen(false))}
+            {user && (
+              <NavLink to="/notifications" className={navLinkClass} onClick={() => setOpen(false)}>
+                <Bell className="h-4 w-4" />
+                الإشعارات
+                {unreadCount > 0 && (
+                  <span className="rounded-full bg-danger px-2 py-0.5 text-xs font-bold text-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
             <div className="my-2 h-px bg-line" />
             {user ? (
               <div className="flex items-center justify-between py-2">

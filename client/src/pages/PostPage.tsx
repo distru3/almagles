@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Calendar, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
@@ -31,6 +31,7 @@ function readTextSize(): number {
 
 export default function PostPage() {
   const { id = '' } = useParams();
+  const { hash, key: locationKey } = useLocation();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +114,26 @@ export default function PostPage() {
       active = false;
     };
   }, [id, loadComments]);
+
+  // Links from a notification (#comment-…) scroll to that comment and flash it.
+  const targetComment = hash.startsWith('#comment-') ? hash.slice('#comment-'.length) : null;
+  const targetLoaded = !!targetComment && comments.some((c) => c.id === targetComment);
+  useEffect(() => {
+    if (!targetLoaded || loading) return;
+    const el = document.getElementById(`comment-${targetComment}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('bg-accent-soft');
+    const timer = window.setTimeout(() => el.classList.remove('bg-accent-soft'), 2500);
+    return () => window.clearTimeout(timer);
+  }, [targetComment, targetLoaded, loading, locationKey]);
+
+  // Opened from a notification while already on this post: the comment may be newer than the list.
+  // (The first render is skipped: the page loads its comments anyway.)
+  const firstLocation = useRef(locationKey);
+  useEffect(() => {
+    if (locationKey !== firstLocation.current && targetComment && !targetLoaded) loadComments();
+  }, [locationKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The tab (and bookmarks) carry the post's title, as shared links do.
   useEffect(() => {

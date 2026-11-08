@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { notifyReaction } from '../lib/notifications.js';
 
 const router = Router({ mergeParams: true });
 
@@ -61,6 +62,7 @@ router.put('/', requireAuth, async (req, res, next) => {
     if (existing && existingType === type) {
       // deleteMany: a double-click that already removed it is not an error.
       await prisma.reaction.deleteMany({ where: { id: existing.id } });
+      await notifyReaction(postId, req.user!.id, true);
       return res.json({ removed: true, type });
     }
 
@@ -70,6 +72,8 @@ router.put('/', requireAuth, async (req, res, next) => {
       update: { type },
       create: { postId, userId: req.user!.id, type },
     });
+    // Switching from one reaction to another is not news to the author.
+    if (!existing) await notifyReaction(postId, req.user!.id, false);
     return res.status(existing ? 200 : 201).json({ removed: false, type: saved.type });
   } catch (err) {
     next(err);

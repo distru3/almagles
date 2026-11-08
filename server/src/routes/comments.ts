@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth, requireAdmin, canManageCategory } from '../middleware/auth.js';
+import { notifyComment, notifyCommentReaction } from '../lib/notifications.js';
 
 const router = Router();
 
@@ -82,6 +83,22 @@ router.get('/post/:postId', async (req, res, next) => {
         _count: { select: { replies: true } },
       },
     });
+
+    const ids = comments.map((c) => c.id);
+    const [grouped, mine] = await Promise.all([
+      prisma.commentReaction.groupBy({ by: ['commentId', 'type'], where: { commentId: { in: ids } }, _count: { _all: true } }),
+      req.user
+        ? prisma.commentReaction.findMany({ where: { commentId: { in: ids }, userId: req.user.id }, select: { commentId: true, type: true } })
+        : Promise.resolve([]),
+    ]);
+    const counts = new Map<string, Record<string, number>>();
+    for (const g of grouped) {
+      const row = counts.get(g.commentId) ?? {};
+      row[g.type] = g._count._all;
+      counts.set(g.commentId, row);
+    }
+    const myReaction = new Map(mine.map((r) => [r.commentId, r.type]));
+
     return res.json({
       comments: comments.map((c) => ({
         id: c.id,
@@ -94,8 +111,43 @@ router.get('/post/:postId', async (req, res, next) => {
         authorAvatarUrl: c.author.avatarUrl,
         createdAt: c.createdAt,
         repliesCount: c._count.replies,
+        reactionCounts: counts.get(c.id) ?? {},
+        myReaction: myReaction.get(c.id) ?? null,
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const reactSchema = z.object({ type: z.enum(['like', 'love', 'insight'], { message: 'نوع التفاعل غير مدعوم' }) });
+
+/** Same toggle as post reactions: the same type again removes it, another type switches. */
+router.put('/:id/reactions', requireAuth, validate(reactSchema), async (req, res, next) => {
+  try {
+    const { type } = req.body as z.infer<typeof reactSchema>;
+    const userId = req.user!.id;
+    const comment = await prisma.comment.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, postId: true, authorId: true },
+    });
+    if (!comment) return res.status(404).json({ message: 'التعليق غير موجود' });
+
+    const where = { commentId_userId: { commentId: comment.id, userId } };
+    const existing = await prisma.commentReaction.findUnique({ where });
+    if (existing && existing.type === type) {
+      await prisma.commentReaction.deleteMany({ where: { id: existing.id } });
+      await notifyCommentReaction(comment, userId, true);
+      return res.json({ removed: true, type });
+    }
+
+    const saved = await prisma.commentReaction.upsert({
+      where,
+      update: { type },
+      create: { commentId: comment.id, userId, type },
+    });
+    if (!existing) await notifyCommentReaction(comment, userId, false);
+    return res.status(existing ? 200 : 201).json({ removed: false, type: saved.type });
   } catch (err) {
     next(err);
   }
@@ -128,6 +180,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
       },
       include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
     });
+    await notifyComment({ ...comment, repliedToId: parentId });
     return res.status(201).json({
       comment: {
         id: comment.id,
