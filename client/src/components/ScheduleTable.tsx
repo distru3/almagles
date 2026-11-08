@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   ChevronRight,
   ChevronLeft,
@@ -42,8 +42,23 @@ export default function ScheduleTable({ items, columns = [], notes = [], loading
   // Admins edit from the dashboard; schedule managers have their own page.
   const manageHref = (query = '') =>
     user?.role === 'admin' ? `/admin?tab=schedule${query ? `&${query}` : ''}` : `/manage/schedule${query ? `?${query}` : ''}`;
-  const [anchor, setAnchor] = useState<Date>(() => weekStart(new Date()));
-  const [selectedMobileDate, setSelectedMobileDate] = useState<string>(() => todayISO());
+  // ?date=YYYY-MM-DD (from a schedule notification) opens that day's week.
+  const [searchParams] = useSearchParams();
+  const linkedDate = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('date') ?? '') ? searchParams.get('date')! : null;
+  const { hash } = useLocation();
+  const [anchor, setAnchor] = useState<Date>(() => weekStart(linkedDate ? new Date(`${linkedDate}T12:00:00`) : new Date()));
+  const [selectedMobileDate, setSelectedMobileDate] = useState<string>(() => linkedDate ?? todayISO());
+
+  // Tapping another notification while the page is open: jump to its day and scroll to the schedule.
+  useEffect(() => {
+    if (linkedDate) {
+      setAnchor(weekStart(new Date(`${linkedDate}T12:00:00`)));
+      setSelectedMobileDate(linkedDate);
+    }
+    if (linkedDate || hash === '#schedule') {
+      document.getElementById('schedule')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [linkedDate, hash]);
 
   const weekDays = useMemo(() => {
     return WEEKDAY_KEYS.map((key, i) => {

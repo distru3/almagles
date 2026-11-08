@@ -100,6 +100,9 @@ export interface ScheduleItem {
   /** Values for custom columns, keyed by ScheduleColumn.id. */
   customValues: Record<string, string>;
   sortOrder: number;
+  /** "HH:MM" (24h): when «حان وقت المجلس» goes out. Null = no reminder. */
+  startTime: string | null;
+  timeZone: string | null;
 }
 
 export interface ScheduleColumn {
@@ -149,7 +152,14 @@ export interface PostsResponse {
   page: number;
   limit: number;
 }
-export type NotificationType = 'comment' | 'reply' | 'reaction' | 'comment_reaction' | 'new_post';
+export type NotificationType =
+  | 'comment'
+  | 'reply'
+  | 'reaction'
+  | 'comment_reaction'
+  | 'new_post'
+  | 'schedule_change'
+  | 'schedule_reminder';
 
 export interface NotificationItem {
   id: string;
@@ -157,9 +167,14 @@ export interface NotificationItem {
   read: boolean;
   createdAt: string;
   actor: { id: string; name: string; avatarUrl: string | null } | null;
-  post: { id: string; title: string };
+  /** Null for schedule notifications. */
+  post: { id: string; title: string } | null;
   commentId: string | null;
   excerpt: string | null;
+  /** schedule_reminder: the session whose time has come. */
+  scheduleItem: { id: string; date: string; title: string; section: string | null; timeLabel: string } | null;
+  /** schedule_change: the days whose sessions changed. */
+  scheduleDates: string[];
 }
 
 export interface NotificationsResponse {

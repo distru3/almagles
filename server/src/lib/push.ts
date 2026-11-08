@@ -11,6 +11,8 @@ export interface PushPayload {
   url: string;
   /** A newer popup with the same tag replaces the older one instead of stacking. */
   tag: string;
+  /** «حان وقت المجلس»: stays on screen until dismissed, with a long vibration where the phone allows it. */
+  ring?: boolean;
 }
 
 /** Push is off until both VAPID keys are configured. */

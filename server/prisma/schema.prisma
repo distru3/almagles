@@ -159,26 +159,37 @@ model CommentReaction {
 }
 
 model ScheduleItem {
-  id           String   @id @default(cuid())
-  date         String
-  weekdayKey   String
-  timeLabel    String
-  section      String?
-  title        String
-  notes        String?
-  linkUrl      String?
+  id            String         @id @default(cuid())
+  date          String
+  weekdayKey    String
+  timeLabel     String
+  section       String?
+  title         String
+  notes         String?
+  linkUrl       String?
   /// Text shown for the link (e.g. "درس الشيخ على يوتيوب"); falls back to a generic label.
-  linkLabel    String?
+  linkLabel     String?
   /// Values for admin-defined columns, keyed by ScheduleColumn.id.
-  customValues Json     @default("{}")
+  customValues  Json           @default("{}")
   /// Order of sessions within the same day.
-  sortOrder    Int      @default(0)
+  sortOrder     Int            @default(0)
+  /// Clock time the session starts ("HH:MM", 24h) for the «حان وقت المجلس» reminder;
+  /// timeLabel stays free text («فجر», «بعد العصر») and can't be scheduled on.
+  startTime     String?
+  /// IANA zone startTime was entered in (the manager's browser), e.g. "Africa/Casablanca".
+  timeZone      String?
+  /// When the reminder goes out: date + startTime in timeZone. Null = no reminder.
+  remindAt      DateTime?
+  /// Set once the reminder was sent; cleared when the date or time changes.
+  remindedAt    DateTime?
   /// Row id in the old almagles-schedule (Firebase) app; makes the import re-runnable.
-  sourceId     String?  @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sourceId      String?        @unique
+  notifications Notification[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([date])
+  @@index([remindAt])
 }
 
 /// «ملاحظات المجلس» — one note per calendar day, readable by everyone and
@@ -227,23 +238,32 @@ enum NotificationType {
   comment_reaction
   /// A new post was published.
   new_post
+  /// Sessions were added, changed or removed (one per burst of edits; scheduleDates lists the days).
+  schedule_change
+  /// A session's start time has come.
+  schedule_reminder
 }
 
-/// One row per recipient. Deleting the post, comment or recipient removes it.
+/// One row per recipient. Deleting the post, comment, session or recipient removes it.
+/// Post notifications carry postId; schedule ones carry scheduleDates or scheduleItemId.
 model Notification {
-  id        String           @id @default(cuid())
-  type      NotificationType
-  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
+  id             String           @id @default(cuid())
+  type           NotificationType
+  user           User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
   /// Who caused it; kept as null if that account is deleted.
-  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
-  actorId   String?
-  post      Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId    String
-  comment   Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  commentId String?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  actor          User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId        String?
+  post           Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId         String?
+  comment        Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  commentId      String?
+  scheduleItem   ScheduleItem?    @relation(fields: [scheduleItemId], references: [id], onDelete: Cascade)
+  scheduleItemId String?
+  /// Days whose sessions changed ("YYYY-MM-DD", ascending), for schedule_change.
+  scheduleDates  String[]         @default([])
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
 
   @@index([userId, createdAt])
   @@index([userId, readAt])

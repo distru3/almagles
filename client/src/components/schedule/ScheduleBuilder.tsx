@@ -35,6 +35,9 @@ const toPayload = (f: SessionFields) => ({
   linkUrl: f.linkUrl.trim() || null,
   linkLabel: f.linkUrl.trim() ? f.linkLabel.trim() || null : null,
   customValues: f.customValues,
+  startTime: f.startTime || null,
+  // The reminder fires at startTime in the zone it was typed in.
+  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 });
 
 /** Fields needed to recreate a deleted session (undo). */
@@ -48,6 +51,8 @@ const restorable = (i: ScheduleItem) => ({
   linkLabel: i.linkLabel,
   customValues: i.customValues,
   sortOrder: i.sortOrder,
+  startTime: i.startTime,
+  timeZone: i.timeZone,
 });
 
 const sortItems = (list: ScheduleItem[]) =>
@@ -146,7 +151,7 @@ export default function ScheduleBuilder() {
     'minmax(150px,1.5fr)',
     ...columns.map(() => '120px'),
     '140px',
-    '88px',
+    '132px',
   ].join(' ');
 
   // ------------------------------------------------------------ session actions
@@ -416,7 +421,7 @@ export default function ScheduleBuilder() {
         {/* Fixed minimum only on desktop, where every field sits on one line; phones stack them. */}
         <div
           className="md:min-w-[var(--builder-min)]"
-          style={{ '--builder-min': `${760 + columns.length * 120}px` } as React.CSSProperties}
+          style={{ '--builder-min': `${804 + columns.length * 120}px` } as React.CSSProperties}
         >
           <div
             className="hidden gap-2 px-4 pb-1.5 font-display text-[13px] text-muted md:grid"

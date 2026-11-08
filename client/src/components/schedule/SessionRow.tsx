@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, Link2, Trash2 } from 'lucide-react';
+import { ArrowLeftRight, BellRing, Link2, Trash2 } from 'lucide-react';
 import type { ScheduleColumn, ScheduleItem } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort } from '../../lib/dates';
 import { linkText } from '../../lib/schedule';
@@ -13,6 +13,8 @@ export interface SessionFields {
   linkUrl: string;
   linkLabel: string;
   customValues: Record<string, string>;
+  /** "HH:MM" for «حان وقت المجلس», or '' for no reminder. */
+  startTime: string;
 }
 
 export function fieldsOf(item?: ScheduleItem): SessionFields {
@@ -24,6 +26,7 @@ export function fieldsOf(item?: ScheduleItem): SessionFields {
     linkUrl: item?.linkUrl ?? '',
     linkLabel: item?.linkLabel ?? '',
     customValues: { ...(item?.customValues ?? {}) },
+    startTime: item?.startTime ?? '',
   };
 }
 
@@ -34,6 +37,7 @@ const sameFields = (a: SessionFields, b: SessionFields) =>
   a.notes === b.notes &&
   a.linkUrl === b.linkUrl &&
   a.linkLabel === b.linkLabel &&
+  a.startTime === b.startTime &&
   JSON.stringify(a.customValues) === JSON.stringify(b.customValues);
 
 const input =
@@ -57,6 +61,7 @@ interface Props {
 export default function SessionRow({ item, date, columns, weekDays, gridTemplate, highlighted, onSave, onMove, onDelete }: Props) {
   const [fields, setFieldsState] = useState<SessionFields>(() => fieldsOf(item));
   const [linkOpen, setLinkOpen] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
   const saved = useRef<SessionFields>(fieldsOf(item));
   // Updated synchronously on every keystroke, so leaving the row right after
   // typing (Tab, autofill) saves what was typed even before React re-renders.
@@ -156,6 +161,18 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
           <span className="truncate">{fields.linkUrl ? linkText(fields) : 'إضافة رابط'}</span>
         </button>
         <div className="flex justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => setReminderOpen((o) => !o)}
+            aria-expanded={reminderOpen}
+            aria-label={fields.startTime ? `وقت التنبيه ${fields.startTime}` : 'إضافة وقت التنبيه'}
+            title={fields.startTime ? `تنبيه «حان وقت المجلس» عند ${fields.startTime}` : 'تنبيه «حان وقت المجلس»'}
+            className={`flex h-10 w-10 items-center justify-center rounded transition ${
+              fields.startTime ? 'bg-accent-soft text-accent' : 'border border-dashed border-line-strong text-muted hover:text-fg'
+            }`}
+          >
+            <BellRing className="h-4 w-4" aria-hidden="true" />
+          </button>
           <div className="relative">
             <label className="sr-only" htmlFor={`${date}-${item?.id ?? 'new'}-move`}>نقل إلى يوم آخر</label>
             <ArrowLeftRight className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-fg-2" aria-hidden="true" />
@@ -185,6 +202,32 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
           </button>
         </div>
       </div>
+
+      {reminderOpen && (
+        <div className="mt-2 flex flex-wrap items-end gap-3 rounded border border-line bg-surface-2 p-3">
+          <div>
+            <label className="mb-0.5 block font-display text-xs text-muted" htmlFor={`${date}-${item?.id ?? 'new'}-start`}>
+              وقت التنبيه
+            </label>
+            <input
+              id={`${date}-${item?.id ?? 'new'}-start`}
+              type="time"
+              dir="ltr"
+              className={`${input} w-32`}
+              value={fields.startTime}
+              onChange={(e) => set({ startTime: e.target.value })}
+            />
+          </div>
+          {fields.startTime && (
+            <button type="button" onClick={() => set({ startTime: '' })} className="h-10 px-2 text-sm text-danger hover:underline">
+              بدون تنبيه
+            </button>
+          )}
+          <p className="basis-full text-xs leading-5 text-muted">
+            عند هذا الوقت يصل إشعار «حان وقت المجلس» لكل الأعضاء الذين فعّلوا الإشعارات. الوقت بتوقيت جهازك.
+          </p>
+        </div>
+      )}
 
       {linkOpen && (
         <div className="mt-2 grid gap-2 rounded border border-line bg-surface-2 p-3 sm:grid-cols-[2fr_1fr]">
