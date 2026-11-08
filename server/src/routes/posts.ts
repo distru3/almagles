@@ -4,10 +4,10 @@ import multer from 'multer';
 import { prisma } from '../db.js';
 import { requireAuth, requirePublisher, canManageCategory } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { optimizeImage, ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
+import { ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../lib/image.js';
+import { MAX_POST_IMAGES, postImageStore, removeStoredImages } from '../lib/postImages.js';
+import type { StoredImage } from '../lib/postImages.js';
 import {
-  uploadPostImage,
-  deletePostImage,
   signVideoUpload,
   findVideo,
   deletePostVideo,
@@ -23,7 +23,7 @@ const router = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_BYTES, files: 1 },
+  limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_POST_IMAGES },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       return cb(new HttpError(400, 'صيغة الصورة غير مدعومة — يُسمح بـ JPG أو PNG أو WebP'));
@@ -33,6 +33,12 @@ const upload = multer({
 });
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/** How a post's photos are returned: in order, cover first. */
+const IMAGES = {
+  orderBy: { position: 'asc' as const },
+  select: { id: true, url: true, width: true, height: true },
+};
 
 const listQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
@@ -124,6 +130,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         include: {
           category: { select: { id: true, name: true, slug: true } },
           author: { select: { id: true, name: true, role: true, avatarUrl: true } },
+          images: IMAGES,
         },
       }),
     ]);
@@ -161,8 +168,7 @@ router.get('/', validate(listQuerySchema, 'query'), async (req, res, next) => {
         title: p.title,
         description: p.description,
         postDate: p.postDate,
-        imagePublicId: p.imagePublicId,
-        imageUrl: p.imageUrl,
+        images: p.images,
         videoUrl: p.videoUrl,
         videoPosterUrl: p.videoPosterUrl,
         videoWidth: p.videoWidth,
@@ -193,6 +199,7 @@ router.get('/:id', async (req, res, next) => {
       include: {
         category: { select: { id: true, name: true, slug: true } },
         author: { select: { id: true, name: true, role: true, avatarUrl: true } },
+        images: IMAGES,
         _count: { select: { comments: true } },
       },
     });
@@ -241,8 +248,10 @@ router.get('/:id', async (req, res, next) => {
       }),
     ]);
 
+    // The old single-image columns are no longer part of the API.
+    const { imageUrl: _oldUrl, imagePublicId: _oldId, ...fields } = post;
     return res.json({
-      ...post,
+      ...fields,
       reactionCounts: counts,
       totalReactions: reactions.length,
       myReaction,
@@ -319,7 +328,72 @@ const NO_VIDEO = {
   videoDuration: null,
 };
 
-router.post('/', requirePublisher, upload.single('image'), async (req, res, next) => {
+/**
+ * Where each photo goes, in order. Tokens are an existing photo's id or
+ * `new:<n>` for the n-th uploaded file. Without a layout, a new post gets
+ * its files in upload order and an edit keeps its photos and appends the new ones.
+ */
+type Slot = { kind: 'existing'; id: string } | { kind: 'new'; index: number };
+
+const layoutSchema = z.array(z.string().min(1).max(64)).max(MAX_POST_IMAGES, `يمكن إضافة ${MAX_POST_IMAGES} صور كحد أقصى`);
+
+function parseLayout(raw: unknown, existingIds: string[], newCount: number): Slot[] {
+  let tokens: string[];
+  if (raw === undefined || raw === '') {
+    tokens = [...existingIds, ...Array.from({ length: newCount }, (_, i) => `new:${i}`)];
+  } else {
+    let json: unknown;
+    try {
+      json = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+      throw new HttpError(400, 'ترتيب الصور غير صالح');
+    }
+    const parsed = layoutSchema.safeParse(json);
+    if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? 'ترتيب الصور غير صالح');
+    tokens = parsed.data;
+  }
+  if (tokens.length > MAX_POST_IMAGES) throw new HttpError(400, `يمكن إضافة ${MAX_POST_IMAGES} صور كحد أقصى`);
+  if (new Set(tokens).size !== tokens.length) throw new HttpError(400, 'ترتيب الصور غير صالح');
+
+  const known = new Set(existingIds);
+  const slots = tokens.map((t): Slot => {
+    const m = /^new:(\d{1,2})$/.exec(t);
+    if (m) {
+      const index = Number(m[1]);
+      if (index >= newCount) throw new HttpError(400, 'ترتيب الصور غير صالح');
+      return { kind: 'new', index };
+    }
+    if (!known.has(t)) throw new HttpError(400, 'ترتيب الصور غير صالح');
+    return { kind: 'existing', id: t };
+  });
+  if (slots.filter((x) => x.kind === 'new').length !== newCount) {
+    throw new HttpError(400, 'إحدى الصور المرفوعة غير مستخدمة');
+  }
+  return slots;
+}
+
+/** Uploads one at a time (keeps memory flat); if one fails, the ones already stored are removed. */
+async function storeFiles(files: Express.Multer.File[]): Promise<StoredImage[]> {
+  const stored: StoredImage[] = [];
+  try {
+    for (const file of files) stored.push(await postImageStore.upload(file.buffer));
+    return stored;
+  } catch (err) {
+    await removeStoredImages(stored.map((x) => x.publicId));
+    throw err;
+  }
+}
+
+const uploadImages = upload.array('images', MAX_POST_IMAGES);
+const filesOf = (req: { files?: unknown }) => (Array.isArray(req.files) ? (req.files as Express.Multer.File[]) : []);
+
+const POST_INCLUDE = {
+  category: { select: { id: true, name: true, slug: true } },
+  author: { select: { id: true, name: true } },
+  images: IMAGES,
+};
+
+router.post('/', requirePublisher, uploadImages, async (req, res, next) => {
   try {
     const user = req.user!;
     const data = parsePostFields(req.body);
@@ -329,35 +403,33 @@ router.post('/', requirePublisher, upload.single('image'), async (req, res, next
       return res.status(403).json({ message: 'لا يمكنك النشر في هذا القسم' });
     }
 
-    let imagePublicId: string | null = null;
-    let imageUrl: string | null = null;
-    if (req.file) {
-      const optimized = await optimizeImage(req.file.buffer);
-      const uploaded = await uploadPostImage(optimized);
-      imagePublicId = uploaded.publicId;
-      imageUrl = uploaded.secureUrl;
-    }
-
+    const files = filesOf(req);
+    const layout = parseLayout(req.body?.layout, [], files.length);
     const video = req.body?.videoPublicId ? await videoFields(req.body.videoPublicId, user.id) : NO_VIDEO;
     const linkPreviews = await previewsFor(data.description, null);
 
-    const post = await prisma.post.create({
-      data: {
-        title: data.title,
-        description: data.description,
-        postDate: data.postDate,
-        categoryId: data.categoryId,
-        authorId: user.id,
-        imagePublicId,
-        imageUrl,
-        ...video,
-        linkPreviews: linkPreviews as any,
-      },
-      include: {
-        category: { select: { id: true, name: true, slug: true } },
-        author: { select: { id: true, name: true } },
-      },
-    });
+    const stored = await storeFiles(files);
+    let post;
+    try {
+      post = await prisma.post.create({
+        data: {
+          title: data.title,
+          description: data.description,
+          postDate: data.postDate,
+          categoryId: data.categoryId,
+          authorId: user.id,
+          ...video,
+          linkPreviews: linkPreviews as any,
+          images: {
+            create: layout.map((slot, position) => ({ ...stored[(slot as { index: number }).index], position })),
+          },
+        },
+        include: POST_INCLUDE,
+      });
+    } catch (err) {
+      await removeStoredImages(stored.map((x) => x.publicId));
+      throw err;
+    }
     await notifyNewPost(post);
     return res.status(201).json({ post });
   } catch (err) {
@@ -365,10 +437,10 @@ router.post('/', requirePublisher, upload.single('image'), async (req, res, next
   }
 });
 
-router.put('/:id', requirePublisher, upload.single('image'), async (req, res, next) => {
+router.put('/:id', requirePublisher, uploadImages, async (req, res, next) => {
   try {
     const user = req.user!;
-    const existing = await prisma.post.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.post.findUnique({ where: { id: req.params.id }, include: { images: { orderBy: { position: 'asc' } } } });
     if (!existing) return res.status(404).json({ message: 'المنشور غير موجود' });
 
     let data: Record<string, any> = {};
@@ -383,18 +455,8 @@ router.put('/:id', requirePublisher, upload.single('image'), async (req, res, ne
       return res.status(403).json({ message: 'لا يمكنك إدارة هذا المنشور' });
     }
 
-    let removedOld: string | null = null;
-    if (req.file) {
-      const optimized = await optimizeImage(req.file.buffer);
-      const uploaded = await uploadPostImage(optimized);
-      data.imagePublicId = uploaded.publicId;
-      data.imageUrl = uploaded.secureUrl;
-      removedOld = existing.imagePublicId;
-    } else if (req.body?.removeImage === 'true' || req.body?.removeImage === true) {
-      data.imagePublicId = null;
-      data.imageUrl = null;
-      removedOld = existing.imagePublicId;
-    }
+    const files = filesOf(req);
+    const layout = parseLayout(req.body?.layout, existing.images.map((i) => i.id), files.length);
 
     let removedVideo: string | null = null;
     if (req.body?.videoPublicId && req.body.videoPublicId !== existing.videoPublicId) {
@@ -409,16 +471,26 @@ router.put('/:id', requirePublisher, upload.single('image'), async (req, res, ne
       data.linkPreviews = await previewsFor(data.description, existing.linkPreviews);
     }
 
-    const post = await prisma.post.update({
-      where: { id: existing.id },
-      data,
-      include: {
-        category: { select: { id: true, name: true, slug: true } },
-        author: { select: { id: true, name: true } },
-      },
-    });
+    const kept = new Set(layout.flatMap((slot) => (slot.kind === 'existing' ? [slot.id] : [])));
+    const removedImages = existing.images.filter((i) => !kept.has(i.id));
 
-    if (removedOld) await deletePostImage(removedOld);
+    const stored = await storeFiles(files);
+    let post;
+    try {
+      post = await prisma.$transaction(async (tx) => {
+        if (removedImages.length) await tx.postImage.deleteMany({ where: { id: { in: removedImages.map((i) => i.id) } } });
+        for (const [position, slot] of layout.entries()) {
+          if (slot.kind === 'existing') await tx.postImage.update({ where: { id: slot.id }, data: { position } });
+          else await tx.postImage.create({ data: { ...stored[slot.index], position, postId: existing.id } });
+        }
+        return tx.post.update({ where: { id: existing.id }, data, include: POST_INCLUDE });
+      });
+    } catch (err) {
+      await removeStoredImages(stored.map((x) => x.publicId));
+      throw err;
+    }
+
+    await removeStoredImages(removedImages.map((i) => i.publicId));
     if (removedVideo) await deletePostVideo(removedVideo);
 
     return res.json({ post });
@@ -429,14 +501,15 @@ router.put('/:id', requirePublisher, upload.single('image'), async (req, res, ne
 
 router.delete('/:id', requireAuth, async (req, res, next) => {
   try {
-    const existing = await prisma.post.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.post.findUnique({ where: { id: req.params.id }, include: { images: { select: { publicId: true } } } });
     if (!existing) return res.status(404).json({ message: 'المنشور غير موجود' });
     if (!canManageCategory(req.user!, existing.categoryId)) {
       return res.status(403).json({ message: 'لا يمكنك إدارة هذا المنشور' });
     }
-    if (existing.imagePublicId) await deletePostImage(existing.imagePublicId);
-    if (existing.videoPublicId) await deletePostVideo(existing.videoPublicId);
     await prisma.post.delete({ where: { id: existing.id } });
+    // After the row is gone: a failed file cleanup must not leave a post pointing at missing photos.
+    await removeStoredImages(existing.images.map((i) => i.publicId));
+    if (existing.videoPublicId) await deletePostVideo(existing.videoPublicId);
     return res.json({ ok: true });
   } catch (err) {
     next(err);

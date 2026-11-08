@@ -20,6 +20,7 @@ import profileRoutes from './routes/profile.js';
 import notificationRoutes from './routes/notifications.js';
 import pushRoutes from './routes/push.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
+import { LOCAL_UPLOADS_DIR } from './lib/postImages.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -59,6 +60,9 @@ app.use(
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+// Local development without Cloudinary: post photos are saved to server/uploads (see lib/postImages.ts).
+if (!isProd) app.use('/uploads', express.static(LOCAL_UPLOADS_DIR, { fallthrough: false }));
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));

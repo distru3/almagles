@@ -5,7 +5,7 @@ const base = {
   title: 'قصة فلسطين',
   postDate: '2026-10-19',
   createdAt: new Date('2026-10-19T19:50:58Z'),
-  imageUrl: null,
+  coverUrl: null,
   videoPosterUrl: null,
   category: { name: 'معلومة تاريخية' },
 };

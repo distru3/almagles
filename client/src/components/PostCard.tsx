@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Check, MessageCircle, Share2 } from 'lucide-react';
 import type { Post } from '../lib/types';
 import { hijriDate } from '../lib/dates';
-import { cloudinaryUrl } from '../lib/image';
+import ImageCollage from './ImageCollage';
 import RichText from './RichText';
 import Avatar from './Avatar';
 import { LinkPreviewCard, PostVideo } from './PostMedia';
@@ -46,7 +46,6 @@ export default function PostCard({ post, onChange }: Props) {
     post.myReaction,
     (reactionCounts, myReaction) => onChange?.({ ...post, reactionCounts, myReaction }),
   );
-  const image = post.imageUrl ? cloudinaryUrl(post.imageUrl, 1000) : null;
   const href = `/post/${post.id}`;
   const badge = post.author.role ? ROLE_BADGE[post.author.role] : undefined;
   const long = post.description.length > 260;
@@ -127,10 +126,8 @@ export default function PostCard({ post, onChange }: Props) {
 
       {post.videoUrl ? (
         <PostVideo post={post} className="mt-3" />
-      ) : image ? (
-        <Link to={href} className="mt-3 block" tabIndex={-1} aria-hidden="true">
-          <img src={image} alt="" loading="lazy" className="max-h-[420px] w-full object-cover" />
-        </Link>
+      ) : post.images?.length ? (
+        <ImageCollage images={post.images} alt={post.title} className="mt-3" />
       ) : post.linkPreviews?.[0] ? (
         // Like a social feed: a post with no media of its own shows its first link.
         <div className="mt-3 px-4 sm:px-5">

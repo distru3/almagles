@@ -6,3 +6,6 @@ build/
 *.log
 .DS_Store
 .vscode/
+
+# Post photos saved locally in development (no Cloudinary keys)
+server/uploads/

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Calendar, X, ZoomIn, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Calendar, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
 import { hijriDate, gregorianLong } from '../lib/dates';
-import { cloudinaryUrl } from '../lib/image';
 import ReactionBar from '../components/ReactionBar';
+import ImageCollage from '../components/ImageCollage';
 import CommentSection from '../components/CommentSection';
 import Spinner from '../components/Spinner';
 import EmptyState from '../components/EmptyState';
@@ -37,7 +37,6 @@ export default function PostPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [zoomed, setZoomed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [textSize, setTextSize] = useState(readTextSize);
@@ -145,19 +144,6 @@ export default function PostPage() {
     };
   }, [post?.title]);
 
-  useEffect(() => {
-    if (!zoomed) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setZoomed(false);
-    };
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = '';
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [zoomed]);
-
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -181,8 +167,6 @@ export default function PostPage() {
       </div>
     );
   }
-
-  const image = post.imageUrl ? cloudinaryUrl(post.imageUrl, 1100) : null;
 
   return (
     <article className="container-site py-10">
@@ -227,18 +211,8 @@ export default function PostPage() {
           </p>
         </div>
 
-        {image && (
-          <button
-            type="button"
-            onClick={() => setZoomed(true)}
-            className="group relative mt-7 block w-full overflow-hidden rounded-sm border border-line"
-            aria-label="تكبير الصورة"
-          >
-            <img src={image} alt={post.title} className="w-full object-contain" />
-            <span className="absolute bottom-3 left-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition group-hover:opacity-100">
-              <ZoomIn className="h-5 w-5" />
-            </span>
-          </button>
+        {post.images?.length > 0 && (
+          <ImageCollage images={post.images} alt={post.title} variant="page" className="mt-7 overflow-hidden rounded-sm border border-line" />
         )}
 
         {post.videoUrl && <PostVideo post={post} className="mt-7 rounded-sm border border-line" />}
@@ -315,29 +289,6 @@ export default function PostPage() {
         </div>
       )}
 
-      {zoomed && post.imageUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
-          onClick={() => setZoomed(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="الصورة مكبّرة"
-        >
-          <img
-            src={cloudinaryUrl(post.imageUrl, 1600)}
-            alt={post.title}
-            onClick={(e) => e.stopPropagation()}
-            className="max-h-[90vh] max-w-full rounded-2xl object-contain shadow-2xl"
-          />
-          <button
-            onClick={() => setZoomed(false)}
-            className="absolute top-4 left-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/25"
-            aria-label="إغلاق"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-      )}
     </article>
   );
 }

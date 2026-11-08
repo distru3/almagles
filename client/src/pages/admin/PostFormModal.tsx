@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { X, Image as ImageIcon, Loader as LoaderIcon, Video as VideoIcon, RotateCcw, Trash2, CheckCircle2 } from 'lucide-react';
+import { X, Image as ImageIcon, ImagePlus, Loader as LoaderIcon, Video as VideoIcon, RotateCcw, Trash2, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { prepareImage, ImageError } from '../../lib/image';
 import { compressVideo, uploadVideo, discardUploadedVideo, formatBytes, formatDuration, VideoError } from '../../lib/video';
@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import AyahButton, { HadithButton } from '../../components/AyahButton';
 import DetectedLinks from '../../components/DetectedLinks';
 import type { Category, Post } from '../../lib/types';
+import { arNumber } from '../../components/reactions';
 
 interface Props {
   categories: Category[];
@@ -24,12 +25,19 @@ type VideoState =
   | { status: 'ready'; publicId: string; previewUrl: string; originalSize: number; size: number; duration: number }
   | { status: 'error'; message: string };
 
-type ImageState =
-  | { status: 'none' }
-  | { status: 'existing'; url: string }
-  | { status: 'processing' }
-  | { status: 'ready'; file: File; previewUrl: string }
-  | { status: 'error'; message: string };
+/** A photo already on the post, or one picked in this form and not uploaded yet. */
+type ImageItem =
+  | { key: string; kind: 'existing'; id: string; url: string }
+  | { key: string; kind: 'new'; file: File; previewUrl: string };
+
+/** Same limit as the server. */
+const MAX_IMAGES = 10;
+
+/** Keys for photos picked in this form (ids of existing ones are used as they are). */
+let newKey = 0;
+
+const existingImages = (post: Post | null): ImageItem[] =>
+  (post?.images ?? []).map((img) => ({ key: img.id, kind: 'existing', id: img.id, url: img.url }));
 
 const MAX_VIDEO_ORIGINAL = 2 * 1024 * 1024 * 1024;
 
@@ -99,7 +107,10 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const [categoryId, setCategoryId] = useState(post?.category.id ?? options[0]?.id ?? '');
   const [postDate, setPostDate] = useState(post?.postDate ?? todayISO());
-  const [image, setImage] = useState<ImageState>(post?.imageUrl ? { status: 'existing', url: post.imageUrl } : { status: 'none' });
+  const [images, setImages] = useState<ImageItem[]>(() => existingImages(post));
+  /** How many picked photos are still being compressed. */
+  const [imagesPending, setImagesPending] = useState(0);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [video, setVideo] = useState<VideoState>(
     post?.videoUrl ? { status: 'existing', url: post.videoUrl, poster: post.videoPosterUrl ?? null } : { status: 'none' },
   );
@@ -116,8 +127,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
   const dirty =
     title !== (post?.title ?? '') ||
     description !== (post?.description ?? '') ||
-    image.status === 'ready' ||
-    (post?.imageUrl ? image.status !== 'existing' : false) ||
+    images.map((i) => i.key).join() !== existingImages(post).map((i) => i.key).join() ||
     !['none', 'existing'].includes(video.status) ||
     (post?.videoUrl ? video.status !== 'existing' : false);
   const videoBusy = video.status === 'compressing' || video.status === 'uploading';
@@ -169,21 +179,59 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     window.setTimeout(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 320);
   };
 
-  // ── Image ──────────────────────────────────────────────────────────────
-  const pickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    e.target.value = ''; // picking the same file again should still fire
-    if (!selected) return;
-    setImage({ status: 'processing' });
-    try {
-      const file = await prepareImage(selected);
-      setImage({ status: 'ready', file, previewUrl: URL.createObjectURL(file) });
-    } catch (err) {
-      setImage({ status: 'error', message: err instanceof ImageError ? err.message : 'تعذّرت معالجة الصورة' });
+  // ── Images ─────────────────────────────────────────────────────────────
+  const pickImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ''; // picking the same files again should still fire
+    if (!picked.length) return;
+    setImageError(null);
+
+    const room = MAX_IMAGES - images.length - imagesPending;
+    const accepted = picked.slice(0, Math.max(0, room));
+    if (accepted.length < picked.length) {
+      setImageError(`يمكن إضافة ${arNumber.format(MAX_IMAGES)} صور كحد أقصى${accepted.length ? ` — أُضيفت ${arNumber.format(accepted.length)} فقط` : ''}`);
+    }
+    if (!accepted.length) return;
+
+    setImagesPending((n) => n + accepted.length);
+    // One at a time: compressing several phone photos at once can exhaust a phone's memory.
+    for (const original of accepted) {
+      try {
+        const file = await prepareImage(original);
+        const item: ImageItem = { key: `new-${++newKey}`, kind: 'new', file, previewUrl: URL.createObjectURL(file) };
+        setImages((list) => [...list, item]);
+      } catch (err) {
+        setImageError(err instanceof ImageError ? err.message : 'تعذّرت معالجة إحدى الصور');
+      } finally {
+        setImagesPending((n) => n - 1);
+      }
     }
   };
 
-  useEffect(() => () => void (image.status === 'ready' && URL.revokeObjectURL(image.previewUrl)), [image]);
+  const removeImage = (key: string) => {
+    setImages((list) => {
+      const gone = list.find((i) => i.key === key);
+      if (gone?.kind === 'new') URL.revokeObjectURL(gone.previewUrl);
+      return list.filter((i) => i.key !== key);
+    });
+  };
+
+  /** delta -1 moves a photo earlier (towards the cover), +1 later. */
+  const moveImage = (key: string, delta: number) => {
+    setImages((list) => {
+      const from = list.findIndex((i) => i.key === key);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= list.length) return list;
+      const next = [...list];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  };
+
+  // Free the previews when the form closes.
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  useEffect(() => () => imagesRef.current.forEach((i) => i.kind === 'new' && URL.revokeObjectURL(i.previewUrl)), []);
 
   // ── Video ──────────────────────────────────────────────────────────────
   const dropPendingVideo = () => {
@@ -251,7 +299,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
   // ── Submit ─────────────────────────────────────────────────────────────
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy || videoBusy || image.status === 'processing') return;
+    if (busy || videoBusy || imagesPending > 0) return;
     setError(null);
 
     if (!categoryId) {
@@ -264,8 +312,14 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     form.append('description', description.trim());
     form.append('categoryId', categoryId);
     form.append('postDate', postDate);
-    if (image.status === 'ready') form.append('image', image.file);
-    if (post?.imageUrl && (image.status === 'none' || image.status === 'error')) form.append('removeImage', 'true');
+    // The order the writer arranged: existing photos by id, new ones as new:<n> in the order their files are sent.
+    let added = 0;
+    const layout = images.map((img) => {
+      if (img.kind === 'existing') return img.id;
+      form.append('images', img.file);
+      return `new:${added++}`;
+    });
+    form.append('layout', JSON.stringify(layout));
     if (video.status === 'ready') form.append('videoPublicId', video.publicId);
     if (post?.videoUrl && (video.status === 'none' || video.status === 'error')) form.append('removeVideo', 'true');
 
@@ -284,7 +338,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     }
   };
 
-  const canSubmit = !busy && !videoBusy && image.status !== 'processing' && title.trim() !== '' && description.trim() !== '';
+  const canSubmit = !busy && !videoBusy && imagesPending === 0 && title.trim() !== '' && description.trim() !== '';
   const submitLabel = videoBusy ? 'انتظر الفيديو…' : post ? 'حفظ' : 'نشر';
 
   const tile =
@@ -384,23 +438,71 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           <fieldset className="space-y-3">
             <legend className="label">الوسائط (اختياري)</legend>
 
-            {/* Image */}
-            {image.status === 'existing' || image.status === 'ready' ? (
-              <div className="flex items-center gap-3 rounded-xl border border-line p-2.5">
-                <ImagePreview src={image.status === 'ready' ? image.previewUrl : image.url} />
-                <div className="flex flex-1 flex-wrap gap-2">
-                  <label className="btn-outline !min-h-10 cursor-pointer !px-3.5 !text-sm">
-                    <RotateCcw className="h-4 w-4" />
-                    تغيير
-                    <input type="file" accept="image/*" className="sr-only" onChange={pickImage} />
-                  </label>
-                  <button type="button" onClick={() => setImage({ status: 'none' })} className="btn-outline !min-h-10 !px-3.5 !text-sm !text-danger">
-                    <Trash2 className="h-4 w-4" />
-                    إزالة
-                  </button>
+            {/* Images */}
+            {(images.length > 0 || imagesPending > 0) && (
+              <div className="rounded-xl border border-line p-2.5">
+                <div className="mb-2 flex items-center justify-between px-0.5 text-xs text-muted">
+                  <span>
+                    الصور {arNumber.format(images.length)} / {arNumber.format(MAX_IMAGES)}
+                  </span>
+                  {images.length > 1 && <span>الأولى هي الغلاف — رتّبها بالأسهم</span>}
                 </div>
+                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {images.map((img, i) => (
+                    <li key={img.key} className="relative aspect-square overflow-hidden rounded-lg bg-surface-2">
+                      <ImagePreview src={img.kind === 'new' ? img.previewUrl : img.url} />
+                      {i === 0 && (
+                        <span className="absolute top-1 right-1 rounded-md bg-accent-fill px-1.5 py-0.5 text-[10px] font-bold text-on-accent">الغلاف</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(img.key)}
+                        className="absolute top-1 left-1 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-danger"
+                        aria-label={`إزالة الصورة ${i + 1}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      {images.length > 1 && (
+                        <div className="absolute inset-x-1 bottom-1 flex justify-between">
+                          <button
+                            type="button"
+                            onClick={() => moveImage(img.key, -1)}
+                            disabled={i === 0}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:invisible"
+                            aria-label={`تقديم الصورة ${i + 1}`}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveImage(img.key, 1)}
+                            disabled={i === images.length - 1}
+                            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80 disabled:invisible"
+                            aria-label={`تأخير الصورة ${i + 1}`}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                  {Array.from({ length: imagesPending }, (_, i) => (
+                    <li key={`pending-${i}`} className="flex aspect-square items-center justify-center rounded-lg bg-surface-2 text-accent" aria-label="جارٍ تجهيز صورة">
+                      <LoaderIcon className="h-6 w-6 animate-spin" />
+                    </li>
+                  ))}
+                  {images.length + imagesPending < MAX_IMAGES && (
+                    <li>
+                      <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-strong text-center text-xs text-accent transition hover:border-accent focus-within:border-accent">
+                        <ImagePlus className="h-6 w-6" />
+                        <span className="font-bold">إضافة صور</span>
+                        <input type="file" accept="image/*" multiple className="sr-only" onChange={pickImages} />
+                      </label>
+                    </li>
+                  )}
+                </ul>
               </div>
-            ) : null}
+            )}
 
             {/* Video */}
             {video.status === 'compressing' || video.status === 'uploading' ? (
@@ -451,22 +553,22 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
               </div>
             ) : null}
 
-            {(image.status === 'error' || video.status === 'error') && (
+            {(imageError || video.status === 'error') && (
               <div role="alert" className="space-y-1 rounded-xl border border-danger/50 bg-danger-soft px-3.5 py-2.5 text-sm text-danger">
-                {image.status === 'error' && <p>{image.message}</p>}
+                {imageError && <p>{imageError}</p>}
                 {video.status === 'error' && <p>{video.message}</p>}
               </div>
             )}
 
             {/* Add tiles for whatever isn't attached yet */}
-            {(image.status !== 'existing' && image.status !== 'ready') || !['existing', 'ready', 'compressing', 'uploading'].includes(video.status) ? (
+            {(images.length === 0 && imagesPending === 0) || !['existing', 'ready', 'compressing', 'uploading'].includes(video.status) ? (
               <div className="flex gap-3">
-                {image.status !== 'existing' && image.status !== 'ready' && (
+                {images.length === 0 && imagesPending === 0 && (
                   <label className={tile}>
-                    {image.status === 'processing' ? <LoaderIcon className="h-6 w-6 animate-spin" /> : <ImageIcon className="h-6 w-6" />}
-                    <span className="font-bold">{image.status === 'processing' ? 'جارٍ تجهيز الصورة…' : 'إضافة صورة'}</span>
-                    <span className="text-[11px] text-muted">تُضغط تلقائياً</span>
-                    <input type="file" accept="image/*" className="sr-only" onChange={pickImage} disabled={image.status === 'processing'} />
+                    <ImageIcon className="h-6 w-6" />
+                    <span className="font-bold">إضافة صور</span>
+                    <span className="text-[11px] text-muted">حتى {arNumber.format(MAX_IMAGES)} صور · تُضغط تلقائياً</span>
+                    <input type="file" accept="image/*" multiple className="sr-only" onChange={pickImages} />
                   </label>
                 )}
                 {!['existing', 'ready', 'compressing', 'uploading'].includes(video.status) && (
@@ -536,11 +638,11 @@ function ImagePreview({ src }: { src: string }) {
   useEffect(() => setFailed(false), [src]);
   if (failed) {
     return (
-      <span className="flex h-20 w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-lg bg-surface-2 text-center text-[11px] text-muted">
+      <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-surface-2 text-center text-[11px] text-muted">
         <ImageIcon className="h-5 w-5" aria-hidden="true" />
         الصورة جاهزة للرفع
       </span>
     );
   }
-  return <img src={src} alt="معاينة الصورة" onError={() => setFailed(true)} className="h-20 w-28 shrink-0 rounded-lg object-cover sm:h-24 sm:w-36" />;
+  return <img src={src} alt="معاينة الصورة" onError={() => setFailed(true)} className="h-full w-full object-cover" />;
 }

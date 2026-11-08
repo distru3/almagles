@@ -70,8 +70,12 @@ model Post {
   title          String
   description    String
   postDate       String
+  /// Deprecated: replaced by `images` (PostImage). Kept for one release so the old server keeps
+  /// working while a deploy rolls out; nothing reads or writes them any more. Drop next release.
   imagePublicId  String?
   imageUrl       String?
+  /// The post's photos, in display order; the first is the cover (feed card, share preview).
+  images         PostImage[]
   /// Video stored in Cloudinary (compressed in the browser before upload); only its address lives here.
   videoPublicId  String?
   videoUrl       String?
@@ -93,6 +97,22 @@ model Post {
 
   @@index([postDate])
   @@index([categoryId])
+}
+
+/// One photo of a post. Stored in Cloudinary (or server/uploads in local development).
+model PostImage {
+  id        String   @id @default(cuid())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  publicId  String
+  url       String
+  width     Int?
+  height    Int?
+  /// 0 = cover.
+  position  Int
+  createdAt DateTime @default(now())
+
+  @@index([postId, position])
 }
 
 model Comment {
