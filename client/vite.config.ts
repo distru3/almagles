@@ -11,6 +11,8 @@ export default defineConfig({
         target: 'http://localhost:4000',
         changeOrigin: true,
       },
+      // Post photos saved locally when Cloudinary isn't configured.
+      '/uploads': 'http://localhost:4000',
     },
   },
   build: {

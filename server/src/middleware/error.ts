@@ -38,8 +38,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   if ((err as any)?.code === 'LIMIT_FILE_SIZE') {
     return res.status(413).json({ message: 'حجم الصورة يتجاوز الحد المسموح (١٠ ميغابايت)' });
   }
-  if ((err as any)?.code === 'LIMIT_UNEXPECTED_FILE') {
-    return res.status(400).json({ message: 'يُسمح بملف صورة واحد فقط' });
+  // Too many files, or a file under a field name the route doesn't take.
+  if ((err as any)?.code === 'LIMIT_UNEXPECTED_FILE' || (err as any)?.code === 'LIMIT_FILE_COUNT') {
+    return res.status(400).json({ message: 'عدد الصور المرفوعة يتجاوز المسموح' });
   }
 
   // Prisma database errors

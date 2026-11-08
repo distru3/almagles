@@ -35,13 +35,21 @@ export interface LinkPreview {
   youtubeId?: string;
 }
 
+/** One photo of a post. width/height let the page reserve its space before it loads. */
+export interface PostImage {
+  id: string;
+  url: string;
+  width: number | null;
+  height: number | null;
+}
+
 export interface Post {
   id: string;
   title: string;
   description: string;
   postDate: string;
-  imagePublicId: string | null;
-  imageUrl: string | null;
+  /** In display order; the first is the cover. */
+  images: PostImage[];
   videoUrl?: string | null;
   videoPosterUrl?: string | null;
   videoWidth?: number | null;

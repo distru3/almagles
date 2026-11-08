@@ -65,7 +65,8 @@ interface PostForMeta {
   description: string;
   postDate: string;
   createdAt: Date;
-  imageUrl: string | null;
+  /** The post's first photo, if it has any. */
+  coverUrl: string | null;
   videoPosterUrl: string | null;
   linkPreviews: unknown;
   category: { name: string };
@@ -87,8 +88,8 @@ function postDescription(post: PostForMeta): string {
 
 export function postMeta(post: PostForMeta): ShareMeta {
   const base = { title: post.title, description: postDescription(post), type: 'article' as const, publishedTime: post.createdAt.toISOString(), section: post.category.name, imageAlt: post.title };
-  if (post.imageUrl?.includes('/image/upload/')) return { ...base, image: cloudinaryCard(post.imageUrl), imageWidth: 1200, imageHeight: 630 };
-  if (post.imageUrl) return { ...base, image: post.imageUrl };
+  if (post.coverUrl?.includes('/image/upload/')) return { ...base, image: cloudinaryCard(post.coverUrl), imageWidth: 1200, imageHeight: 630 };
+  if (post.coverUrl) return { ...base, image: post.coverUrl };
   if (post.videoPosterUrl) return { ...base, image: post.videoPosterUrl };
   const previews = Array.isArray(post.linkPreviews) ? (post.linkPreviews as { kind?: string; youtubeId?: string; image?: string | null }[]) : [];
   const yt = previews.find((p) => p?.kind === 'youtube' && p.youtubeId);
@@ -110,9 +111,18 @@ export async function metaForPath(pathname: string): Promise<ShareMeta> {
   if (post) {
     const row = await prisma.post.findUnique({
       where: { id: post[1] },
-      select: { title: true, description: true, postDate: true, createdAt: true, imageUrl: true, videoPosterUrl: true, linkPreviews: true, category: { select: { name: true } } },
+      select: {
+        title: true,
+        description: true,
+        postDate: true,
+        createdAt: true,
+        videoPosterUrl: true,
+        linkPreviews: true,
+        category: { select: { name: true } },
+        images: { orderBy: { position: 'asc' }, take: 1, select: { url: true } },
+      },
     });
-    return row ? postMeta(row) : DEFAULT_META;
+    return row ? postMeta({ ...row, coverUrl: row.images[0]?.url ?? null }) : DEFAULT_META;
   }
   const category = /^\/category\/([^/]{1,120})\/?$/.exec(path);
   if (category) {
