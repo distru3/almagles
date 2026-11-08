@@ -10,7 +10,7 @@ interface Props {
 
 /** The post page's reaction row: three pill buttons with counts. */
 export default function ReactionBar({ postId, counts, myReaction, onChange }: Props) {
-  const { normalized, mine, total, react, busy, signedIn } = useReaction(postId, counts, myReaction, onChange);
+  const { normalized, mine, total, react, busy, signedIn } = useReaction(`/posts/${postId}/reactions`, counts, myReaction, onChange);
 
   return (
     <section aria-label="التفاعل">

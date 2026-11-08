@@ -15,6 +15,7 @@ import { WritePage, SchedulePage } from './pages/write/WriterPages';
 import AccessDenied from './pages/AccessDenied';
 import NotFound from './pages/NotFound';
 import { ProfileSettingsPage, PublicProfilePage } from './pages/ProfilePage';
+import NotificationsPage from './pages/NotificationsPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -78,6 +79,14 @@ export default function App() {
             element={
               <RequireLogin>
                 <ProfileSettingsPage />
+              </RequireLogin>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <RequireLogin>
+                <NotificationsPage />
               </RequireLogin>
             }
           />

@@ -26,6 +26,11 @@ export const env = {
   EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME ?? 'رجال الأمة',
   APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
   MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
+  // Web push (phone/desktop popups). Generate a pair once with: npx web-push generate-vapid-keys
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? null,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? null,
+  /** A contact the push services can reach if something goes wrong (mailto: or https:). */
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? 'mailto:admin@almagles.app',
 };
 
 export const isProd = env.NODE_ENV === 'production';

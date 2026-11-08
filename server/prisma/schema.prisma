@@ -14,24 +14,28 @@ enum Role {
 }
 
 model User {
-  id                String         @id @default(cuid())
+  id                String             @id @default(cuid())
   name              String
-  email             String         @unique
+  email             String             @unique
   passwordHash      String
-  role              Role           @default(visitor)
-  canManageSchedule Boolean        @default(false)
+  role              Role               @default(visitor)
+  canManageSchedule Boolean            @default(false)
   /// Profile photo in Cloudinary (512px square WebP) and a short bio, set by the user.
   avatarUrl         String?
   avatarPublicId    String?
   bio               String?
-  managedCategories Category[]     @relation("CategoryAdmins")
+  managedCategories Category[]         @relation("CategoryAdmins")
   refreshTokens     RefreshToken[]
   councilNotes      CouncilNote[]
   posts             Post[]
   comments          Comment[]
   reactions         Reaction[]
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  commentReactions  CommentReaction[]
+  pushSubscriptions PushSubscription[]
+  notifications     Notification[]     @relation("NotificationRecipient")
+  notificationsSent Notification[]     @relation("NotificationActor")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 /// One row per login session. Only the SHA-256 of the cookie value is stored.
@@ -62,7 +66,7 @@ model Category {
 }
 
 model Post {
-  id             String     @id @default(cuid())
+  id             String         @id @default(cuid())
   title          String
   description    String
   postDate       String
@@ -77,31 +81,34 @@ model Post {
   videoDuration  Float?
   /// Previews (title, image, YouTube id) for the links in the description, fetched when the post is saved.
   linkPreviews   Json?
-  category       Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category       Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   categoryId     String
-  author         User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author         User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId       String
   comments       Comment[]
   reactions      Reaction[]
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  notifications  Notification[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([postDate])
   @@index([categoryId])
 }
 
 model Comment {
-  id        String    @id @default(cuid())
-  content   String
-  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId    String
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  authorId  String
-  parent    Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
-  parentId  String?
-  replies   Comment[] @relation("Replies")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String            @id @default(cuid())
+  content       String
+  post          Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId        String
+  author        User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId      String
+  parent        Comment?          @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId      String?
+  replies       Comment[]         @relation("Replies")
+  notifications Notification[]
+  reactions     CommentReaction[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@index([postId])
 }
@@ -116,6 +123,19 @@ model Reaction {
   createdAt DateTime @default(now())
 
   @@unique([postId, userId])
+}
+
+/// Same three types as post reactions; one per person per comment (or reply).
+model CommentReaction {
+  id        String   @id @default(cuid())
+  type      String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  commentId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
 }
 
 model ScheduleItem {
@@ -174,4 +194,52 @@ model VerificationCode {
   createdAt DateTime  @default(now())
 
   @@index([email, purpose])
+}
+
+enum NotificationType {
+  /// Someone commented on a post you wrote.
+  comment
+  /// Someone replied to your comment.
+  reply
+  /// Someone reacted to a post you wrote.
+  reaction
+  /// Someone reacted to your comment or reply.
+  comment_reaction
+  /// A new post was published.
+  new_post
+}
+
+/// One row per recipient. Deleting the post, comment or recipient removes it.
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  /// Who caused it; kept as null if that account is deleted.
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorId   String?
+  post      Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  comment   Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  commentId String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+/// A browser or installed app (PWA) that receives this user's notifications as phone/desktop popups.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  /// The push service URL; unique per browser install.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

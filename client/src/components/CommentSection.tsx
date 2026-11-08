@@ -6,6 +6,8 @@ import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import RichText from './RichText';
 import Avatar from './Avatar';
+import CommentReactions from './CommentReactions';
+import { timeAgo } from '../lib/dates';
 
 interface Props {
   postId: string;
@@ -13,18 +15,6 @@ interface Props {
   postAuthorId?: string;
   comments: CommentItem[];
   onChanged: () => void;
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'الآن';
-  if (mins < 60) return `منذ ${mins} دقيقة`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `منذ ${hours} ساعة`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `منذ ${days} يوم`;
-  return new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
 }
 
 export default function CommentSection({ postId, postCategoryId, postAuthorId, comments, onChanged }: Props) {
@@ -125,7 +115,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
       (!!postCategoryId && user.managedCategoryIds.includes(postCategoryId)));
 
   const renderComment = (c: CommentItem, isReply: boolean) => (
-    <div key={c.id} className={isReply ? 'mt-1 border-r-2 border-accent-fill pr-4' : 'border-b border-line py-4'}>
+    <div key={c.id} id={`comment-${c.id}`} className={`scroll-mt-24 rounded transition-colors duration-700 ${isReply ? 'mt-1 border-r-2 border-accent-fill pr-4' : 'border-b border-line py-4'}`}>
       <div className={isReply ? 'py-2' : ''}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -215,17 +205,22 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
           </p>
         )}
 
-        {!isReply && user && editingId !== c.id && (
-          <button
-            onClick={() => {
-              setReplyingTo(replyingTo === c.id ? null : c.id);
-              setReplyContent('');
-            }}
-            className="mt-1 inline-flex min-h-10 items-center gap-1 font-display text-sm text-accent hover:text-accent-strong"
-          >
-            <Reply className="h-3.5 w-3.5" />
-            رد
-          </button>
+        {editingId !== c.id && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <CommentReactions commentId={c.id} counts={c.reactionCounts} myReaction={c.myReaction} />
+            {!isReply && user && (
+              <button
+                onClick={() => {
+                  setReplyingTo(replyingTo === c.id ? null : c.id);
+                  setReplyContent('');
+                }}
+                className="inline-flex min-h-10 items-center gap-1 font-display text-sm text-accent hover:text-accent-strong"
+              >
+                <Reply className="h-3.5 w-3.5" />
+                رد
+              </button>
+            )}
+          </div>
         )}
       </div>
 

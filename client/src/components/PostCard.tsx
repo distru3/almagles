@@ -41,7 +41,7 @@ export default function PostCard({ post, onChange }: Props) {
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
   const { normalized, mine, total, react, busy, signedIn } = useReaction(
-    post.id,
+    `/posts/${post.id}/reactions`,
     post.reactionCounts,
     post.myReaction,
     (reactionCounts, myReaction) => onChange?.({ ...post, reactionCounts, myReaction }),

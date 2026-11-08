@@ -17,6 +17,8 @@ import reactionRoutes from './routes/reactions.js';
 import scheduleRoutes from './routes/schedule.js';
 import userRoutes from './routes/users.js';
 import profileRoutes from './routes/profile.js';
+import notificationRoutes from './routes/notifications.js';
+import pushRoutes from './routes/push.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 
 const app = express();
@@ -79,6 +81,7 @@ if (isProd) {
   app.use('/api/auth/send-code', limiter(15, 5));
   app.use('/api/auth/reset-password', limiter(15, 10));
   app.use('/api/comments', limiter(10, 60));
+  app.use('/api/push', limiter(15, 30));
   app.use('/api/posts/:postId/reactions', limiter(10, 120));
   app.use('/api/posts', limiter(60, 120));
 }
@@ -94,6 +97,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/posts/:postId/reactions', reactionRoutes);
 app.use('/api/comments', commentRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/push', pushRoutes);
 
 app.use('/api', notFoundApi);
 
