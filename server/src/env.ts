@@ -27,11 +27,18 @@ export const env = {
   APP_BASE_URL: process.env.APP_BASE_URL ?? 'http://localhost:5173',
   MAIL_DEV_MODE: process.env.MAIL_DEV_MODE ?? '1',
   // Web push (phone/desktop popups). Generate a pair once with: npx web-push generate-vapid-keys
-  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? null,
-  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? null,
+  // Trimmed: a space or newline pasted into a dashboard silently breaks the signature.
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY?.trim() || null,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY?.trim() || null,
   /** A contact the push services can reach if something goes wrong (mailto: or https:). */
-  VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? 'mailto:admin@almagles.app',
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT?.replace(/\s+/g, '') || 'mailto:admin@almagles.app',
 };
 
 export const isProd = env.NODE_ENV === 'production';
+
+// Apple's push service rejects every message (BadJwtToken) when this isn't a real
+// mailto: address or https: URL; Google accepts it, so Android alone can look fine.
+if (env.VAPID_PUBLIC_KEY && !/^(mailto:[^@\s]+@[^@\s]+\.[^@\s]+|https:\/\/\S+)$/.test(env.VAPID_SUBJECT)) {
+  console.warn(`[push] VAPID_SUBJECT "${env.VAPID_SUBJECT}" should look like mailto:you@example.com — iPhones will not receive notifications`);
+}
 

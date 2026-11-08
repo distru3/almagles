@@ -34,10 +34,34 @@ export async function flushPushes(): Promise<void> {
   while (inFlight.size) await Promise.allSettled([...inFlight]);
 }
 
-async function deliver(messages: { userId: string; payload: PushPayload }[]): Promise<void> {
+/** Which push service an endpoint belongs to, for logs and the test report. */
+export function pushService(endpoint: string): string {
+  const host = (() => {
+    try {
+      return new URL(endpoint).hostname;
+    } catch {
+      return '';
+    }
+  })();
+  if (host.endsWith('push.apple.com')) return 'apple';
+  if (host.endsWith('googleapis.com')) return 'google';
+  if (host.endsWith('mozilla.com')) return 'mozilla';
+  if (host.endsWith('notify.windows.com')) return 'microsoft';
+  return host || 'unknown';
+}
+
+export interface DeliveryReport {
+  devices: number;
+  sent: number;
+  /** Devices the push service refused, with its reason (e.g. Apple's BadJwtToken). */
+  failures: { service: string; status: number | null; reason: string }[];
+}
+
+async function deliver(messages: { userId: string; payload: PushPayload }[]): Promise<DeliveryReport> {
   const payloads = new Map(messages.map((m) => [m.userId, JSON.stringify(m.payload)]));
   const subscriptions = await prisma.pushSubscription.findMany({ where: { userId: { in: [...payloads.keys()] } } });
-  if (!subscriptions.length) return;
+  const report: DeliveryReport = { devices: subscriptions.length, sent: 0, failures: [] };
+  if (!subscriptions.length) return report;
 
   const options: RequestOptions = {
     vapidDetails: { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY!, privateKey: env.VAPID_PRIVATE_KEY! },
@@ -53,15 +77,27 @@ async function deliver(messages: { userId: string; payload: PushPayload }[]): Pr
       subscriptions.slice(i, i + BATCH).map(async (s) => {
         try {
           await pushTransport.send({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payloads.get(s.userId)!, options);
+          report.sent += 1;
         } catch (err) {
+          const service = pushService(s.endpoint);
+          const status = err instanceof WebPushError ? err.statusCode : null;
+          // The push services explain refusals in the body, e.g. Apple: {"reason":"BadJwtToken"}.
+          const reason = (err instanceof WebPushError ? String(err.body ?? '').trim() : '') || (err instanceof Error ? err.message : String(err));
+          report.failures.push({ service, status, reason: reason.slice(0, 300) });
           // 404/410: the app was uninstalled or notifications were turned off; stop sending there.
-          if (err instanceof WebPushError && (err.statusCode === 404 || err.statusCode === 410)) gone.push(s.id);
-          else console.error('[push] send failed', err instanceof WebPushError ? err.statusCode : err);
+          if (status === 404 || status === 410) gone.push(s.id);
+          else console.error(`[push] ${service} refused (${status ?? 'no status'}): ${reason}`);
         }
       }),
     );
   }
   if (gone.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: gone } } });
+  return report;
+}
+
+/** Sends to one user's devices and waits, so the caller can report what happened (the test button). */
+export function pushToUserNow(userId: string, payload: PushPayload): Promise<DeliveryReport> {
+  return deliver([{ userId, payload }]);
 }
 
 /**
@@ -71,6 +107,7 @@ async function deliver(messages: { userId: string; payload: PushPayload }[]): Pr
 export function pushToUsers(messages: { userId: string; payload: PushPayload }[]): void {
   if (!pushConfigured() || !messages.length) return;
   const job = deliver(messages)
+    .then(() => undefined)
     .catch((err) => console.error('[push]', err))
     .finally(() => inFlight.delete(job));
   inFlight.add(job);

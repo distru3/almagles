@@ -161,3 +161,37 @@ describe('push delivery', () => {
     expect(left).toEqual([endpointFor('fine'), endpointFor('flaky')]);
   });
 });
+
+describe('test notification', () => {
+  it('needs a login', async () => {
+    expect((await (await client()).post('/api/push/test')).status).toBe(401);
+  });
+
+  it('reports each device, with the push service’s own reason when it refuses', async () => {
+    await createUser({ email: 'a@test.local' });
+    const a = await subscribe('a@test.local', 'android');
+    await a.post('/api/push/subscribe', { endpoint: 'https://web.push.apple.com/QGx-iphone', keys: KEYS });
+    const realFail = pushTransport.send;
+    pushTransport.send = async (sub, payload, options) => {
+      if (sub.endpoint.includes('apple')) throw new WebPushError('refused', 403, {}, '{"reason":"BadJwtToken"}', sub.endpoint);
+      return realFail(sub, payload, options);
+    };
+
+    const res = await a.post('/api/push/test');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      devices: 2,
+      sent: 1,
+      failures: [{ service: 'apple', status: 403, reason: '{"reason":"BadJwtToken"}' }],
+    });
+    expect(sent[0].payload).toMatchObject({ tag: 'test', url: '/notifications' });
+    // A refusal other than "gone" keeps the device.
+    expect(await prisma.pushSubscription.count()).toBe(2);
+  });
+
+  it('says so when the account has no device', async () => {
+    await createUser({ email: 'a@test.local' });
+    const res = await (await loginAs('a@test.local')).post('/api/push/test');
+    expect(res.body).toEqual({ devices: 0, sent: 0, failures: [] });
+  });
+});

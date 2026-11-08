@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { NotificationItem, NotificationsResponse } from '../lib/types';
 import { notificationLink } from '../lib/notifications';
-import { disablePush, enablePush, getPushState, registerServiceWorker, resyncPush } from '../lib/push';
+import { disablePush, enablePush, getPushState, registerServiceWorker } from '../lib/push';
 import type { PushState } from '../lib/push';
 import { useAuth } from './AuthContext';
 
@@ -27,7 +27,7 @@ interface NotificationsContextValue {
   /** Phone/desktop popups on this device. */
   pushState: PushState;
   pushBusy: boolean;
-  /** Must be called from a tap or click: it shows the browser's permission prompt. */
+  /** Must be called directly from a tap or click (no await before it): it shows the browser's permission prompt. */
   turnOnPush: () => Promise<void>;
   turnOffPush: () => Promise<void>;
 }
@@ -140,7 +140,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setLoaded(false);
     if (!userId) return;
     reload();
-    resyncPush().finally(() => getPushState().then(setPushState, () => undefined));
+    // Also re-links this device to the account if popups were already on here.
+    getPushState().then(setPushState, () => undefined);
   }, [userId, reload]);
 
   // Ask for the count now and then, and whenever the tab comes back; fetch the list only when it changed.
