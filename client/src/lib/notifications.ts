@@ -41,7 +41,8 @@ export function notificationText(n: NotificationItem): string {
 /** The second line under the sentence: what was written, or the session's details. */
 export function notificationExcerpt(n: NotificationItem): string | null {
   if (n.type === 'schedule_reminder' && n.scheduleItem) {
-    return [n.scheduleItem.section, n.scheduleItem.timeLabel].filter(Boolean).join(' · ') || null;
+    const details = [n.scheduleItem.section, n.scheduleItem.timeLabel].filter(Boolean).join(' · ');
+    return [details, n.scheduleItem.reminderMessage].filter(Boolean).join(' — ') || null;
   }
   return n.excerpt;
 }

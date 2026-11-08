@@ -88,6 +88,7 @@ export function templateCsv(columns: ScheduleColumn[]): string {
         sortOrder: 0,
         startTime: null,
         timeZone: null,
+        reminderMessage: null,
       },
     ],
     columns,

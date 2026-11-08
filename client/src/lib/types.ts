@@ -103,6 +103,8 @@ export interface ScheduleItem {
   /** "HH:MM" (24h): when «حان وقت المجلس» goes out. Null = no reminder. */
   startTime: string | null;
   timeZone: string | null;
+  /** Sent under the reminder: a verse, a hadith or the manager's own words. */
+  reminderMessage: string | null;
 }
 
 export interface ScheduleColumn {
@@ -172,7 +174,7 @@ export interface NotificationItem {
   commentId: string | null;
   excerpt: string | null;
   /** schedule_reminder: the session whose time has come. */
-  scheduleItem: { id: string; date: string; title: string; section: string | null; timeLabel: string } | null;
+  scheduleItem: { id: string; date: string; title: string; section: string | null; timeLabel: string; reminderMessage: string | null } | null;
   /** schedule_change: the days whose sessions changed. */
   scheduleDates: string[];
 }

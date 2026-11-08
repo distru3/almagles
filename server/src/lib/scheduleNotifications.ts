@@ -175,9 +175,11 @@ async function announceChange(actorId: string, dates: string[]): Promise<void> {
 
 export const REMINDER_TITLE = 'حان وقت المجلس';
 
-/** «درس التفسير · القسم الأول · بعد العصر» */
-export function reminderBody(s: { title: string; section: string | null; timeLabel: string }): string {
-  return [`«${s.title}»`, s.section, s.timeLabel].filter(Boolean).join(' · ');
+/** «درس التفسير · القسم الأول · بعد العصر», then the manager's message (a verse, a hadith…) below it. */
+export function reminderBody(s: { title: string; section: string | null; timeLabel: string; reminderMessage: string | null }): string {
+  const line = [`«${s.title}»`, s.section, s.timeLabel].filter(Boolean).join(' · ');
+  return s.reminderMessage ? `${line}
+${s.reminderMessage}` : line;
 }
 
 /** Sends every reminder that has come due. Each session is claimed first, so it is never sent twice. */

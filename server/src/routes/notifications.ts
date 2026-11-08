@@ -32,7 +32,7 @@ router.get('/', validate(listSchema, 'query'), async (req, res, next) => {
         actor: { select: { id: true, name: true, avatarUrl: true } },
         post: { select: { id: true, title: true } },
         comment: { select: { content: true } },
-        scheduleItem: { select: { id: true, date: true, title: true, section: true, timeLabel: true } },
+        scheduleItem: { select: { id: true, date: true, title: true, section: true, timeLabel: true, reminderMessage: true } },
       },
     });
     const page = rows.slice(0, limit);
