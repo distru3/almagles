@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { REACTIONS, arNumber, useReaction } from './reactions';
+import ReactorsDialog from './ReactorsDialog';
 
 interface Props {
   postId: string;
@@ -10,7 +12,9 @@ interface Props {
 
 /** The post page's reaction row: three pill buttons with counts. */
 export default function ReactionBar({ postId, counts, myReaction, onChange }: Props) {
-  const { normalized, mine, total, react, busy, signedIn } = useReaction(`/posts/${postId}/reactions`, counts, myReaction, onChange);
+  const endpoint = `/posts/${postId}/reactions`;
+  const { normalized, mine, total, react, busy, signedIn } = useReaction(endpoint, counts, myReaction, onChange);
+  const [showReactors, setShowReactors] = useState(false);
 
   return (
     <section aria-label="التفاعل">
@@ -44,8 +48,20 @@ export default function ReactionBar({ postId, counts, myReaction, onChange }: Pr
         })}
       </div>
       <p className="mt-3 text-center text-sm text-muted">
-        {total > 0 ? `${arNumber.format(total)} تفاعل` : 'كن أول من يتفاعل'}
+        {total > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowReactors(true)}
+            aria-haspopup="dialog"
+            className="underline-offset-4 hover:text-accent hover:underline"
+          >
+            {arNumber.format(total)} تفاعل · عرض المتفاعلين
+          </button>
+        ) : (
+          'كن أول من يتفاعل'
+        )}
       </p>
+      {showReactors && <ReactorsDialog endpoint={endpoint} onClose={() => setShowReactors(false)} />}
     </section>
   );
 }

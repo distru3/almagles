@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Users } from 'lucide-react';
 import { REACTIONS, arNumber, useReaction } from './reactions';
+import ReactorsDialog from './ReactorsDialog';
 
 const NO_COUNTS: Record<string, number> = {};
 
@@ -15,13 +17,15 @@ export default function CommentReactions({
 }) {
   const [counts, setCounts] = useState(initialCounts);
   const [myReaction, setMyReaction] = useState(initialMine);
+  const [showReactors, setShowReactors] = useState(false);
   // A fresh comment list from the server replaces what was shown.
   useEffect(() => {
     setCounts(initialCounts);
     setMyReaction(initialMine);
   }, [initialCounts, initialMine]);
-  const { normalized, mine, react, busy, signedIn } = useReaction(
-    `/comments/${commentId}/reactions`,
+  const endpoint = `/comments/${commentId}/reactions`;
+  const { normalized, mine, total, react, busy, signedIn } = useReaction(
+    endpoint,
     counts,
     myReaction,
     (c, m) => {
@@ -55,6 +59,19 @@ export default function CommentReactions({
           </button>
         );
       })}
+      {total > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowReactors(true)}
+          aria-haspopup="dialog"
+          aria-label="عرض من تفاعل مع التعليق"
+          title="من تفاعل؟"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-accent"
+        >
+          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+      {showReactors && <ReactorsDialog endpoint={endpoint} onClose={() => setShowReactors(false)} />}
     </div>
   );
 }

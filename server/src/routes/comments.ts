@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth, requireAdmin, canManageCategory } from '../middleware/auth.js';
 import { notifyComment, notifyCommentReaction } from '../lib/notifications.js';
+import { commentReactors, reactorsQuery, type ReactorsQuery } from '../lib/reactors.js';
 
 const router = Router();
 
@@ -121,6 +122,17 @@ router.get('/post/:postId', async (req, res, next) => {
 });
 
 const reactSchema = z.object({ type: z.enum(['like', 'love', 'insight'], { message: 'نوع التفاعل غير مدعوم' }) });
+
+/** Who reacted to a comment or reply, newest first, paged like the post list. */
+router.get('/:id/reactions/users', validate(reactorsQuery, 'query'), async (req, res, next) => {
+  try {
+    const comment = await prisma.comment.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!comment) return res.status(404).json({ message: 'التعليق غير موجود' });
+    return res.json(await commentReactors(comment.id, req.query as unknown as ReactorsQuery));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /** Same toggle as post reactions: the same type again removes it, another type switches. */
 router.put('/:id/reactions', requireAuth, validate(reactSchema), async (req, res, next) => {
