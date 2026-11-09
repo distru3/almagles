@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users } from 'lucide-react';
-import { REACTIONS, arNumber, useReaction } from './reactions';
+import { REACTIONS, ReactionIcons, arNumber, useReaction } from './reactions';
 import ReactorsDialog from './ReactorsDialog';
 
 const NO_COUNTS: Record<string, number> = {};
@@ -64,11 +63,12 @@ export default function CommentReactions({
           type="button"
           onClick={() => setShowReactors(true)}
           aria-haspopup="dialog"
-          aria-label="عرض من تفاعل مع التعليق"
+          aria-label={`عرض من تفاعل (${arNumber.format(total)})`}
           title="من تفاعل؟"
-          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-accent"
+          className="ms-1 inline-flex min-h-9 items-center gap-1 rounded-full border border-line px-2 text-xs text-muted transition hover:border-line-strong hover:text-accent"
         >
-          <Users className="h-3.5 w-3.5" aria-hidden="true" />
+          <ReactionIcons counts={normalized} />
+          <span>{arNumber.format(total)}</span>
         </button>
       )}
       {showReactors && <ReactorsDialog endpoint={endpoint} onClose={() => setShowReactors(false)} />}

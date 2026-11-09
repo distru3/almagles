@@ -7,7 +7,7 @@ import ImageCollage from './ImageCollage';
 import RichText from './RichText';
 import Avatar from './Avatar';
 import { LinkPreviewCard, PostVideo } from './PostMedia';
-import { REACTIONS, arNumber, useReaction } from './reactions';
+import { REACTIONS, ReactionIcons, arNumber, useReaction } from './reactions';
 import ReactorsDialog from './ReactorsDialog';
 
 const relative = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
@@ -213,19 +213,5 @@ export default function PostCard({ post, onChange }: Props) {
         )}
       </div>
     </article>
-  );
-}
-
-/** The reaction types present, as small overlapping icons (like a social feed's summary). */
-function ReactionIcons({ counts }: { counts: Record<string, number> }) {
-  const present = REACTIONS.filter(({ key }) => counts[key] > 0);
-  return (
-    <span className="flex -space-x-1 rtl:space-x-reverse" aria-hidden="true">
-      {present.map(({ key, icon: Icon }) => (
-        <span key={key} className="flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-accent-fill text-on-accent">
-          <Icon className="h-2.5 w-2.5 fill-current" />
-        </span>
-      ))}
-    </span>
   );
 }

@@ -96,3 +96,17 @@ export function useReaction(
 
   return { normalized, mine, total, react, busy, signedIn: Boolean(user) };
 }
+
+/** The reaction types present, as small overlapping icons (like a social feed's summary). */
+export function ReactionIcons({ counts }: { counts: Record<string, number> }) {
+  const present = REACTIONS.filter(({ key }) => counts[key] > 0);
+  return (
+    <span className="flex -space-x-1 rtl:space-x-reverse" aria-hidden="true">
+      {present.map(({ key, icon: Icon }) => (
+        <span key={key} className="flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-accent-fill text-on-accent">
+          <Icon className="h-2.5 w-2.5 fill-current" />
+        </span>
+      ))}
+    </span>
+  );
+}
