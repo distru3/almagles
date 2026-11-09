@@ -60,15 +60,17 @@ const silhouette = inner.replace(/fill="#[0-9a-f]{6}"/gi, 'fill="#fff"');
 await png('icons/badge-96.png', 96, 96, placed(48, 48, 84, silhouette));
 
 // Link previews (WhatsApp, Telegram, X…): 1200×630.
+// Same arch lattice as ArchPattern in src/components/Logo.tsx.
+const ARCH = 'v-14c0-7 5-10.5 9-13c3-2 5-5 5-9c0 4 2 7 5 9c4 2.5 9 6 9 13v14z';
 const W = 1200;
 const H = 630;
 const og = `
 <defs>
-  <pattern id="p" width="56" height="56" patternUnits="userSpaceOnUse">
-    <g fill="none" stroke="${GOLD}" stroke-opacity=".13" stroke-width="1">
-      <rect x="16" y="16" width="24" height="24"/>
-      <rect x="16" y="16" width="24" height="24" transform="rotate(45 28 28)"/>
-      <circle cx="28" cy="28" r="3"/>
+  <pattern id="p" width="72" height="96" patternUnits="userSpaceOnUse">
+    <g fill="none" stroke="${GOLD}" stroke-opacity=".16" stroke-width="1" stroke-linejoin="round">
+      ${[[22, 44], [-14, 92], [58, 92]]
+        .map(([x, y]) => `<path d="M${x} ${y}${ARCH}"/><rect x="${x + 11.5}" y="${y - 13}" width="5" height="5" transform="rotate(45 ${x + 14} ${y - 10.5})"/>`)
+        .join('')}
     </g>
   </pattern>
   <radialGradient id="v" cx="50%" cy="42%" r="65%">

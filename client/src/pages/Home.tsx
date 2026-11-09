@@ -11,7 +11,7 @@ import PostCard from '../components/PostCard';
 import ScheduleTable from '../components/ScheduleTable';
 import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
-import { StarPattern } from '../components/Logo';
+import Logo, { ArchPattern } from '../components/Logo';
 import { CouncilNoteView } from '../components/schedule/CouncilNotes';
 
 const dayName = (iso: string) => WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))];
@@ -203,7 +203,9 @@ export default function Home() {
     <div>
       {/* Hero band */}
       <section className="relative overflow-hidden border-b border-line bg-surface-2 dark:bg-canvas">
-        <StarPattern className="opacity-[0.18]" />
+        <ArchPattern className="opacity-[0.16]" />
+        {/* Oversized brand mark as a quiet watermark, bleeding off the far edge. */}
+        <Logo className="pointer-events-none absolute -bottom-16 -left-24 h-[26rem] w-auto opacity-[0.07] sm:h-[32rem]" />
         <div className="hero-reveal container-site relative grid items-end gap-8 py-14 sm:py-16 lg:grid-cols-12 lg:gap-8">
           <div className="lg:col-span-7">
             <p className="font-display text-base text-accent">

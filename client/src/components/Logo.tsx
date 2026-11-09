@@ -26,20 +26,27 @@ export default function Logo({ className = 'h-9 w-auto', title }: { className?: 
   );
 }
 
-/** Tiled eight-point-star lattice used behind hero bands. Colour comes from the pattern token. */
-export function StarPattern({ className = '' }: { className?: string }) {
+/** One onion-arch window — the doorway from the brand mark — repeated in a staggered lattice. */
+const ARCH = 'v-14c0-7 5-10.5 9-13c3-2 5-5 5-9c0 4 2 7 5 9c4 2.5 9 6 9 13v14z';
+const ARCH_TILES: [number, number][] = [[22, 44], [-14, 92], [58, 92]];
+
+/** Tiled arch lattice used behind hero bands. Colour comes from the pattern token. */
+export function ArchPattern({ className = '' }: { className?: string }) {
   return (
     <svg className={`pointer-events-none absolute inset-0 h-full w-full text-pattern ${className}`} aria-hidden="true">
       <defs>
-        <pattern id="almagles-star8" width="56" height="56" patternUnits="userSpaceOnUse">
-          <g fill="none" stroke="currentColor" strokeWidth="1">
-            <rect x="16" y="16" width="24" height="24" />
-            <rect x="16" y="16" width="24" height="24" transform="rotate(45 28 28)" />
-            <circle cx="28" cy="28" r="3" />
+        <pattern id="almagles-arches" width="72" height="96" patternUnits="userSpaceOnUse">
+          <g fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round">
+            {ARCH_TILES.map(([x, y]) => (
+              <g key={`${x},${y}`}>
+                <path d={`M${x} ${y}${ARCH}`} />
+                <rect x={x + 11.5} y={y - 13} width="5" height="5" transform={`rotate(45 ${x + 14} ${y - 10.5})`} />
+              </g>
+            ))}
           </g>
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#almagles-star8)" />
+      <rect width="100%" height="100%" fill="url(#almagles-arches)" />
     </svg>
   );
 }
