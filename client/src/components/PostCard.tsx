@@ -8,6 +8,7 @@ import RichText from './RichText';
 import Avatar from './Avatar';
 import { LinkPreviewCard, PostVideo } from './PostMedia';
 import { REACTIONS, arNumber, useReaction } from './reactions';
+import ReactorsDialog from './ReactorsDialog';
 
 const relative = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
 
@@ -39,6 +40,7 @@ interface Props {
 /** Social-style post card for the feed: author, text, counts, actions, newest comment. */
 export default function PostCard({ post, onChange }: Props) {
   const [copied, setCopied] = useState(false);
+  const [showReactors, setShowReactors] = useState(false);
   const navigate = useNavigate();
   const { normalized, mine, total, react, busy, signedIn } = useReaction(
     `/posts/${post.id}/reactions`,
@@ -137,7 +139,20 @@ export default function PostCard({ post, onChange }: Props) {
 
       <div className="px-4 sm:px-5">
         <div className="flex items-center justify-between py-3 text-[13px] text-muted">
-          <span>{total > 0 ? `${arNumber.format(total)} تفاعل` : 'كن أول من يتفاعل'}</span>
+          {total > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowReactors(true)}
+              aria-haspopup="dialog"
+              title="عرض المتفاعلين"
+              className="inline-flex items-center gap-1 hover:text-fg hover:underline"
+            >
+              <ReactionIcons counts={normalized} />
+              {arNumber.format(total)} تفاعل
+            </button>
+          ) : (
+            <span>كن أول من يتفاعل</span>
+          )}
           {post.commentsCount > 0 && (
             <Link to={`${href}#comments`} className="hover:text-fg">
               {commentsLabel(post.commentsCount)}
@@ -176,6 +191,8 @@ export default function PostCard({ post, onChange }: Props) {
           </button>
         </div>
 
+        {showReactors && <ReactorsDialog endpoint={`/posts/${post.id}/reactions`} onClose={() => setShowReactors(false)} />}
+
         {post.topComment && (
           <div className="border-t border-line pb-4 pt-3">
             <div className="flex gap-2.5">
@@ -196,5 +213,19 @@ export default function PostCard({ post, onChange }: Props) {
         )}
       </div>
     </article>
+  );
+}
+
+/** The reaction types present, as small overlapping icons (like a social feed's summary). */
+function ReactionIcons({ counts }: { counts: Record<string, number> }) {
+  const present = REACTIONS.filter(({ key }) => counts[key] > 0);
+  return (
+    <span className="flex -space-x-1 rtl:space-x-reverse" aria-hidden="true">
+      {present.map(({ key, icon: Icon }) => (
+        <span key={key} className="flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-accent-fill text-on-accent">
+          <Icon className="h-2.5 w-2.5 fill-current" />
+        </span>
+      ))}
+    </span>
   );
 }

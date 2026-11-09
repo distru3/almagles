@@ -3,19 +3,12 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { notifyReaction } from '../lib/notifications.js';
+import { validate } from '../middleware/validate.js';
+import { CANONICAL_REACTIONS, postReactors, reactorsQuery, type ReactorsQuery } from '../lib/reactors.js';
+
+export { CANONICAL_REACTIONS };
 
 const router = Router({ mergeParams: true });
-
-export const CANONICAL_REACTIONS: Record<string, string> = {
-  like: 'like',
-  love: 'love',
-  insight: 'insight',
-  '👍': 'like',
-  '❤️': 'love',
-  '💗': 'love',
-  '😮': 'insight',
-  '😢': 'insight',
-};
 
 const VALID_TYPES = ['like', 'love', 'insight', '👍', '❤️', '💗', '😮', '😢'] as const;
 
@@ -36,6 +29,18 @@ router.get('/', async (req, res, next) => {
       counts[norm] = (counts[norm] ?? 0) + 1;
     }
     return res.json({ counts });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Who reacted, newest first: `?type=like|love|insight`, paged with `?cursor=`. */
+router.get('/users', validate(reactorsQuery, 'query'), async (req, res, next) => {
+  try {
+    const postId = (req.params as { postId?: string }).postId ?? '';
+    const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
+    if (!post) return res.status(404).json({ message: 'المنشور غير موجود' });
+    return res.json(await postReactors(postId, req.query as unknown as ReactorsQuery));
   } catch (err) {
     next(err);
   }
