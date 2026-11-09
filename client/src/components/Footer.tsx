@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="mt-16 border-t border-line">
       <div className="container-site flex flex-wrap items-center justify-between gap-4 py-6 text-sm text-muted">
         <span className="flex items-center gap-2 font-display text-lg text-fg">
-          <Logo className="h-5 w-5 text-accent" />
+          <Logo className="h-7 w-auto" />
           رجال الأمة
         </span>
         <nav aria-label="روابط سريعة" className="flex gap-5 font-display">

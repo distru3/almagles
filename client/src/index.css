@@ -33,6 +33,11 @@
   --warn: #7a4e05;
   --warn-soft: #fbebc9;
   --hadith: #1f5878;
+  /* Brand mark (Logo.tsx): the logo's own inks, as drawn on paper. */
+  --brand-ink: #18252e;
+  --brand-olive: #4c4f3e;
+  --brand-maroon: #5a1a1b;
+  --brand-gold: #8a5a1f;
 }
 
 .dark {
@@ -59,6 +64,11 @@
   --warn: #e9c277;
   --warn-soft: #33280f;
   --hadith: #93c8e8;
+  /* Same mark lifted for night: ink turns to parchment, the rest keep their hue. */
+  --brand-ink: #e9e4d8;
+  --brand-olive: #a3a688;
+  --brand-maroon: #b5504a;
+  --brand-gold: #d8a14a;
 }
 
 @theme inline {

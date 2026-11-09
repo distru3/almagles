@@ -73,7 +73,7 @@ export default function Navbar() {
       <div className="container-site flex h-[4.5rem] items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-8">
           <Link to="/" className="flex shrink-0 items-center gap-2.5 text-fg" onClick={() => setOpen(false)}>
-            <Logo className="h-7 w-7 text-accent" />
+            <Logo className="h-10 w-auto shrink-0" />
             <span className="font-display text-[22px] font-bold sm:text-[26px]">رجال الأمة</span>
           </Link>
           <nav aria-label="التنقل الرئيسي" className="hidden items-center gap-6 lg:flex">
