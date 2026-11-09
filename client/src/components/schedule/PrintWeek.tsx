@@ -27,7 +27,7 @@ export default function PrintWeek({
     <div dir="rtl" className="theme-light w-[1062px] bg-surface p-6 font-sans text-[13px] leading-[1.7] text-fg">
       <div className="mb-4 flex items-end justify-between border-b-2 border-accent-fill pb-3">
         <div className="flex items-center gap-2">
-          <Logo className="h-7 w-7 text-accent" />
+          <Logo className="h-11 w-auto" />
           <div>
             <p className="font-display text-[22px] font-bold leading-tight">رجال الأمة</p>
             <p className="text-[13px] text-muted">المقرر الأسبوعي</p>
