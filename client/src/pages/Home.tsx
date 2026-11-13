@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Newspaper, PenLine } from 'lucide-react';
 import { api } from '../lib/api';
@@ -13,6 +13,8 @@ import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
 import Logo, { ArchPattern } from '../components/Logo';
 import { CouncilNoteView } from '../components/schedule/CouncilNotes';
+
+const FEED_PAGE_SIZE = 10;
 
 const dayName = (iso: string) => WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))];
 
@@ -155,34 +157,30 @@ export default function Home() {
   const [scheduleColumns, setScheduleColumns] = useState<ScheduleColumn[]>([]);
   const [councilNotes, setCouncilNotes] = useState<CouncilNote[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [isFallback, setIsFallback] = useState(false);
+  const [postsTotal, setPostsTotal] = useState(0);
+  const [postsPage, setPostsPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const [catRes, schedRes, todayRes] = await Promise.all([
+        const [catRes, schedRes, postsRes] = await Promise.all([
           api<{ categories: Category[] }>('/categories'),
           api<ScheduleResponse>('/schedule'),
-          api<{ items: Post[] }>(`/posts?date=${todayISO()}&limit=12`),
+          api<{ items: Post[]; total: number }>(`/posts?page=1&limit=${FEED_PAGE_SIZE}`),
         ]);
         if (!active) return;
         setCategories(catRes.categories);
         setSchedule(schedRes.items);
         setScheduleColumns(schedRes.columns ?? []);
         setCouncilNotes(schedRes.notes ?? []);
-
-        if (todayRes.items.length > 0) {
-          setPosts(todayRes.items);
-          setIsFallback(false);
-        } else {
-          // Nothing dated today: show the most recent posts instead.
-          const recentRes = await api<{ items: Post[] }>('/posts?limit=12').catch(() => ({ items: [] }));
-          if (!active) return;
-          setPosts(recentRes.items);
-          setIsFallback(recentRes.items.length > 0);
-        }
+        // Newest first by post date, so today's posts lead and older ones follow as the reader scrolls.
+        setPosts(postsRes.items);
+        setPostsTotal(postsRes.total);
       } catch {
         /* sections fall back to their empty states */
       } finally {
@@ -197,6 +195,43 @@ export default function Home() {
   const canPublish = user?.role === 'admin' || user?.role === 'writer';
   const publishHref = user?.role === 'admin' ? '/admin?tab=posts' : '/write';
   const updatePost = (next: Post) => setPosts((prev) => prev.map((p) => (p.id === next.id ? next : p)));
+  const hasMore = posts.length < postsTotal;
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const res = await api<{ items: Post[]; total: number }>(`/posts?page=${postsPage + 1}&limit=${FEED_PAGE_SIZE}`);
+      // A post published meanwhile shifts the pages by one, so skip any already shown.
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...res.items.filter((p) => !seen.has(p.id))];
+      });
+      // An empty page means the list shrank under us: stop instead of asking again.
+      setPostsTotal(res.items.length === 0 ? 0 : res.total);
+      setPostsPage((n) => n + 1);
+    } catch {
+      setLoadMoreFailed(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, postsPage]);
+
+  // Load the next page when the end of the feed comes near.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loadMoreFailed) return;
+    const observer = new IntersectionObserver((entries) => entries[0].isIntersecting && loadMore(), {
+      rootMargin: '600px 0px',
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, loadMoreFailed]);
+
+  const today = todayISO();
+  const todayCount = posts.filter((p) => p.postDate >= today).length;
+
   const visibleCategories = useMemo(() => categories.filter((c) => c.postCount > 0), [categories]);
 
   return (
@@ -229,7 +264,7 @@ export default function Home() {
         {/* Posts */}
         <section id="postList" className="min-w-0 max-w-[680px] flex-[999_1_560px]">
           <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="font-display text-[26px] font-semibold">{isFallback ? 'أحدث المنشورات' : 'منشورات اليوم'}</h2>
+            <h2 className="font-display text-[26px] font-semibold">{todayCount > 0 ? 'منشورات اليوم' : 'أحدث المنشورات'}</h2>
             {visibleCategories.length > 0 && (
               <nav aria-label="الأقسام" className="flex flex-wrap gap-2">
                 {visibleCategories.map((c) => (
@@ -241,7 +276,7 @@ export default function Home() {
             )}
           </div>
 
-          {isFallback && (
+          {!loading && todayCount === 0 && posts.length > 0 && (
             <p className="mb-6 text-sm text-muted">لم تُنشر مواد لتاريخ اليوم بعد — هذه أحدث المواد المنشورة.</p>
           )}
 
@@ -274,7 +309,33 @@ export default function Home() {
               {posts.length === 0 ? (
                 <EmptyState icon={Newspaper} title="لا توجد منشورات بعد" description="لم يُنشر أي محتوى حتى الآن — عد لاحقاً" />
               ) : (
-                posts.map((post) => <PostCard key={post.id} post={post} onChange={updatePost} />)
+                posts.map((post, i) => (
+                  <div key={post.id} className="contents">
+                    {/* Divider where today's posts end and earlier ones begin. */}
+                    {i === todayCount && todayCount > 0 && (
+                      <h3 className="mt-4 flex items-center gap-3 font-display text-[18px] font-semibold text-fg-2">
+                        منشورات سابقة
+                        <span className="h-px flex-1 bg-line" aria-hidden="true" />
+                      </h3>
+                    )}
+                    <PostCard post={post} onChange={updatePost} />
+                  </div>
+                ))
+              )}
+              {hasMore && (
+                <div ref={sentinelRef} className="flex justify-center py-6">
+                  {loadMoreFailed ? (
+                    <button onClick={loadMore} className="btn-outline">
+                      تعذّر التحميل — إعادة المحاولة
+                    </button>
+                  ) : loadingMore ? (
+                    <Spinner />
+                  ) : (
+                    <button onClick={loadMore} className="btn-outline">
+                      تحميل المزيد
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
