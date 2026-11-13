@@ -5,15 +5,8 @@ import { api, ApiError } from '../../lib/api';
 import type { CommentItem } from '../../lib/types';
 import Spinner from '../../components/Spinner';
 import EmptyState from '../../components/EmptyState';
+import { dateTime, dateTimeTitle } from '../../lib/dates';
 
-function timeAgoFull(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 24) return `منذ ${Math.max(1, Math.floor(diff / 60000))} دقيقة`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `منذ ${days} يوم`;
-  return new Intl.DateTimeFormat('ar', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(iso));
-}
 
 const PAGE_SIZE = 50;
 
@@ -211,7 +204,7 @@ export default function AdminCommentsTab() {
                       )}
                     </div>
                     <p className="text-[10px] text-muted">
-                      {timeAgoFull(c.createdAt)}
+                      <time dateTime={c.createdAt} title={dateTimeTitle(c.createdAt)}>{dateTime(c.createdAt)}</time>
                     </p>
                   </div>
                 </div>

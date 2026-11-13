@@ -2,7 +2,7 @@ import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing } from 'l
 import type { LucideIcon } from 'lucide-react';
 import type { NotificationItem, NotificationType } from '../lib/types';
 import { notificationExcerpt, notificationText } from '../lib/notifications';
-import { timeAgo } from '../lib/dates';
+import { dateTime, dateTimeTitle } from '../lib/dates';
 import Avatar from './Avatar';
 
 const ICONS: Record<NotificationType, LucideIcon> = {
@@ -53,7 +53,9 @@ export default function NotificationList({
                     {excerpt}
                   </span>
                 )}
-                <span className="mt-1 block text-xs text-muted">{timeAgo(n.createdAt)}</span>
+                <time dateTime={n.createdAt} title={dateTimeTitle(n.createdAt)} className="mt-1 block text-xs text-muted">
+                  {dateTime(n.createdAt)}
+                </time>
               </span>
               {!n.read && <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" aria-label="غير مقروء" />}
             </button>

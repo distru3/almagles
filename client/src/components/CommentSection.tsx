@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import RichText from './RichText';
 import Avatar from './Avatar';
 import CommentReactions from './CommentReactions';
-import { timeAgo } from '../lib/dates';
+import { dateTime, dateTimeTitle } from '../lib/dates';
 
 interface Props {
   postId: string;
@@ -140,7 +140,9 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-muted">{timeAgo(c.createdAt)}</p>
+              <p className="mt-0.5 text-xs text-muted">
+                <time dateTime={c.createdAt} title={dateTimeTitle(c.createdAt)}>{dateTime(c.createdAt)}</time>
+              </p>
             </div>
           </div>
           <div className="flex gap-1.5">

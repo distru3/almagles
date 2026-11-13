@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { Calendar, Share2, Check, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import type { CommentItem, Post } from '../lib/types';
-import { hijriDate, gregorianLong } from '../lib/dates';
+import { hijriDate, gregorianLong, dateTime, dateTimeTitle } from '../lib/dates';
 import ReactionBar from '../components/ReactionBar';
 import ImageCollage from '../components/ImageCollage';
 import CommentSection from '../components/CommentSection';
@@ -208,6 +208,8 @@ export default function PostPage() {
               {post.author.name}
             </Link>
             <span title={gregorianLong(post.postDate)}>{hijriDate(post.postDate)}</span>
+            {' · '}
+            <time dateTime={post.createdAt} title={dateTimeTitle(post.createdAt)}>{dateTime(post.createdAt)}</time>
           </p>
         </div>
 
