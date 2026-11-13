@@ -2,25 +2,13 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, MessageCircle, Share2 } from 'lucide-react';
 import type { Post } from '../lib/types';
-import { hijriDate } from '../lib/dates';
+import { dateTime, dateTimeTitle } from '../lib/dates';
 import ImageCollage from './ImageCollage';
 import RichText from './RichText';
 import Avatar from './Avatar';
 import { LinkPreviewCard, PostVideo } from './PostMedia';
 import { REACTIONS, ReactionIcons, arNumber, useReaction } from './reactions';
 import ReactorsDialog from './ReactorsDialog';
-
-const relative = new Intl.RelativeTimeFormat('ar', { numeric: 'auto' });
-
-/** "منذ ٣ ساعات" for the last week, the Hijri date after that. */
-function timeAgo(createdAt: string, postDate: string): string {
-  const seconds = (Date.now() - new Date(createdAt).getTime()) / 1000;
-  if (seconds < 60) return 'الآن';
-  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), 'minute');
-  if (seconds < 86400) return relative.format(-Math.floor(seconds / 3600), 'hour');
-  if (seconds < 7 * 86400) return relative.format(-Math.floor(seconds / 86400), 'day');
-  return hijriDate(postDate);
-}
 
 const ROLE_BADGE: Record<string, string> = { writer: 'كاتب', admin: 'مشرف' };
 
@@ -106,7 +94,7 @@ export default function PostCard({ post, onChange }: Props) {
               <Link to={`/category/${post.category.slug}`} className="text-accent hover:text-accent-strong">
                 {post.category.name}
               </Link>{' '}
-              · <time dateTime={post.createdAt} title={hijriDate(post.postDate)}>{timeAgo(post.createdAt, post.postDate)}</time>
+              · <time dateTime={post.createdAt} title={dateTimeTitle(post.createdAt)}>{dateTime(post.createdAt)}</time>
             </p>
           </div>
         </header>
