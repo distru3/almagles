@@ -184,3 +184,27 @@ export interface NotificationsResponse {
   nextCursor: string | null;
   unreadCount: number;
 }
+
+/** «مهامي»: how often a task's checkmark resets. */
+export type TaskRepeat = 'daily' | 'weekly' | 'once';
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  linkUrl: string | null;
+  repeat: TaskRepeat;
+  order: number;
+  active: boolean;
+}
+
+/** A task as a member sees it, with their checkmark for the current day / week. */
+export interface MyTask extends Task {
+  done: boolean;
+}
+
+export interface TaskProgress {
+  date: string;
+  tasks: (Task & { period: string; doneCount: number })[];
+  members: { id: string; name: string; avatarUrl: string | null; done: string[] }[];
+}
