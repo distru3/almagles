@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, BellRing, Link2, Trash2 } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowLeftRight, BellRing, Check, Link2, Trash2, Undo2 } from 'lucide-react';
+import { markDirty } from '../../lib/unsaved';
 import type { ScheduleColumn, ScheduleItem } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort } from '../../lib/dates';
 import { linkText } from '../../lib/schedule';
@@ -59,29 +60,43 @@ interface Props {
   highlighted?: boolean;
   /** Save edits; for a draft, create it. Resolves false when the save failed. */
   onSave: (fields: SessionFields) => Promise<boolean>;
-  onMove: (date: string) => void;
+  /** Move to another day; unsaved edits, if any, are saved along with the move. */
+  onMove: (date: string, fields?: SessionFields) => void;
   onDelete: () => void;
 }
 
 export default function SessionRow({ item, date, columns, weekDays, gridTemplate, highlighted, onSave, onMove, onDelete }: Props) {
   const [fields, setFieldsState] = useState<SessionFields>(() => fieldsOf(item));
+  const [savedFields, setSavedFields] = useState<SessionFields>(() => fieldsOf(item));
   const [linkOpen, setLinkOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
-  const saved = useRef<SessionFields>(fieldsOf(item));
-  // Updated synchronously on every keystroke, so leaving the row right after
-  // typing (Tab, autofill) saves what was typed even before React re-renders.
+  const [saving, setSaving] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
+  // Refs mirror the state so saves and server updates read the latest values
+  // synchronously, even before React re-renders.
+  const saved = useRef<SessionFields>(savedFields);
   const latest = useRef<SessionFields>(fields);
+  /** The values being sent right now, so the server's reply can be told apart from newer typing. */
+  const sending = useRef<SessionFields | null>(null);
   const setFields = (next: SessionFields) => {
     latest.current = next;
     setFieldsState(next);
   };
   const rowRef = useRef<HTMLDivElement>(null);
   const isDraft = !item;
+  const dirty = !sameFields(fields, savedFields);
+  const registryKey = `session-${useId()}`;
 
-  // Server copy changed (e.g. after a save elsewhere): adopt it.
+  // Server copy changed (after a save or a move): adopt it, unless the writer
+  // has typed something newer that isn't saved yet.
   useEffect(() => {
-    saved.current = fieldsOf(item);
-    setFields(fieldsOf(item));
+    const server = fieldsOf(item);
+    const upToDate =
+      sameFields(latest.current, saved.current) || (sending.current !== null && sameFields(latest.current, sending.current));
+    sending.current = null;
+    saved.current = server;
+    setSavedFields(server);
+    if (upToDate) setFields(server);
   }, [item]);
 
   useEffect(() => {
@@ -92,23 +107,66 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
   const setCustom = (id: string, value: string) =>
     setFields({ ...latest.current, customValues: { ...latest.current.customValues, [id]: value } });
 
-  /** Save when focus leaves the row, so moving between its fields doesn't save half-typed values. */
-  const commit = async (e: React.FocusEvent) => {
-    if (rowRef.current?.contains(e.relatedTarget as Node | null)) return;
+  /** Saves this row on request (its button, Enter, or «حفظ الكل»). */
+  const save = async (): Promise<boolean> => {
+    if (sending.current) return false;
     const snapshot = latest.current;
-    if (sameFields(snapshot, saved.current)) return;
+    if (!isDraft && sameFields(snapshot, saved.current)) return true;
     if (!snapshot.title.trim()) {
-      if (!isDraft) setFields(saved.current); // a saved session must keep its title
+      setRowError('العنوان مطلوب للحفظ');
+      document.getElementById(`${date}-${item?.id ?? 'new'}-title`)?.focus();
+      return false;
+    }
+    sending.current = snapshot;
+    setSaving(true);
+    setRowError(null);
+    const ok = await onSave(snapshot);
+    setSaving(false);
+    if (!ok) {
+      sending.current = null;
+      setRowError('تعذّر الحفظ — تحقق من الاتصال ثم اضغط «حفظ» مرة أخرى');
+    }
+    return ok;
+  };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  const revert = () => {
+    setFields(saved.current);
+    setRowError(null);
+  };
+
+  // Count this row in «حفظ الكل» and the leave-page warning while it has unsaved edits.
+  useEffect(() => {
+    markDirty(registryKey, dirty ? { save: () => saveRef.current() } : null);
+  }, [dirty, registryKey]);
+  useEffect(() => () => markDirty(registryKey, null), [registryKey]);
+
+  const move = (to: string) => {
+    if (!dirty) return onMove(to);
+    // The row remounts under its new day, so its edits travel with the move.
+    if (!latest.current.title.trim()) {
+      setRowError('اكتب العنوان أو تراجع عن التعديل قبل النقل');
       return;
     }
-    if (await onSave(snapshot)) saved.current = snapshot;
+    onMove(to, latest.current);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const t = e.target as HTMLElement;
+    if (e.key === 'Enter' && t.tagName === 'INPUT' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void save();
+    }
   };
 
   return (
     <div
       ref={rowRef}
-      onBlur={commit}
-      className={`border-b border-line px-3 py-3 last:border-b-0 md:px-4 ${highlighted ? 'bg-accent-soft' : ''}`}
+      onKeyDown={onKeyDown}
+      className={`border-b border-line px-3 py-3 transition-colors last:border-b-0 md:px-4 ${
+        highlighted ? 'bg-accent-soft' : dirty || isDraft ? 'bg-accent-soft/40' : ''
+      }`}
     >
       <div
         className="grid grid-cols-2 items-end gap-2 md:items-center md:[grid-template-columns:var(--session-cols)]"
@@ -185,7 +243,7 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
               id={`${date}-${item?.id ?? 'new'}-move`}
               disabled={isDraft}
               value={date}
-              onChange={(e) => onMove(e.target.value)}
+              onChange={(e) => move(e.target.value)}
               className="h-10 w-10 cursor-pointer appearance-none rounded border border-line bg-transparent text-transparent disabled:cursor-not-allowed disabled:opacity-40"
               title="نقل إلى يوم آخر"
             >
@@ -286,6 +344,29 @@ export default function SessionRow({ item, date, columns, weekDays, gridTemplate
             <label className="mb-0.5 block font-display text-xs text-muted" htmlFor={`${date}-${item?.id ?? 'new'}-label`}>النص الظاهر للرابط</label>
             <input id={`${date}-${item?.id ?? 'new'}-label`} className={input} placeholder="فتح الرابط" value={fields.linkLabel} onChange={(e) => set({ linkLabel: e.target.value })} />
           </div>
+        </div>
+      )}
+
+      {(dirty || isDraft || rowError) && (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+          <p role="status" className={`me-auto text-xs ${rowError ? 'text-danger' : 'text-muted'}`}>
+            {rowError ?? (isDraft ? 'جلسة جديدة — اكتب العنوان ثم اضغط «حفظ»' : 'تعديلات غير محفوظة')}
+          </p>
+          {dirty && !isDraft && (
+            <button
+              type="button"
+              onClick={revert}
+              disabled={saving}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-display text-sm text-fg-2 transition hover:bg-surface-2 hover:text-fg disabled:opacity-50"
+            >
+              <Undo2 className="h-4 w-4" aria-hidden="true" />
+              تراجع
+            </button>
+          )}
+          <button type="button" onClick={() => void save()} disabled={saving} className="btn-primary !min-h-9 !px-4 !text-sm">
+            <Check className="h-4 w-4" aria-hidden="true" />
+            {saving ? 'جارٍ الحفظ…' : 'حفظ'}
+          </button>
         </div>
       )}
     </div>

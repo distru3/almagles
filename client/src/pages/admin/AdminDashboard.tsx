@@ -19,6 +19,7 @@ import type { Category } from '../../lib/types';
 import AdminPostsTab from './AdminPostsTab';
 import AdminCategoriesTab from './AdminCategoriesTab';
 import ScheduleBuilder from '../../components/schedule/ScheduleBuilder';
+import { confirmDiscard } from '../../lib/unsaved';
 import AdminCommentsTab from './AdminCommentsTab';
 import AdminUsersTab from './AdminUsersTab';
 import PostFormModal from './PostFormModal';
@@ -192,6 +193,8 @@ export default function AdminDashboard() {
               key={key}
               type="button"
               onClick={() => {
+                // Leaving the schedule tab drops its unsaved edits.
+                if (key === tab || !confirmDiscard()) return;
                 setTab(key);
                 setSearchParams({ tab: key });
               }}
@@ -264,7 +267,7 @@ export default function AdminDashboard() {
           onSaved={() => {
             setShowGlobalNewPost(false);
             loadOverview();
-            if (tab !== 'posts') {
+            if (tab !== 'posts' && confirmDiscard()) {
               setTab('posts');
               setSearchParams({ tab: 'posts' });
             }

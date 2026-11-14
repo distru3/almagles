@@ -7,6 +7,7 @@ import type { Category } from '../../lib/types';
 import AdminPostsTab from '../admin/AdminPostsTab';
 import ScheduleBuilder from '../../components/schedule/ScheduleBuilder';
 import { CouncilNotesWeek } from '../../components/schedule/CouncilNotes';
+import { confirmDiscard } from '../../lib/unsaved';
 
 function PageHeader({ icon: Icon, title, subtitle }: { icon: typeof PenLine; title: string; subtitle: string }) {
   return (
@@ -67,7 +68,7 @@ export function WritePage() {
             type="button"
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setSearchParams(key === 'notes' ? { tab: 'notes' } : {})}
+            onClick={() => key !== tab && confirmDiscard() && setSearchParams(key === 'notes' ? { tab: 'notes' } : {})}
             className={`min-h-10 rounded-full px-4 font-display text-[15px] transition ${
               tab === key ? 'bg-accent-fill text-on-accent' : 'text-fg-2 hover:bg-surface-2 hover:text-fg'
             }`}
