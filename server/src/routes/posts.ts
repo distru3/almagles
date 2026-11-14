@@ -265,7 +265,8 @@ router.get('/:id', async (req, res, next) => {
 
 const postFieldsSchema = z.object({
   title: z.string().trim().min(1, 'العنوان مطلوب').max(200, 'العنوان طويل جداً'),
-  description: z.string().trim().min(1, 'نص المنشور مطلوب').max(20000, 'المنشور طويل جداً'),
+  // Optional: a post can be just a video, images or a title.
+  description: z.string().trim().max(20000, 'المنشور طويل جداً'),
   categoryId: z.string().min(1, 'يجب اختيار القسم'),
   postDate: z.string().regex(DATE_REGEX, 'تاريخ المنشور غير صالح'),
 });

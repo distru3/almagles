@@ -80,3 +80,40 @@ describe('admin comments list', () => {
     expect((await a.get('/api/comments?limit=500')).status).toBe(400);
   });
 });
+
+describe('post text', () => {
+  const form = (c: Awaited<ReturnType<typeof loginAs>>, categoryId: string, fields: Record<string, string>) => {
+    let req = c.agent.post('/api/posts').set('X-CSRF-Token', c.csrf).field('categoryId', categoryId).field('postDate', '2026-10-15');
+    for (const [k, v] of Object.entries(fields)) req = req.field(k, v);
+    return req;
+  };
+
+  it('is optional: a post can be only a title (with a video or images)', async () => {
+    const cat = await createCategory();
+    await createUser({ email: 'w@test.local', role: 'writer', categoryIds: [cat.id] });
+    const w = await loginAs('w@test.local');
+    const empty = await form(w, cat.id, { title: 'فيديو الدرس', description: '   ' });
+    expect(empty.status).toBe(201);
+    expect(empty.body.post.description).toBe('');
+    const missing = await form(w, cat.id, { title: 'بدون نص' });
+    expect(missing.status).toBe(201);
+    // Editing an existing post can clear its text too.
+    const withText = (await form(w, cat.id, { title: 'منشور', description: 'نص' })).body.post;
+    const cleared = await w.agent
+      .put(`/api/posts/${withText.id}`)
+      .set('X-CSRF-Token', w.csrf)
+      .field('title', 'منشور')
+      .field('description', '')
+      .field('categoryId', cat.id)
+      .field('postDate', '2026-10-15');
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.post.description).toBe('');
+  });
+
+  it('still requires a title', async () => {
+    const cat = await createCategory();
+    await createUser({ email: 'w@test.local', role: 'writer', categoryIds: [cat.id] });
+    const w = await loginAs('w@test.local');
+    expect((await form(w, cat.id, { title: '  ', description: 'نص' })).status).toBe(400);
+  });
+});
