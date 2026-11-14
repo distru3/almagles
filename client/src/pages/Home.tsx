@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Newspaper, PenLine } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, CalendarDays, ExternalLink, Newspaper, PenLine } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { Category, CouncilNote, Post, ScheduleColumn, ScheduleItem, ScheduleResponse } from '../lib/types';
@@ -8,7 +8,7 @@ import { customSummary, linkText } from '../lib/schedule';
 import { todayISO, hijriDate, hijriShort, weekStart, addDays, toISODate, weekdayKey, WEEKDAY_NAMES } from '../lib/dates';
 import { normalizeUrl, isInternalPath } from '../lib/url';
 import PostCard from '../components/PostCard';
-import ScheduleTable from '../components/ScheduleTable';
+import ScheduleSheet from '../components/ScheduleSheet';
 import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
 import Logo, { ArchPattern } from '../components/Logo';
@@ -18,22 +18,29 @@ const FEED_PAGE_SIZE = 10;
 
 const dayName = (iso: string) => WEEKDAY_NAMES[weekdayKey(new Date(`${iso}T12:00:00`))];
 
+/** Today's sessions, else the next upcoming one. */
+function upcoming(schedule: ScheduleItem[]) {
+  const today = todayISO();
+  const todays = schedule.filter((i) => i.date === today);
+  const next = schedule.filter((i) => i.date > today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  return { todays, items: todays.length > 0 ? todays : next ? [next] : [] };
+}
+
 /** The hero card: today's sessions, else the next upcoming one. */
 function LessonCard({
   schedule,
   columns,
   todayNote,
   loading,
+  onOpenSchedule,
 }: {
   schedule: ScheduleItem[];
   columns: ScheduleColumn[];
   todayNote?: CouncilNote;
   loading: boolean;
+  onOpenSchedule: () => void;
 }) {
-  const today = todayISO();
-  const todays = schedule.filter((i) => i.date === today);
-  const next = schedule.filter((i) => i.date > today).sort((a, b) => a.date.localeCompare(b.date))[0];
-  const items = todays.length > 0 ? todays : next ? [next] : [];
+  const { todays, items } = upcoming(schedule);
   const lead = items[0];
 
   return (
@@ -90,9 +97,9 @@ function LessonCard({
                 {lead.linkLabel ? linkText(lead) : 'افتح رابط الدرس'}
               </a>
             ) : (
-              <a href="#schedule" className="btn-primary">
+              <button type="button" onClick={onOpenSchedule} className="btn-primary">
                 الجدول كاملاً
-              </a>
+              </button>
             )}
           </div>
         </>
@@ -101,14 +108,50 @@ function LessonCard({
   );
 }
 
+/**
+ * Floating pill that keeps the schedule one tap away once the hero has scrolled
+ * off, previewing the next session so a glance is often enough.
+ */
+function ScheduleFab({ schedule, visible, onOpen }: { schedule: ScheduleItem[]; visible: boolean; onOpen: () => void }) {
+  const { todays, items } = upcoming(schedule);
+  const lead = items[0];
+  const when = lead ? (todays.length > 0 ? `اليوم${lead.timeLabel ? ` ${lead.timeLabel}` : ''}` : dayName(lead.date)) : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={lead ? `الجدول — ${when}: ${lead.title}` : 'الجدول'}
+      tabIndex={visible ? 0 : -1}
+      aria-hidden={!visible}
+      className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] end-4 z-30 flex max-w-[calc(100vw-2rem)] items-center gap-2.5 rounded-full border border-line bg-surface py-2 pe-4 ps-2 text-start shadow-lg transition duration-300 hover:border-accent sm:end-6 ${
+        visible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-6 opacity-0'
+      }`}
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-fill text-on-accent">
+        <CalendarDays className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block font-display text-[15px] font-semibold text-fg">الجدول</span>
+        {lead && (
+          <span className="block max-w-[14rem] truncate text-[13px] text-muted">
+            <span className="text-accent">{when}</span> · {lead.title}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 /** Saturday→Friday list of this week's sessions, today marked. */
-function WeekTimeline({ schedule }: { schedule: ScheduleItem[] }) {
+function WeekTimeline({ schedule, onOpenSchedule }: { schedule: ScheduleItem[]; onOpenSchedule: () => void }) {
   const today = todayISO();
   const start = weekStart(new Date(`${today}T12:00:00`));
   const days = Array.from({ length: 7 }, (_, i) => toISODate(addDays(start, i)));
 
   return (
-    <aside id="week" className="min-w-0 flex-[1_1_320px]">
+    // Sticks beside the feed on wide screens, so the week stays in view however far the reader scrolls.
+    <aside id="week" className="min-w-0 flex-[1_1_320px] lg:sticky lg:top-24 lg:self-start">
       <h2 className="mb-4 font-display text-[22px] font-semibold">
         الأسبوع <span className="text-sm font-normal text-muted">{hijriShort(days[0])} – {hijriShort(days[6])}</span>
       </h2>
@@ -142,10 +185,14 @@ function WeekTimeline({ schedule }: { schedule: ScheduleItem[] }) {
           );
         })}
       </ol>
-      <a href="#schedule" className="mt-5 inline-flex items-center gap-1.5 font-display text-accent hover:text-accent-strong">
+      <button
+        type="button"
+        onClick={onOpenSchedule}
+        className="mt-5 inline-flex items-center gap-1.5 font-display text-accent hover:text-accent-strong"
+      >
         الجدول كاملاً
         <ArrowLeft className="h-4 w-4" />
-      </a>
+      </button>
     </aside>
   );
 }
@@ -163,6 +210,31 @@ export default function Home() {
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const [heroInView, setHeroInView] = useState(true);
+
+  // The schedule lives in a sheet so the endless feed can't bury it. Every link to
+  // /#schedule (navbar, footer, notifications with ?date=) opens it.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const scheduleOpen = location.hash === '#schedule' || new URLSearchParams(location.search).has('date');
+  const openSchedule = () => navigate({ search: location.search, hash: 'schedule' }, { state: { scheduleSheet: true } });
+  const closeSchedule = () => {
+    // Opened from this page: step back, so the close button and the browser back button agree.
+    if ((location.state as { scheduleSheet?: boolean } | null)?.scheduleSheet) return navigate(-1);
+    const params = new URLSearchParams(location.search);
+    params.delete('date');
+    navigate({ search: params.toString(), hash: '' }, { replace: true });
+  };
+
+  // The floating schedule button shows once the hero (with today's lesson) is out of view.
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => setHeroInView(entries[0].isIntersecting));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -237,7 +309,7 @@ export default function Home() {
   return (
     <div>
       {/* Hero band */}
-      <section className="relative overflow-hidden border-b border-line bg-surface-2 dark:bg-canvas">
+      <section ref={heroRef} className="relative overflow-hidden border-b border-line bg-surface-2 dark:bg-canvas">
         <ArchPattern className="opacity-[0.16]" />
         {/* Oversized brand mark as a quiet watermark, bleeding off the far edge. */}
         <Logo className="pointer-events-none absolute -bottom-16 -left-24 h-[26rem] w-auto opacity-[0.07] sm:h-[32rem]" />
@@ -255,6 +327,7 @@ export default function Home() {
               columns={scheduleColumns}
               todayNote={councilNotes.find((n) => n.date === todayISO())}
               loading={loading}
+              onOpenSchedule={openSchedule}
             />
           </div>
         </div>
@@ -341,13 +414,21 @@ export default function Home() {
           )}
         </section>
 
-        <WeekTimeline schedule={schedule} />
+        <WeekTimeline schedule={schedule} onOpenSchedule={openSchedule} />
       </div>
 
-      {/* Full schedule with week navigation */}
-      <section id="schedule" className="container-site scroll-mt-24">
-        <ScheduleTable items={schedule} columns={scheduleColumns} notes={councilNotes} loading={loading} />
-      </section>
+      <ScheduleFab schedule={schedule} visible={!heroInView && !scheduleOpen} onOpen={openSchedule} />
+
+      {/* Full schedule with week navigation, over the page */}
+      {scheduleOpen && (
+        <ScheduleSheet
+          items={schedule}
+          columns={scheduleColumns}
+          notes={councilNotes}
+          loading={loading}
+          onClose={closeSchedule}
+        />
+      )}
     </div>
   );
 }
