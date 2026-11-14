@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, List, ListOrdered, NotebookPen } from 'lucide-react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, List, ListOrdered, NotebookPen, Undo2 } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
+import { confirmDiscard, markDirty } from '../../lib/unsaved';
+import SaveAllButton from './SaveAllButton';
 import type { CouncilNote, ScheduleResponse } from '../../lib/types';
 import { WEEKDAY_NAMES, weekdayKey, hijriShort, hijriDate, gregorianShort, todayISO } from '../../lib/dates';
 import { weekDates, weekKeyOf, shiftWeek } from '../../lib/schedule';
@@ -16,16 +18,13 @@ function editedLine(note: CouncilNote): string {
   return `آخر تعديل${note.updatedByName ? `: ${note.updatedByName}` : ''} · ${timeFormat.format(new Date(note.updatedAt))}`;
 }
 
-/** Saves this long after the last keystroke, as well as on leaving the box. */
-const AUTOSAVE_MS = 2500;
-
 const toolButton =
   'inline-flex min-h-9 items-center gap-1.5 rounded-full border border-line-strong px-3 font-display text-sm text-fg-2 transition hover:border-accent hover:text-accent';
 
 /**
- * Editable «ملاحظات المجلس» for one day. Saves shortly after typing stops and
- * when focus leaves the box; clearing it deletes the note. The box grows with
- * the text, and Enter on a "- " / "1- " point starts the next one.
+ * Editable «ملاحظات المجلس» for one day. Saved only when the writer presses
+ * «حفظ» (or Ctrl/Cmd+S, or «حفظ الكل»); saving an emptied box deletes the note.
+ * The box grows with the text, and Enter on a "- " / "1- " point starts the next one.
  */
 export function CouncilNoteField({
   date,
@@ -37,73 +36,79 @@ export function CouncilNoteField({
   onSaved: (date: string, note: CouncilNote | null) => void;
 }) {
   const [text, setText] = useState(note?.content ?? '');
-  const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle');
+  // What the server holds, so the field knows when it has unsaved changes.
+  const [savedText, setSavedText] = useState(note?.content ?? '');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  // Latest typed value, readable synchronously on blur (see SessionRow).
+  // Refs mirror the state for synchronous reads in save().
   const latest = useRef(text);
-  // What the server holds, so only real changes are sent.
-  const saved = useRef(note?.content ?? '');
+  const saved = useRef(savedText);
   const inFlight = useRef(false);
-  const queued = useRef(false);
-  const timer = useRef<number | undefined>(undefined);
   const box = useRef<HTMLTextAreaElement>(null);
   const id = `council-note-${date}`;
+  const dirty = text.trim() !== savedText;
+  const registryKey = `note-${date}-${useId()}`;
 
+  // The note changed on the server (e.g. reloaded): adopt it unless there are unsaved edits.
   useEffect(() => {
-    saved.current = note?.content ?? '';
-    // Never replace text under the writer's cursor (an autosave landing mid-sentence).
-    if (document.activeElement === box.current) return;
-    latest.current = note?.content ?? '';
-    setText(note?.content ?? '');
+    const server = note?.content ?? '';
+    const clean = latest.current.trim() === saved.current;
+    saved.current = server;
+    setSavedText(server);
+    if (clean) {
+      latest.current = server;
+      setText(server);
+    }
   }, [note]);
 
-  const save = async () => {
-    window.clearTimeout(timer.current);
-    if (inFlight.current) {
-      queued.current = true;
-      return;
-    }
+  const save = async (): Promise<boolean> => {
+    if (inFlight.current) return false;
     const content = latest.current.trim();
-    if (content === saved.current) return;
+    if (content === saved.current) return true;
     inFlight.current = true;
     setState('saving');
     try {
       const res = await api<{ note: CouncilNote | null }>(`/schedule/notes/${date}`, { method: 'PUT', body: { content } });
-      saved.current = res.note?.content ?? '';
-      setState('idle');
+      const server = res.note?.content ?? '';
+      saved.current = server;
+      setSavedText(server);
+      // Show the saved (trimmed) text, unless more was typed while saving.
+      if (latest.current.trim() === content) {
+        latest.current = server;
+        setText(server);
+      }
+      setState('saved');
       setError(null);
       onSaved(date, res.note);
+      return true;
     } catch (err) {
       setState('error');
-      setError(err instanceof ApiError ? err.message : 'تعذّر حفظ الملاحظات');
+      setError(err instanceof ApiError ? err.message : 'تعذّر حفظ الملاحظات — تحقق من الاتصال ثم اضغط «حفظ» مرة أخرى');
+      return false;
     } finally {
       inFlight.current = false;
-      if (queued.current) {
-        queued.current = false;
-        void save();
-      }
     }
   };
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  // Flush on unmount (switching week or tab), and warn before closing the page with unsaved text.
+  const revert = () => {
+    latest.current = saved.current;
+    setText(saved.current);
+    setState('idle');
+    setError(null);
+  };
+
+  // Count this note in «حفظ الكل» and the leave-page warning while it has unsaved edits.
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (latest.current.trim() !== saved.current) e.preventDefault();
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => {
-      window.removeEventListener('beforeunload', warn);
-      if (latest.current.trim() !== saved.current) void saveRef.current();
-    };
-  }, []);
+    markDirty(registryKey, dirty ? { save: () => saveRef.current() } : null);
+  }, [dirty, registryKey]);
+  useEffect(() => () => markDirty(registryKey, null), [registryKey]);
 
   const update = (next: string) => {
     latest.current = next;
     setText(next);
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void saveRef.current(), AUTOSAVE_MS);
+    if (state === 'saved') setState('idle');
   };
 
   // Grow with the text up to most of the screen, then scroll inside.
@@ -189,15 +194,53 @@ export function CouncilNoteField({
         maxLength={NOTE_MAX}
         onChange={(e) => update(e.target.value)}
         onKeyDown={onKeyDown}
-        onBlur={() => void save()}
       />
-      <div className="mt-1 flex items-start justify-between gap-3 text-xs">
-        <p className={state === 'error' ? 'text-danger' : 'text-muted'} role="status">
-          {state === 'saving' ? 'جارٍ الحفظ…' : state === 'error' ? error : note ? editedLine(note) : 'تُحفظ تلقائياً أثناء الكتابة'}
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-xs">
+        <p
+          className={state === 'error' ? 'text-danger' : state === 'saved' && !dirty ? 'text-success' : 'text-muted'}
+          role="status"
+        >
+          {state === 'saving'
+            ? 'جارٍ الحفظ…'
+            : state === 'error'
+              ? error
+              : dirty
+                ? savedText && !text.trim()
+                  ? 'ستُحذف الملاحظات عند الحفظ'
+                  : 'تعديلات غير محفوظة'
+                : state === 'saved'
+                  ? 'تم الحفظ'
+                  : note
+                    ? editedLine(note)
+                    : 'اكتب الملاحظات ثم اضغط «حفظ»'}
         </p>
-        <span className={`shrink-0 tabular-nums ${text.length > NOTE_MAX * 0.9 ? 'text-danger' : 'text-muted'}`}>
-          {text.length.toLocaleString('en')}/{NOTE_MAX.toLocaleString('en')}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`shrink-0 tabular-nums ${text.length > NOTE_MAX * 0.9 ? 'text-danger' : 'text-muted'}`}>
+            {text.length.toLocaleString('en')}/{NOTE_MAX.toLocaleString('en')}
+          </span>
+          {dirty && (
+            <>
+              <button
+                type="button"
+                onClick={revert}
+                disabled={state === 'saving'}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-display text-sm text-fg-2 transition hover:bg-surface-2 hover:text-fg disabled:opacity-50"
+              >
+                <Undo2 className="h-4 w-4" aria-hidden="true" />
+                تراجع
+              </button>
+              <button
+                type="button"
+                onClick={() => void save()}
+                disabled={state === 'saving'}
+                className="btn-primary !min-h-9 !px-4 !text-sm"
+              >
+                <Check className="h-4 w-4" aria-hidden="true" />
+                {state === 'saving' ? 'جارٍ الحفظ…' : 'حفظ الملاحظات'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -296,6 +339,10 @@ export function CouncilNotesWeek() {
 
   const onSaved = (date: string, note: CouncilNote | null) =>
     setNotes((prev) => [...prev.filter((n) => n.date !== date), ...(note ? [note] : [])]);
+  // Another week unmounts these fields, so unsaved notes would be lost.
+  const goToWeek = (next: string) => {
+    if (next !== week && confirmDiscard()) setWeek(next);
+  };
 
   return (
     <div>
@@ -308,16 +355,19 @@ export function CouncilNotesWeek() {
             {gregorianShort(days[0])} – {gregorianShort(days[6])}
           </p>
         </div>
-        <div className="flex gap-1.5">
-          <button type="button" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="الأسبوع السابق" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
-            <ChevronRight className="h-[18px] w-[18px]" />
-          </button>
-          <button type="button" onClick={() => setWeek(weekKeyOf(today))} disabled={week === weekKeyOf(today)} className="h-11 rounded-full border border-line-strong px-4 font-display text-sm hover:border-accent hover:text-accent disabled:opacity-50">
-            اليوم
-          </button>
-          <button type="button" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="الأسبوع التالي" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
-            <ChevronLeft className="h-[18px] w-[18px]" />
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <SaveAllButton />
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => goToWeek(shiftWeek(week, -1))} aria-label="الأسبوع السابق" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
+              <ChevronRight className="h-[18px] w-[18px]" />
+            </button>
+            <button type="button" onClick={() => goToWeek(weekKeyOf(today))} disabled={week === weekKeyOf(today)} className="h-11 rounded-full border border-line-strong px-4 font-display text-sm hover:border-accent hover:text-accent disabled:opacity-50">
+              اليوم
+            </button>
+            <button type="button" onClick={() => goToWeek(shiftWeek(week, 1))} aria-label="الأسبوع التالي" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
+              <ChevronLeft className="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </div>
       </div>
 

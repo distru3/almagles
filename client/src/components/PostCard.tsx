@@ -104,9 +104,11 @@ export default function PostCard({ post, onChange }: Props) {
             {post.title}
           </Link>
         </h3>
-        <p className="mt-1.5 line-clamp-4 whitespace-pre-line text-[16px] leading-[1.95] text-fg-2 [overflow-wrap:anywhere] sm:text-[17px]">
-          <RichText text={post.description} />
-        </p>
+        {post.description && (
+          <p className="mt-1.5 line-clamp-4 whitespace-pre-line text-[16px] leading-[1.95] text-fg-2 [overflow-wrap:anywhere] sm:text-[17px]">
+            <RichText text={post.description} />
+          </p>
+        )}
         {long && (
           <Link to={href} className="mt-1 inline-block font-display text-sm text-accent hover:text-accent-strong">
             اقرأ المزيد

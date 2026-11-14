@@ -19,6 +19,8 @@ import Spinner from '../Spinner';
 import SessionRow, { type SessionFields } from './SessionRow';
 import PrintWeek from './PrintWeek';
 import { CouncilNoteField } from './CouncilNotes';
+import SaveAllButton from './SaveAllButton';
+import { confirmDiscard } from '../../lib/unsaved';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'exporting' | 'error';
 
@@ -175,9 +177,11 @@ export default function ScheduleBuilder() {
     return true;
   };
 
-  const moveSession = async (item: ScheduleItem, date: string) => {
+  /** Moves a session; `fields` carries the row's unsaved edits, saved with the move. */
+  const moveSession = async (item: ScheduleItem, date: string, fields?: SessionFields) => {
     if (date === item.date) return;
-    const res = await track(() => api<{ item: ScheduleItem }>(`/schedule/${item.id}`, { method: 'PUT', body: { date } }));
+    const body = fields ? { ...toPayload(fields), date } : { date };
+    const res = await track(() => api<{ item: ScheduleItem }>(`/schedule/${item.id}`, { method: 'PUT', body }));
     if (res) setItems((prev) => sortItems(prev.map((i) => (i.id === item.id ? res.item : i))));
   };
 
@@ -200,9 +204,14 @@ export default function ScheduleBuilder() {
 
   // ------------------------------------------------------------ week actions
 
+  // Another week unmounts this week's rows, so their unsaved edits would be lost.
+  const goToWeek = (next: string) => {
+    if (next !== week && confirmDiscard()) setWeek(next);
+  };
+
   const goToNewWeek = () => {
     const last = weeksWithItems.at(-1);
-    setWeek(last && last >= week ? shiftWeek(last, 1) : shiftWeek(week, 1));
+    goToWeek(last && last >= week ? shiftWeek(last, 1) : shiftWeek(week, 1));
   };
 
   const copyPreviousWeek = async () => {
@@ -296,7 +305,7 @@ export default function ScheduleBuilder() {
       );
       if (!res) return;
       setItems((prev) => sortItems([...prev, ...res.items]));
-      setWeek(weekKeyOf(res.items[0].date));
+      goToWeek(weekKeyOf(res.items[0].date));
       const skippedNote = parsed.skipped.length ? ` — تُجوهل ${parsed.skipped.length} سطر (الأسطر: ${parsed.skipped.map((s) => s.line).join('، ')})` : '';
       showToast({ message: `استُورد ${res.items.length} جلسة${skippedNote}` });
     } catch (err) {
@@ -364,14 +373,15 @@ export default function ScheduleBuilder() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <SaveStatus state={saveState} error={saveError} />
+          <SaveAllButton />
           <div className="flex gap-1.5">
-            <button type="button" onClick={() => setWeek(shiftWeek(week, -1))} aria-label="الأسبوع السابق" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
+            <button type="button" onClick={() => goToWeek(shiftWeek(week, -1))} aria-label="الأسبوع السابق" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
               <ChevronRight className="h-[18px] w-[18px]" />
             </button>
-            <button type="button" onClick={() => setWeek(weekKeyOf(today))} disabled={isCurrentWeek} className="h-11 rounded-full border border-line-strong px-4 font-display text-sm hover:border-accent hover:text-accent disabled:opacity-50">
+            <button type="button" onClick={() => goToWeek(weekKeyOf(today))} disabled={isCurrentWeek} className="h-11 rounded-full border border-line-strong px-4 font-display text-sm hover:border-accent hover:text-accent disabled:opacity-50">
               اليوم
             </button>
-            <button type="button" onClick={() => setWeek(shiftWeek(week, 1))} aria-label="الأسبوع التالي" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
+            <button type="button" onClick={() => goToWeek(shiftWeek(week, 1))} aria-label="الأسبوع التالي" className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong hover:border-accent hover:text-accent">
               <ChevronLeft className="h-[18px] w-[18px]" />
             </button>
           </div>
@@ -481,7 +491,7 @@ export default function ScheduleBuilder() {
                         gridTemplate={gridTemplate}
                         highlighted={item.id === editId}
                         onSave={(f) => saveSession(item, f)}
-                        onMove={(d) => moveSession(item, d)}
+                        onMove={(d, f) => moveSession(item, d, f)}
                         onDelete={() => deleteSession(item)}
                       />
                     ))}
@@ -558,7 +568,7 @@ function SaveStatus({ state, error }: { state: SaveState; error: string | null }
       : state === 'exporting'
         ? 'جارٍ إنشاء ملف PDF… (أبقِ هذه الصفحة مفتوحة)'
         : state === 'saved'
-          ? 'حُفظ تلقائياً'
+          ? 'تم الحفظ'
           : error ?? 'تعذّر الحفظ';
   const tone = state === 'error' ? 'text-danger' : state === 'saved' ? 'text-success' : 'text-muted';
   return (
@@ -609,13 +619,7 @@ function ColumnsDialog({
       <p className="mb-3 text-sm text-muted">أعمدة إضافية تظهر في كل جلسة، مثل «الشيخ» أو «الكمية».</p>
       <ul className="mb-4 space-y-2">
         {columns.map((c) => (
-          <li key={c.id} className="flex gap-2">
-            <label className="sr-only" htmlFor={`col-${c.id}`}>اسم العمود</label>
-            <input id={`col-${c.id}`} className="input !py-2" defaultValue={c.label} onBlur={(e) => onRename(c, e.target.value.trim())} />
-            <button type="button" onClick={() => onRemove(c)} aria-label={`حذف عمود ${c.label}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-line text-danger hover:border-danger">
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </li>
+          <ColumnRow key={c.id} column={c} onRename={onRename} onRemove={onRemove} />
         ))}
         {columns.length === 0 && <li className="text-sm text-muted">لا توجد أعمدة مخصصة بعد.</li>}
       </ul>
@@ -633,6 +637,43 @@ function ColumnsDialog({
         <button type="submit" className="btn-primary shrink-0">إضافة</button>
       </form>
     </Dialog>
+  );
+}
+
+/** One custom column: renamed only when «حفظ» is pressed (or Enter). */
+function ColumnRow({
+  column,
+  onRename,
+  onRemove,
+}: {
+  column: ScheduleColumn;
+  onRename: (c: ScheduleColumn, label: string) => Promise<void>;
+  onRemove: (c: ScheduleColumn) => Promise<void>;
+}) {
+  const [label, setLabel] = useState(column.label);
+  useEffect(() => setLabel(column.label), [column.label]);
+  const changed = label.trim() !== '' && label.trim() !== column.label;
+  return (
+    <li>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (changed) void onRename(column, label.trim());
+        }}
+      >
+        <label className="sr-only" htmlFor={`col-${column.id}`}>اسم العمود</label>
+        <input id={`col-${column.id}`} className="input !py-2" value={label} onChange={(e) => setLabel(e.target.value)} />
+        {changed && (
+          <button type="submit" className="btn-primary shrink-0 !px-4">
+            حفظ
+          </button>
+        )}
+        <button type="button" onClick={() => onRemove(column)} aria-label={`حذف عمود ${column.label}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-line text-danger hover:border-danger">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </form>
+    </li>
   );
 }
 

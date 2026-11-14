@@ -176,6 +176,8 @@ export default function PostPage() {
             {post.category.name}
           </Link>
           <div className="flex items-center gap-1">
+            {/* Text size only matters when the post has text. */}
+            {post.description && (
             <button
               type="button"
               onClick={cycleTextSize}
@@ -186,6 +188,7 @@ export default function PostPage() {
               <span className="text-[17px]">أ</span>
               <span className="text-[12px]">أ</span>
             </button>
+            )}
             <button
               type="button"
               onClick={handleShare}
@@ -219,9 +222,11 @@ export default function PostPage() {
 
         {post.videoUrl && <PostVideo post={post} className="mt-7 rounded-sm border border-line" />}
 
-        <div className={`prose-ar mt-7 whitespace-pre-line [overflow-wrap:anywhere] ${TEXT_SIZES[textSize].className}`}>
-          <RichText text={post.description} />
-        </div>
+        {post.description && (
+          <div className={`prose-ar mt-7 whitespace-pre-line [overflow-wrap:anywhere] ${TEXT_SIZES[textSize].className}`}>
+            <RichText text={post.description} />
+          </div>
+        )}
 
         <LinkPreviews previews={post.linkPreviews} className="mt-7" />
 

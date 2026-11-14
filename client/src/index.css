@@ -229,3 +229,23 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Schedule sheet: backdrop fades, panel rises from the bottom edge. */
+.sheet-backdrop {
+  animation: sheet-fade 200ms ease-out both;
+}
+.sheet-panel {
+  animation: sheet-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes sheet-fade {
+  from { opacity: 0; }
+}
+@keyframes sheet-rise {
+  from { opacity: 0; transform: translateY(40px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop,
+  .sheet-panel {
+    animation: none;
+  }
+}

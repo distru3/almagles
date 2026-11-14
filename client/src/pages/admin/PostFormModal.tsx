@@ -338,7 +338,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
     }
   };
 
-  const canSubmit = !busy && !videoBusy && imagesPending === 0 && title.trim() !== '' && description.trim() !== '';
+  const canSubmit = !busy && !videoBusy && imagesPending === 0 && title.trim() !== '';
   const submitLabel = videoBusy ? 'انتظر الفيديو…' : post ? 'حفظ' : 'نشر';
 
   const tile =
@@ -412,7 +412,7 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
           <div>
             <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <label htmlFor="post-description" className="label !mb-0">
-                نص المنشور
+                نص المنشور <span className="font-normal text-muted">(اختياري)</span>
               </label>
               <span className="text-[11px] text-muted">{description.length}/20000</span>
             </div>
@@ -429,7 +429,6 @@ export default function PostFormModal({ categories, post, onClose, onSaved }: Pr
               placeholder="اكتب المحتوى هنا… الروابط تصبح قابلة للنقر تلقائياً، وروابط يوتيوب تظهر بصورتها."
               maxLength={20000}
               rows={6}
-              required
             />
             <DetectedLinks text={description} />
           </div>

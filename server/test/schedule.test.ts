@@ -39,6 +39,53 @@ describe('sessions', () => {
     const moved = (await a.put(`/api/schedule/${second.id}`, { date: '2026-10-15' })).body.item;
     expect(moved.weekdayKey).toBe('thu');
   });
+
+  // The editor saves only on «حفظ», sending the whole row exactly as below.
+  const rowPayload = (patch: Record<string, unknown> = {}) => ({
+    timeLabel: 'بعد العصر',
+    section: null,
+    title: 'درس الفقه',
+    notes: null,
+    linkUrl: null,
+    linkLabel: null,
+    customValues: {},
+    startTime: null,
+    reminderMessage: null,
+    timeZone: 'Africa/Casablanca',
+    ...patch,
+  });
+
+  it('saves a full row from the editor, including clearing fields back to empty', async () => {
+    const a = await admin();
+    const created = await a.post('/api/schedule', { date: '2026-10-14', ...rowPayload({ section: 'الفقه', notes: 'باب الطهارة' }) });
+    expect(created.status).toBe(201);
+    const res = await a.put(`/api/schedule/${created.body.item.id}`, rowPayload({ title: 'درس الفقه — الثاني', startTime: '17:30' }));
+    expect(res.status).toBe(200);
+    expect(res.body.item).toMatchObject({
+      title: 'درس الفقه — الثاني',
+      section: null,
+      notes: null,
+      startTime: '17:30',
+      timeZone: 'Africa/Casablanca',
+    });
+    const stored = await prisma.scheduleItem.findUnique({ where: { id: created.body.item.id } });
+    expect(stored).toMatchObject({ title: 'درس الفقه — الثاني', section: null, notes: null });
+  });
+
+  it('refuses to save a row without a title', async () => {
+    const a = await admin();
+    const created = (await a.post('/api/schedule', { date: '2026-10-14', ...rowPayload() })).body.item;
+    expect((await a.put(`/api/schedule/${created.id}`, rowPayload({ title: '   ' }))).status).toBe(400);
+    expect((await prisma.scheduleItem.findUnique({ where: { id: created.id } }))?.title).toBe('درس الفقه');
+  });
+
+  it('saves unsaved edits together with a move to another day', async () => {
+    const a = await admin();
+    const created = (await a.post('/api/schedule', { date: '2026-10-14', ...rowPayload() })).body.item;
+    const res = await a.put(`/api/schedule/${created.id}`, { ...rowPayload({ title: 'درس منقول', notes: 'عُدّل قبل النقل' }), date: '2026-10-16' });
+    expect(res.status).toBe(200);
+    expect(res.body.item).toMatchObject({ date: '2026-10-16', weekdayKey: 'fri', title: 'درس منقول', notes: 'عُدّل قبل النقل' });
+  });
 });
 
 describe('weeks', () => {
