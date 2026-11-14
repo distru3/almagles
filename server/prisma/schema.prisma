@@ -34,6 +34,8 @@ model User {
   pushSubscriptions PushSubscription[]
   notifications     Notification[]     @relation("NotificationRecipient")
   notificationsSent Notification[]     @relation("NotificationActor")
+  tasksCreated      Task[]
+  taskCompletions   TaskCompletion[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -284,4 +286,47 @@ model PushSubscription {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+/// How often a task's checkmark resets: every day, every Saturday→Friday week, or never.
+enum TaskRepeat {
+  daily
+  weekly
+  once
+}
+
+/// «مهامي» — a task every member ticks off, set by admins and schedule managers.
+model Task {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  /// Optional link to open from the task (a lecture, a page of the mushaf…).
+  linkUrl     String?
+  repeat      TaskRepeat       @default(daily)
+  order       Int              @default(0)
+  /// Archived tasks are hidden from members but keep their history.
+  active      Boolean          @default(true)
+  createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  completions TaskCompletion[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([active, order])
+}
+
+/// One member ticked one task for one period: the day ("2026-11-14"), the week's
+/// Saturday ("2026-11-14"), or "once" for a one-time task.
+model TaskCompletion {
+  id        String   @id @default(cuid())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  period    String
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId, period])
+  @@index([userId, period])
+  @@index([taskId, period])
 }

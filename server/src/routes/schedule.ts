@@ -5,6 +5,7 @@ import { requireAuth, requireScheduleManager, requireWriterOrAdmin } from '../mi
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { isTimeZone, noteScheduleChange, reminderFields } from '../lib/scheduleNotifications.js';
+import { linkUrlSchema } from '../lib/linkUrl.js';
 
 const router = Router();
 const manage = [requireAuth, requireScheduleManager];
@@ -35,34 +36,6 @@ function addDaysIso(iso: string, days: number): string {
 function weekStartIso(iso: string): string {
   return addDaysIso(iso, -((parseDate(iso)!.getUTCDay() + 1) % 7));
 }
-
-/** `//host` and `/\host` start with a slash but resolve to another site. */
-function isInternalPath(url: string): boolean {
-  return url.startsWith('/') && !url.startsWith('//') && !url.startsWith('/\\');
-}
-
-const linkUrlSchema = z
-  .string()
-  .trim()
-  .max(2000)
-  .nullish()
-  .transform((val) => {
-    if (!val) return null;
-    if (isInternalPath(val) || /^https?:\/\//i.test(val)) return val;
-    return `https://${val.replace(/^[/\\]+/, '')}`;
-  })
-  .refine(
-    (val) => {
-      if (!val || isInternalPath(val)) return true;
-      try {
-        const u = new URL(val);
-        return u.protocol === 'http:' || u.protocol === 'https:';
-      } catch {
-        return false;
-      }
-    },
-    { message: 'الرابط غير صالح' },
-  );
 
 /** Values for custom columns; empty values are dropped so rows stay small. */
 const customValuesSchema = z

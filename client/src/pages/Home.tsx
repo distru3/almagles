@@ -9,6 +9,7 @@ import { todayISO, hijriDate, hijriShort, weekStart, addDays, toISODate, weekday
 import { normalizeUrl, isInternalPath } from '../lib/url';
 import PostCard from '../components/PostCard';
 import ScheduleSheet from '../components/ScheduleSheet';
+import TaskChecklist from '../components/tasks/TaskChecklist';
 import EmptyState from '../components/EmptyState';
 import Spinner from '../components/Spinner';
 import Logo, { ArchPattern } from '../components/Logo';
@@ -144,14 +145,22 @@ function ScheduleFab({ schedule, visible, onOpen }: { schedule: ScheduleItem[]; 
 }
 
 /** Saturday→Friday list of this week's sessions, today marked. */
-function WeekTimeline({ schedule, onOpenSchedule }: { schedule: ScheduleItem[]; onOpenSchedule: () => void }) {
+function WeekTimeline({
+  schedule,
+  onOpenSchedule,
+  signedIn,
+}: {
+  schedule: ScheduleItem[];
+  onOpenSchedule: () => void;
+  signedIn: boolean;
+}) {
   const today = todayISO();
   const start = weekStart(new Date(`${today}T12:00:00`));
   const days = Array.from({ length: 7 }, (_, i) => toISODate(addDays(start, i)));
 
   return (
     // Sticks beside the feed on wide screens, so the week stays in view however far the reader scrolls.
-    <aside id="week" className="min-w-0 flex-[1_1_320px] lg:sticky lg:top-24 lg:self-start">
+    <aside id="week" className="min-w-0 flex-[1_1_320px] lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
       <h2 className="mb-4 font-display text-[22px] font-semibold">
         الأسبوع <span className="text-sm font-normal text-muted">{hijriShort(days[0])} – {hijriShort(days[6])}</span>
       </h2>
@@ -193,6 +202,12 @@ function WeekTimeline({ schedule, onOpenSchedule }: { schedule: ScheduleItem[]; 
         الجدول كاملاً
         <ArrowLeft className="h-4 w-4" />
       </button>
+      {signedIn && (
+        <div className="mt-8 border-t border-line pt-6">
+          <h2 className="mb-3 font-display text-[22px] font-semibold">مهامي</h2>
+          <TaskChecklist compact />
+        </div>
+      )}
     </aside>
   );
 }
@@ -414,7 +429,7 @@ export default function Home() {
           )}
         </section>
 
-        <WeekTimeline schedule={schedule} onOpenSchedule={openSchedule} />
+        <WeekTimeline schedule={schedule} onOpenSchedule={openSchedule} signedIn={Boolean(user)} />
       </div>
 
       <ScheduleFab schedule={schedule} visible={!heroInView && !scheduleOpen} onOpen={openSchedule} />
