@@ -1,24 +1,86 @@
-import { useEffect, useId, useState } from 'react';
-import { Archive, ArchiveRestore, Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Archive, ArchiveRestore, BookOpen, Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import type { Task, TaskRepeat } from '../../lib/types';
+import type { Task, TaskRepeat, TaskTime } from '../../lib/types';
+import { fadailFor } from '../../lib/fadail';
+import { REPEAT_LABELS, WEEKDAYS, scheduleSummary } from '../../lib/taskSchedule';
 import Spinner from '../Spinner';
-import { REPEAT_LABELS } from './TaskChecklist';
+import FadlText from './FadlText';
 
 interface Draft {
   title: string;
   description: string;
   linkUrl: string;
   repeat: TaskRepeat;
+  points: number;
+  startDate: string;
+  endDate: string;
+  weekdays: number[];
+  timeWindow: TaskTime;
+  startTime: string;
+  endTime: string;
 }
-const emptyDraft: Draft = { title: '', description: '', linkUrl: '', repeat: 'daily' };
-const draftOf = (t: Task): Draft => ({ title: t.title, description: t.description ?? '', linkUrl: t.linkUrl ?? '', repeat: t.repeat });
+const emptyDraft: Draft = {
+  title: '',
+  description: '',
+  linkUrl: '',
+  repeat: 'daily',
+  points: 10,
+  startDate: '',
+  endDate: '',
+  weekdays: [],
+  timeWindow: 'anytime',
+  startTime: '',
+  endTime: '',
+};
+const draftOf = (t: Task): Draft => ({
+  title: t.title,
+  description: t.description ?? '',
+  linkUrl: t.linkUrl ?? '',
+  repeat: t.repeat,
+  points: t.points,
+  startDate: t.startDate ?? '',
+  endDate: t.endDate ?? '',
+  weekdays: t.weekdays,
+  timeWindow: t.timeWindow,
+  startTime: t.startTime ?? '',
+  endTime: t.endTime ?? '',
+});
 const payloadOf = (d: Draft) => ({
   title: d.title.trim(),
   description: d.description.trim() || null,
   linkUrl: d.linkUrl.trim() || null,
   repeat: d.repeat,
+  points: d.points,
+  startDate: d.startDate || null,
+  endDate: d.endDate || null,
+  weekdays: d.repeat === 'daily' ? d.weekdays : [],
+  timeWindow: d.timeWindow,
+  startTime: d.timeWindow === 'range' ? d.startTime || null : null,
+  endTime: d.timeWindow === 'range' ? d.endTime || null : null,
 });
+
+const arNumber = new Intl.NumberFormat('ar');
+const TIME_LABELS: Record<TaskTime, string> = { anytime: 'في أي وقت', range: 'وقت محدد', qiyam: 'قيام الليل (العشاء ← الفجر)' };
+const POINT_PRESETS = [5, 10, 20, 30, 50];
+
+const chip = (on: boolean) =>
+  `min-h-10 rounded-full border px-4 font-display text-sm transition ${on ? 'border-accent bg-accent-soft text-accent' : 'border-line-strong text-fg-2 hover:border-accent'}`;
+
+/** What members will see under «فضلها», matched from the dictionary in lib/fadail.ts. */
+function FadlPreview({ text }: { text: string }) {
+  const entries = useMemo(() => fadailFor(text), [text]);
+  if (!text.trim()) return null;
+  return (
+    <div className="rounded-sm border border-dashed border-line-strong px-3 py-2.5 text-sm">
+      <p className="flex items-center gap-1.5 font-display text-fg-2">
+        <BookOpen className="h-4 w-4 text-accent" aria-hidden="true" />
+        {entries.length ? `سيرى الأعضاء فضل: ${entries.map((f) => f.title).join('، ')}` : 'لا يوجد فضل مطابق في القاموس — سيرون آية عامة في الأجر عند الإنجاز.'}
+      </p>
+      {entries[0] && <FadlText text={entries[0].texts[0]} className="mt-1.5" />}
+    </div>
+  );
+}
 
 /** The add / edit form. Saves only on «حفظ». */
 function TaskForm({
@@ -45,6 +107,14 @@ function TaskForm({
         e.preventDefault();
         if (!draft.title.trim()) {
           setError('عنوان المهمة مطلوب');
+          return;
+        }
+        if (draft.startDate && draft.endDate && draft.endDate < draft.startDate) {
+          setError('تاريخ النهاية قبل تاريخ البداية');
+          return;
+        }
+        if (draft.timeWindow === 'range' && (!draft.startTime || !draft.endTime)) {
+          setError('حدّد وقت البداية والنهاية');
           return;
         }
         setBusy(true);
@@ -77,9 +147,7 @@ function TaskForm({
               role="radio"
               aria-checked={draft.repeat === r}
               onClick={() => set({ repeat: r })}
-              className={`min-h-10 rounded-full border px-4 font-display text-sm transition ${
-                draft.repeat === r ? 'border-accent bg-accent-soft text-accent' : 'border-line-strong text-fg-2 hover:border-accent'
-              }`}
+              className={chip(draft.repeat === r)}
             >
               {REPEAT_LABELS[r]}
             </button>
@@ -92,6 +160,112 @@ function TaskForm({
               ? 'تعود غير منجزة كل سبت — مثل حفظ مقطع الأسبوع.'
               : 'تبقى منجزة بعد أن يضع العضو علامتها.'}
         </p>
+      </div>
+      {draft.repeat === 'daily' && (
+        <div>
+          <span className="label">
+            الأيام <span className="font-normal text-muted">(بلا اختيار = كل يوم)</span>
+          </span>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="أيام الأسبوع">
+            {WEEKDAYS.map((w) => {
+              const on = draft.weekdays.includes(w.day);
+              return (
+                <button
+                  key={w.day}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => set({ weekdays: on ? draft.weekdays.filter((d) => d !== w.day) : [...draft.weekdays, w.day] })}
+                  className={`${chip(on)} !min-h-9 !px-3`}
+                >
+                  {w.short}
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => set({ weekdays: [1, 4] })} className="min-h-9 px-2 text-sm text-accent hover:text-accent-strong">
+              الاثنين والخميس
+            </button>
+          </div>
+        </div>
+      )}
+      <div>
+        <span className="label">الوقت</span>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="الوقت">
+          {(['anytime', 'range', 'qiyam'] as const).map((w) => (
+            <button key={w} type="button" role="radio" aria-checked={draft.timeWindow === w} onClick={() => set({ timeWindow: w })} className={chip(draft.timeWindow === w)}>
+              {TIME_LABELS[w]}
+            </button>
+          ))}
+        </div>
+        {draft.timeWindow === 'range' && (
+          <div className="mt-2 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="label !text-xs" htmlFor={`task-st-${uid}`}>
+                من
+              </label>
+              <input id={`task-st-${uid}`} type="time" className="input !h-10 !py-1" value={draft.startTime} onChange={(e) => set({ startTime: e.target.value })} />
+            </div>
+            <div>
+              <label className="label !text-xs" htmlFor={`task-et-${uid}`}>
+                إلى
+              </label>
+              <input id={`task-et-${uid}`} type="time" className="input !h-10 !py-1" value={draft.endTime} onChange={(e) => set({ endTime: e.target.value })} />
+            </div>
+          </div>
+        )}
+        <p className="mt-1 text-xs leading-5 text-muted">
+          {draft.timeWindow === 'anytime'
+            ? 'يضع العضو علامتها متى شاء خلال اليوم.'
+            : draft.timeWindow === 'range'
+              ? draft.startTime && draft.endTime && draft.startTime > draft.endTime
+                ? 'وقت يمتد بعد منتصف الليل: ما يُنجز بعد الثانية عشرة يُحسب لليلة التي بدأت مساء اليوم السابق.'
+                : 'لا تُفتح قبل وقت البداية، وتبقى مفتوحة إلى آخر اليوم لمن أنجزها في وقتها.'
+              : 'تُفتح بعد العشاء حسب مدينة كل عضو (مصر والسعودية وسائر البلاد العربية)، ويُعرض له الثلث الأخير من الليل. ما يُنجز بعد منتصف الليل أو في الصباح يُحسب لليلة السابقة.'}
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor={`task-sd-${uid}`}>
+            من تاريخ <span className="font-normal text-muted">(اختياري)</span>
+          </label>
+          <input id={`task-sd-${uid}`} type="date" className="input" value={draft.startDate} onChange={(e) => set({ startDate: e.target.value })} />
+        </div>
+        <div>
+          <label className="label" htmlFor={`task-ed-${uid}`}>
+            إلى تاريخ <span className="font-normal text-muted">(اختياري)</span>
+          </label>
+          <input
+            id={`task-ed-${uid}`}
+            type="date"
+            className="input"
+            value={draft.endDate}
+            min={draft.startDate || undefined}
+            onChange={(e) => set({ endDate: e.target.value })}
+          />
+        </div>
+        <p className="-mt-1 text-xs text-muted sm:col-span-2">مثلًا: العشر الأواخر، أو أيام دورة علمية. خارج هذه المدة لا تظهر المهمة للأعضاء.</p>
+      </div>
+      <div>
+        <span className="label">النقاط</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {POINT_PRESETS.map((p) => (
+            <button key={p} type="button" aria-pressed={draft.points === p} onClick={() => set({ points: p })} className={`${chip(draft.points === p)} !min-h-9 !px-3`}>
+              {arNumber.format(p)}
+            </button>
+          ))}
+          <label className="sr-only" htmlFor={`task-pts-${uid}`}>
+            عدد النقاط
+          </label>
+          <input
+            id={`task-pts-${uid}`}
+            type="number"
+            min={1}
+            max={100}
+            className="input !h-9 !w-20 !py-1"
+            value={draft.points}
+            onChange={(e) => set({ points: Math.min(100, Math.max(1, Math.round(Number(e.target.value)) || 1)) })}
+          />
+        </div>
+        <p className="mt-1 text-xs text-muted">ما يكسبه العضو كل مرة ينجزها — اجعل الأثقل أكثر نقاطًا.</p>
       </div>
       <div>
         <label className="label" htmlFor={`task-desc-${uid}`}>
@@ -120,6 +294,7 @@ function TaskForm({
           placeholder="https://youtu.be/…"
         />
       </div>
+      <FadlPreview text={`${draft.title} ${draft.description}`} />
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap justify-end gap-2">
         {onCancel && (
@@ -215,7 +390,7 @@ export default function TaskManager() {
           <div className="min-w-0 flex-1">
             <p className={`font-display text-[16px] ${task.active ? 'text-fg' : 'text-muted'}`}>{task.title}</p>
             <p className="text-xs text-muted">
-              {REPEAT_LABELS[task.repeat]}
+              {scheduleSummary(task)} · {arNumber.format(task.points)} نقطة
               {task.description && ` · ${task.description.slice(0, 80)}${task.description.length > 80 ? '…' : ''}`}
               {task.linkUrl && ' · فيها رابط'}
             </p>

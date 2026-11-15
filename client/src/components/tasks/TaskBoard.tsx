@@ -1,0 +1,240 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Flame, Sparkles, Trophy } from 'lucide-react';
+import { api, ApiError } from '../../lib/api';
+import type { BoardMember, TaskBoard as Board } from '../../lib/types';
+import { dateTime, dateTimeTitle, todayISO } from '../../lib/dates';
+import { COMPETE, GUIDE, RACE } from '../../lib/fadail';
+import { BADGES, levelOf } from '../../lib/rewards';
+import { useAuth } from '../../context/AuthContext';
+import Avatar from '../Avatar';
+import Spinner from '../Spinner';
+import FadlText from './FadlText';
+
+const arNumber = new Intl.NumberFormat('ar');
+
+function daysLabel(n: number): string {
+  if (n === 1) return 'يوم واحد';
+  if (n === 2) return 'يومان';
+  if (n >= 3 && n <= 10) return `${arNumber.format(n)} أيام`;
+  return `${arNumber.format(n)} يومًا`;
+}
+
+export function useBoard() {
+  const [board, setBoard] = useState<Board | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setBoard(await api<Board>(`/tasks/board?date=${todayISO()}`));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذّر تحميل الساحة');
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  return { board, error, reload: load };
+}
+
+function Badges({ ids, size = 'sm' }: { ids: BoardMember['badges']; size?: 'sm' | 'lg' }) {
+  if (ids.length === 0) return null;
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {ids.map((id) => {
+        const b = BADGES[id];
+        const Icon = b.icon;
+        return size === 'lg' ? (
+          <span key={id} className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft px-2.5 py-0.5 text-xs text-accent" title={b.hint}>
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            {b.name}
+          </span>
+        ) : (
+          <span key={id} title={`${b.name} — ${b.hint}`} className="text-accent">
+            <Icon className="h-4 w-4" aria-label={b.name} />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/** «بستاني»: the member's own level, points, streak and badges. */
+export function MyGarden({ me }: { me: BoardMember | undefined }) {
+  const stats = me ?? { total: 0, week: 0, streak: 0, bestStreak: 0, badges: [] as BoardMember['badges'] };
+  const { level, next, progress } = levelOf(stats.total);
+  const Icon = level.icon;
+  return (
+    <section className="mb-5 rounded-sm border border-line bg-surface px-4 py-4 sm:px-5" aria-label="بستاني">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <Icon className="h-8 w-8" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted">بستانك</p>
+          <p className="font-display text-[20px] font-bold">
+            {level.name}
+            <span className="ms-2 text-sm font-normal text-muted">{arNumber.format(stats.total)} نقطة</span>
+          </p>
+          {next && (
+            <>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+                <div className="h-full rounded-full bg-accent-fill transition-[width] duration-500" style={{ width: `${progress * 100}%` }} />
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                {arNumber.format(next.min - stats.total)} نقطة حتى تصير «{next.name}»
+              </p>
+            </>
+          )}
+        </div>
+        <div className="flex gap-4 text-center">
+          <div>
+            <p className={`flex items-center justify-center gap-1 font-display text-[20px] font-bold ${stats.streak ? 'text-warn' : 'text-muted'}`}>
+              <Flame className="h-5 w-5" aria-hidden="true" />
+              {arNumber.format(stats.streak)}
+            </p>
+            <p className="text-xs text-muted">أيام متتالية</p>
+          </div>
+          <div>
+            <p className="font-display text-[20px] font-bold text-accent">{arNumber.format(stats.week)}</p>
+            <p className="text-xs text-muted">نقاط الأسبوع</p>
+          </div>
+        </div>
+      </div>
+      {stats.badges.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <Badges ids={stats.badges} size="lg" />
+        </div>
+      )}
+      <p className="mt-3 border-t border-line pt-2 text-xs leading-6 text-muted">
+        {stats.streak > 0
+          ? `ثبّتك الله — ${daysLabel(stats.streak)} على العمل. «أحبّ الأعمال إلى الله أدومها وإن قلّ».`
+          : '«أحبّ الأعمال إلى الله أدومها وإن قلّ» — ابدأ اليوم ولو بمهمة واحدة.'}{' '}
+        النقاط للتشجيع فقط، والأجر عند الله.
+      </p>
+    </section>
+  );
+}
+
+const RANK_STYLES = ['bg-accent-fill text-on-accent', 'bg-accent-soft text-accent', 'bg-surface-2 text-accent'];
+
+/**
+ * «ساحة الهمّة», for every member: this week's standings, who was first
+ * today, and what the others have just done — so each encourages the rest.
+ */
+export default function TaskBoard() {
+  const { user } = useAuth();
+  const { board, error } = useBoard();
+
+  if (error) return <p className="rounded border border-danger/40 bg-danger-soft px-4 py-3 text-danger">{error}</p>;
+  if (!board) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner />
+      </div>
+    );
+  }
+  const me = board.members.find((m) => m.id === user?.id);
+  const ranked = board.members.filter((m) => m.total > 0);
+
+  return (
+    <div className="space-y-5">
+      <MyGarden me={me} />
+
+      <div className="rounded-sm border border-line bg-surface-2/40 px-4 py-3 text-center">
+        <FadlText text={COMPETE} />
+        <p className="mt-1 text-xs text-muted">تنافسٌ في الخير يشدّ بعضنا بعضًا — فأخلص النية، ولا تجعل النقاط غايتك.</p>
+      </div>
+
+      {board.first && (
+        <div className="flex items-center gap-3 rounded-sm border border-accent/40 bg-accent-soft px-4 py-3">
+          <Sparkles className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="font-display text-accent">السبّاق اليوم: </span>
+            {board.first.id === user?.id ? 'أنت' : board.first.name} — أول من أنجز مهمة اليوم
+            <span className="ms-1 text-xs text-muted">{RACE.text}</span>
+          </p>
+        </div>
+      )}
+
+      {/* This week's standings */}
+      <section className="rounded-sm border border-line bg-surface px-4 py-3 sm:px-5">
+        <h2 className="flex items-center justify-between gap-3 border-b border-line pb-2 font-display text-[18px] font-semibold">
+          <span className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-accent" aria-hidden="true" />
+            ترتيب هذا الأسبوع
+          </span>
+          <span className="text-xs font-normal text-muted">يبدأ كل سبت</span>
+        </h2>
+        {ranked.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted">لم يُنجز أحد مهمة بعد — كن أول السابقين.</p>
+        ) : (
+          <ol className="divide-y divide-line">
+            {ranked.map((m, i) => {
+              const { level } = levelOf(m.total);
+              const LevelIcon = level.icon;
+              const isMe = m.id === user?.id;
+              return (
+                <li key={m.id} className={`flex items-center gap-3 py-2.5 ${isMe ? '-mx-2 rounded bg-accent-soft/60 px-2' : ''}`}>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-sm ${RANK_STYLES[i] ?? 'text-muted'}`}>
+                    {arNumber.format(i + 1)}
+                  </span>
+                  <Avatar name={m.name} src={m.avatarUrl} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate font-display text-[15px]">
+                      {isMe ? `${m.name} (أنت)` : m.name}
+                      <Badges ids={m.badges} />
+                    </p>
+                    <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1" title={`المستوى: ${level.name}`}>
+                        <LevelIcon className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+                        {level.name}
+                      </span>
+                      {m.streak > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-warn" title="أيام متتالية">
+                          <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+                          {daysLabel(m.streak)}
+                        </span>
+                      )}
+                      {m.today > 0 && <span>اليوم: {arNumber.format(m.today)}</span>}
+                    </p>
+                  </div>
+                  <p className="text-end font-display">
+                    <span className="block text-[18px] font-bold text-accent tabular-nums">{arNumber.format(m.week)}</span>
+                    <span className="block text-[11px] text-muted">هذا الأسبوع</span>
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+
+      {/* What the others just did */}
+      {board.recent.length > 0 && (
+        <section className="rounded-sm border border-line bg-surface px-4 py-3 sm:px-5">
+          <h2 className="border-b border-line pb-2 font-display text-[18px] font-semibold">أنجز إخوانك مؤخرًا</h2>
+          <ul className="divide-y divide-line">
+            {board.recent.map((r) => (
+              <li key={`${r.userId}-${r.at}`} className="flex items-center gap-2.5 py-2 text-sm">
+                <Avatar name={r.name} src={r.avatarUrl} size="xs" />
+                <p className="min-w-0 flex-1">
+                  <span className="font-display">{r.userId === user?.id ? 'أنت' : r.name}</span>
+                  <span className="text-fg-2"> · {r.title}</span>
+                  <span className="ms-1 text-xs text-accent">+{arNumber.format(r.points)}</span>
+                </p>
+                <time dateTime={r.at} title={dateTimeTitle(r.at)} className="shrink-0 text-xs text-muted">
+                  {dateTime(r.at)}
+                </time>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="text-center">
+        <FadlText text={GUIDE} />
+        <p className="mt-1 text-xs text-muted">ادعُ إخوانك إلى المهام — لك مثل أجرهم.</p>
+      </div>
+    </div>
+  );
+}
