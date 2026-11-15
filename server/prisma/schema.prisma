@@ -295,6 +295,15 @@ enum TaskRepeat {
   once
 }
 
+/// When in the day a task can be ticked: any time, a fixed range (which may run
+/// past midnight, e.g. 21:00 → 05:00), or «قيام الليل» — Isha to Fajr, worked out
+/// in the member's browser for their own city.
+enum TaskTime {
+  anytime
+  range
+  qiyam
+}
+
 /// «مهامي» — a task every member ticks off, set by admins and schedule managers.
 model Task {
   id          String           @id @default(cuid())
@@ -303,6 +312,17 @@ model Task {
   /// Optional link to open from the task (a lecture, a page of the mushaf…).
   linkUrl     String?
   repeat      TaskRepeat       @default(daily)
+  /// Points a member earns each time they tick it (shown as motivation, not as a tally of reward).
+  points      Int              @default(10)
+  /// Optional first and last day the task is shown ("2026-11-20"); null = open-ended.
+  startDate   String?
+  endDate     String?
+  /// Days of the week a daily task applies on (JS getDay: 0 = Sunday … 6 = Saturday); empty = every day.
+  weekdays    Int[]            @default([])
+  timeWindow  TaskTime         @default(anytime)
+  /// "HH:MM" bounds for timeWindow = range.
+  startTime   String?
+  endTime     String?
   order       Int              @default(0)
   /// Archived tasks are hidden from members but keep their history.
   active      Boolean          @default(true)
@@ -324,9 +344,15 @@ model TaskCompletion {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   period    String
+  /// The member's day this tick counts for ("2026-11-14"). A night task ticked at
+  /// 02:00 counts for the evening before. Used for streaks and weekly points.
+  day       String
+  /// Points earned, kept as they were when ticked.
+  points    Int      @default(10)
   createdAt DateTime @default(now())
 
   @@unique([taskId, userId, period])
+  @@index([day])
   @@index([userId, period])
   @@index([taskId, period])
 }

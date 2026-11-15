@@ -187,6 +187,7 @@ export interface NotificationsResponse {
 
 /** «مهامي»: how often a task's checkmark resets. */
 export type TaskRepeat = 'daily' | 'weekly' | 'once';
+export type TaskTime = 'anytime' | 'range' | 'qiyam';
 
 export interface Task {
   id: string;
@@ -194,17 +195,60 @@ export interface Task {
   description: string | null;
   linkUrl: string | null;
   repeat: TaskRepeat;
+  points: number;
+  /** First / last day it's shown ("2026-11-20"), or null. */
+  startDate: string | null;
+  endDate: string | null;
+  /** Days a daily task applies on (0 = Sunday … 6 = Saturday); empty = every day. */
+  weekdays: number[];
+  timeWindow: TaskTime;
+  /** "HH:MM", for timeWindow = range. */
+  startTime: string | null;
+  endTime: string | null;
   order: number;
   active: boolean;
 }
 
-/** A task as a member sees it, with their checkmark for the current day / week. */
+/** A task as a member sees it: their checkmark for the current day / night / week, and how many members did it. */
 export interface MyTask extends Task {
+  /** The day this checkmark counts for — the evening before, for a night task after midnight. */
+  day: string;
   done: boolean;
+  doneCount: number;
+}
+
+export interface MyTasks {
+  tasks: MyTask[];
+  tomorrow: { id: string; title: string }[];
 }
 
 export interface TaskProgress {
   date: string;
   tasks: (Task & { period: string; doneCount: number })[];
   members: { id: string; name: string; avatarUrl: string | null; done: string[] }[];
+}
+
+export type BadgeId = 'steady' | 'firm' | 'qawwam' | 'hundred';
+
+export interface BoardMember {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  total: number;
+  ticks: number;
+  week: number;
+  today: number;
+  streak: number;
+  bestStreak: number;
+  nights: number;
+  badges: BadgeId[];
+}
+
+export interface TaskBoard {
+  date: string;
+  weekStart: string;
+  weekEnd: string;
+  members: BoardMember[];
+  first: { id: string; name: string; avatarUrl: string | null; at: string } | null;
+  recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; at: string }[];
 }
