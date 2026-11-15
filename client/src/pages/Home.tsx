@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, ExternalLink, Newspaper, PenLine } from 'lucide-react';
 import { api } from '../lib/api';
@@ -27,7 +27,43 @@ function upcoming(schedule: ScheduleItem[]) {
   return { todays, items: todays.length > 0 ? todays : next ? [next] : [] };
 }
 
-/** The hero card: today's sessions, else the next upcoming one. */
+/**
+ * The scrolling middle of the hero card. Fades out at the bottom while there's
+ * more to read below, so a long note looks cut on purpose, not broken.
+ */
+function CardBody({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    el.addEventListener('scroll', check, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('scroll', check);
+    };
+  }, [children]);
+  return (
+    <div
+      ref={ref}
+      tabIndex={more ? 0 : undefined}
+      className={`-me-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pe-2 ${more ? 'card-fade' : ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The hero card: today's sessions, else the next upcoming one. It keeps the
+ * same height whatever the schedule says — long notes scroll inside it and the
+ * button stays at the bottom — so the hero never jumps or stretches.
+ */
 function LessonCard({
   schedule,
   columns,
@@ -45,48 +81,61 @@ function LessonCard({
   const lead = items[0];
 
   return (
-    <article className="rounded-sm border border-line border-t-[3px] border-t-accent-fill bg-surface p-6 sm:p-7">
+    <article className="flex h-[25rem] flex-col rounded-sm border border-line border-t-[3px] border-t-accent-fill bg-surface p-6 sm:h-[24rem] sm:p-7">
       {loading ? (
-        <div className="flex justify-center py-6">
+        <div className="flex flex-1 items-center justify-center">
           <Spinner />
         </div>
       ) : !lead ? (
         <>
-          <p className="font-display text-sm text-accent">الدرس القادم</p>
-          <p className="mt-2 text-fg-2">لا توجد دروس مجدولة حالياً.</p>
-          {/* Today's council note still matters on a day without a lesson. */}
-          {todayNote && (
-            <div className="mt-4">
-              <CouncilNoteView note={todayNote} />
-            </div>
-          )}
+          <p className="shrink-0 font-display text-sm text-accent">الدرس القادم</p>
+          <CardBody>
+            <p className="mt-2 text-fg-2">لا توجد دروس مجدولة حالياً.</p>
+            {/* Today's council note still matters on a day without a lesson. */}
+            {todayNote && (
+              <div className="mt-4">
+                <CouncilNoteView note={todayNote} />
+              </div>
+            )}
+          </CardBody>
+          <div className="shrink-0 pt-4">
+            <button type="button" onClick={onOpenSchedule} className="btn-primary">
+              الجدول كاملاً
+            </button>
+          </div>
         </>
       ) : (
         <>
-          <p className="font-display text-sm text-accent">
-            {todays.length > 0
-              ? `درس اليوم${lead.timeLabel ? ` · ${lead.timeLabel}` : ''}`
-              : `الدرس القادم · ${dayName(lead.date)} ${hijriShort(lead.date)}`}
-          </p>
-          <h2 className="mt-1.5 font-display text-[28px] font-semibold leading-[1.35] sm:text-[30px]">{lead.title}</h2>
-          {lead.section && <p className="mt-1 text-[15px] text-muted">{lead.section}</p>}
-          {lead.notes && <p className="mt-1.5 text-fg">{lead.notes}</p>}
-          {customSummary(lead, columns) && <p className="mt-1 text-[15px] text-fg-2">{customSummary(lead, columns)}</p>}
-          {todays.length > 1 && (
-            <ul className="mt-3 space-y-1 border-t border-line pt-3 text-[15px] text-fg-2">
-              {todays.slice(1).map((i) => (
-                <li key={i.id}>
-                  <span className="font-display text-accent">{i.timeLabel}</span> — {i.title}
-                </li>
-              ))}
-            </ul>
-          )}
-          {todayNote && (
-            <div className="mt-4">
-              <CouncilNoteView note={todayNote} />
-            </div>
-          )}
-          <div className="mt-5 flex flex-wrap gap-2">
+          <div className="shrink-0">
+            <p className="font-display text-sm text-accent">
+              {todays.length > 0
+                ? `درس اليوم${lead.timeLabel ? ` · ${lead.timeLabel}` : ''}`
+                : `الدرس القادم · ${dayName(lead.date)} ${hijriShort(lead.date)}`}
+            </p>
+            <h2 className="mt-1.5 line-clamp-2 font-display text-[28px] font-semibold leading-[1.35] sm:text-[30px]" title={lead.title}>
+              {lead.title}
+            </h2>
+          </div>
+          <CardBody>
+            {lead.section && <p className="mt-1 text-[15px] text-muted">{lead.section}</p>}
+            {lead.notes && <p className="mt-1.5 whitespace-pre-line text-fg">{lead.notes}</p>}
+            {customSummary(lead, columns) && <p className="mt-1 text-[15px] text-fg-2">{customSummary(lead, columns)}</p>}
+            {todays.length > 1 && (
+              <ul className="mt-3 space-y-1 border-t border-line pt-3 text-[15px] text-fg-2">
+                {todays.slice(1).map((i) => (
+                  <li key={i.id}>
+                    <span className="font-display text-accent">{i.timeLabel}</span> — {i.title}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {todayNote && (
+              <div className="mt-4">
+                <CouncilNoteView note={todayNote} />
+              </div>
+            )}
+          </CardBody>
+          <div className="flex shrink-0 flex-wrap gap-2 pt-4">
             {lead.linkUrl ? (
               <a
                 href={normalizeUrl(lead.linkUrl)}

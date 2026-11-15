@@ -269,3 +269,9 @@ body {
   }
   .points-pop { opacity: 0; }
 }
+
+/* Hero lesson card: long text scrolls inside a fixed-height card and fades at the bottom while there's more. */
+.card-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+}
