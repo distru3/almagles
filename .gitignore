@@ -9,3 +9,7 @@ build/
 
 # Post photos saved locally in development (no Cloudinary keys)
 server/uploads/
+
+# Local tools and screenshots
+.claude/
+screenshots-mostaql/
