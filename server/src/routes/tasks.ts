@@ -5,11 +5,16 @@ import { requireAuth, requireScheduleManager } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { linkUrlSchema } from '../lib/linkUrl.js';
+import { pushToUsers } from '../lib/push.js';
 import {
+  COMEBACK_BONUS,
   HH_MM,
+  MAKEUP_DAYS,
   appliesOn,
   effectiveDay,
+  makeupPoints,
   notOpenYet,
+  prayerClock,
   parseDate,
   periodOf,
   shiftDate,
@@ -41,6 +46,8 @@ const todaySchema = anyDateSchema.refine((v) => Math.abs(parseDate(v)!.getTime()
 });
 /** The member's local time of day; older pages that don't send it are treated as midday. */
 const timeSchema = z.string().regex(HH_MM, 'وقت غير صالح').default('12:00');
+/** Today's Fajr and Isha in the member's city, from their browser (see prayerClock). */
+const prayerFields = { fajr: z.string().optional(), isha: z.string().optional() };
 
 const TASK_SELECT = {
   id: true,
@@ -62,69 +69,228 @@ const ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as const }];
 
 // ---------------------------------------------------------------- members
 
-const listQuery = z.object({ date: anyDateSchema, time: timeSchema });
+const listQuery = z.object({ date: anyDateSchema, time: timeSchema, ...prayerFields });
+const isoOf = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * The tasks that apply for this member right now, each with their checkmark
  * and how many members have done it this period, plus what's coming tomorrow
- * (so a member can plan for Monday's fast on Sunday evening).
+ * (so a member can plan for Monday's fast on Sunday evening), the daily tasks
+ * they missed in the last few days and can still make up, and their excuses.
  */
 router.get('/', requireAuth, validate(listQuery, 'query'), async (req, res, next) => {
   try {
-    const { date, time } = req.query as unknown as z.infer<typeof listQuery>;
-    const all = await prisma.task.findMany({ where: { active: true }, orderBy: ORDER, select: TASK_SELECT });
+    const { date, time, fajr, isha } = req.query as unknown as z.infer<typeof listQuery>;
+    const prayers = prayerClock(fajr, isha);
+    const userId = req.user!.id;
+    const [all, me, excuses] = await Promise.all([
+      prisma.task.findMany({ where: { active: true }, orderBy: ORDER, select: { ...TASK_SELECT, createdAt: true } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } }),
+      prisma.taskExcuse.findMany({ where: { userId, day: { gte: shiftDate(date, -MAKEUP_DAYS - 1), lte: date } }, select: { day: true, reason: true } }),
+    ]);
+    const excused = new Set(excuses.map((e) => e.day));
+    const joined = me ? isoOf(me.createdAt) : date;
+
+    // Missed daily tasks: the last few days before each task's own "today",
+    // since the member joined and the task existed, skipping excused days.
+    const candidates = all.flatMap((t) => {
+      if (t.repeat !== 'daily') return [];
+      const today = effectiveDay(t, date, time, prayers);
+      return Array.from({ length: MAKEUP_DAYS }, (_, i) => shiftDate(today, -i - 1))
+        .filter((d) => appliesOn(t, d) && d >= isoOf(t.createdAt) && d >= joined && !excused.has(d))
+        .map((d) => ({ task: t, day: d, today }));
+    });
+    const madeKeys = candidates.length
+      ? await prisma.taskCompletion.findMany({
+          where: { userId, OR: candidates.map((c) => ({ taskId: c.task.id, period: c.day })) },
+          select: { taskId: true, period: true },
+        })
+      : [];
+    const madeSet = new Set(madeKeys.map((k) => `${k.taskId}|${k.period}`));
+    const missed = candidates
+      .filter((c) => !madeSet.has(`${c.task.id}|${c.day}`))
+      .map(({ task, day, today }) => ({ id: task.id, title: task.title, description: task.description, timeWindow: task.timeWindow, day, points: makeupPoints(task.points, day, today) }));
+
     const tasks = all
       .map((t) => {
-        const day = effectiveDay(t, date, time);
+        const day = effectiveDay(t, date, time, prayers);
         return { ...t, day, period: periodOf(t.repeat, day) };
       })
       .filter((t) => appliesOn(t, t.day));
     const tomorrow = all.filter((t) => {
-      const day = effectiveDay(t, date, time);
+      const day = effectiveDay(t, date, time, prayers);
       return t.repeat === 'daily' && !appliesOn(t, day) && appliesOn(t, shiftDate(day, 1));
     });
 
     const keys = tasks.map((t) => ({ taskId: t.id, period: t.period }));
     const [mine, counts] = keys.length
       ? await Promise.all([
-          prisma.taskCompletion.findMany({ where: { userId: req.user!.id, OR: keys }, select: { taskId: true } }),
+          prisma.taskCompletion.findMany({ where: { userId, OR: keys }, select: { taskId: true } }),
           prisma.taskCompletion.groupBy({ by: ['taskId', 'period'], where: { OR: keys }, _count: { _all: true } }),
         ])
       : [[], []];
     const doneSet = new Set(mine.map((d) => d.taskId));
     const countOf = new Map(counts.map((c) => [`${c.taskId}|${c.period}`, c._count._all]));
     return res.json({
-      tasks: tasks.map((t) => ({ ...t, done: doneSet.has(t.id), doneCount: countOf.get(`${t.id}|${t.period}`) ?? 0 })),
+      tasks: tasks.map(({ createdAt: _c, ...t }) => ({ ...t, done: doneSet.has(t.id), doneCount: countOf.get(`${t.id}|${t.period}`) ?? 0 })),
       tomorrow: tomorrow.map((t) => ({ id: t.id, title: t.title })),
+      missed,
+      excuses,
     });
   } catch (err) {
     next(err);
   }
 });
 
-const tickSchema = z.object({ date: todaySchema, time: timeSchema, done: z.boolean() });
+const tickSchema = z.object({ date: todaySchema, time: timeSchema, done: z.boolean(), ...prayerFields });
 
 /** Tick or untick one task for the member's current day / night / week. */
 router.put('/:id/done', requireAuth, validate(tickSchema), async (req, res, next) => {
   try {
-    const { date, time, done } = req.body as z.infer<typeof tickSchema>;
+    const { date, time, done, fajr, isha } = req.body as z.infer<typeof tickSchema>;
+    const prayers = prayerClock(fajr, isha);
     const task = await prisma.task.findUnique({ where: { id: req.params.id }, select: TASK_SELECT });
     if (!task || !task.active) throw new HttpError(404, 'المهمة غير موجودة');
-    const day = effectiveDay(task, date, time);
+    const day = effectiveDay(task, date, time, prayers);
     if (!appliesOn(task, day)) throw new HttpError(400, 'هذه المهمة ليست لهذا اليوم');
-    if (done && notOpenYet(task, time)) throw new HttpError(400, `لم يحن وقت هذه المهمة بعد — تبدأ الساعة ${task.startTime}`);
-    const key = { taskId: task.id, userId: req.user!.id, period: periodOf(task.repeat, day) };
-    if (done) {
-      // upsert keeps a double-tap from failing on the unique key.
-      await prisma.taskCompletion.upsert({
-        where: { taskId_userId_period: key },
-        create: { ...key, day, points: task.points },
-        update: {},
-      });
-    } else {
-      await prisma.taskCompletion.deleteMany({ where: key });
+    if (done && notOpenYet(task, time, prayers)) {
+      throw new HttpError(
+        400,
+        task.timeWindow === 'qiyam'
+          ? 'وقت القيام من بعد صلاة العشاء إلى الفجر — وما فاتك من الليلة الماضية تجده في «تدارك ما فاتك»'
+          : `ليس هذا وقت هذه المهمة — وقتها من ${task.startTime} إلى ${task.endTime}`,
+      );
     }
-    return res.json({ id: task.id, done, day, points: task.points });
+    const userId = req.user!.id;
+    const key = { taskId: task.id, userId, period: periodOf(task.repeat, day) };
+    if (!done) {
+      await prisma.taskCompletion.deleteMany({ where: key });
+      return res.json({ id: task.id, done, day, points: 0, comeback: false });
+    }
+    const existing = await prisma.taskCompletion.findUnique({ where: { taskId_userId_period: key }, select: { points: true } });
+    if (existing) return res.json({ id: task.id, done, day, points: existing.points, comeback: false });
+    const comeback = await isComeback(userId, day);
+    const points = task.points + (comeback ? COMEBACK_BONUS : 0);
+    // upsert keeps a double-tap from failing on the unique key.
+    await prisma.taskCompletion.upsert({ where: { taskId_userId_period: key }, create: { ...key, day, points }, update: {} });
+    return res.json({ id: task.id, done, day, points, comeback });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * «عودة حميدة»: the first tick of `day` after two or more days with nothing
+ * done and no excuse, by a member who had taken part before.
+ */
+async function isComeback(userId: string, day: string): Promise<boolean> {
+  const gap = { gte: shiftDate(day, -2), lte: day };
+  const [recent, excused, before] = await Promise.all([
+    prisma.taskCompletion.count({ where: { userId, day: gap } }),
+    prisma.taskExcuse.count({ where: { userId, day: { gte: shiftDate(day, -2), lt: day } } }),
+    prisma.taskCompletion.count({ where: { userId, day: { lt: shiftDate(day, -2) } } }),
+  ]);
+  return recent === 0 && excused === 0 && before > 0;
+}
+
+const makeupSchema = z.object({ date: todaySchema, time: timeSchema, day: anyDateSchema, done: z.boolean(), ...prayerFields });
+
+/**
+ * «تدارك»: make up a daily task missed on one of the last few days. The full
+ * points the next day, half after that; the missed day counts again for the
+ * streak. Unticking only removes a made-up tick, never an on-time one.
+ */
+router.put('/:id/makeup', requireAuth, validate(makeupSchema), async (req, res, next) => {
+  try {
+    const { date, time, day, done, fajr, isha } = req.body as z.infer<typeof makeupSchema>;
+    const task = await prisma.task.findUnique({ where: { id: req.params.id }, select: TASK_SELECT });
+    if (!task || !task.active) throw new HttpError(404, 'المهمة غير موجودة');
+    if (task.repeat !== 'daily') throw new HttpError(400, 'التدارك للمهام اليومية فقط');
+    const today = effectiveDay(task, date, time, prayerClock(fajr, isha));
+    if (!(day < today && day >= shiftDate(today, -MAKEUP_DAYS))) throw new HttpError(400, `يمكن تدارك آخر ${MAKEUP_DAYS} أيام فقط`);
+    if (!appliesOn(task, day)) throw new HttpError(400, 'هذه المهمة لم تكن لذلك اليوم');
+    const key = { taskId: task.id, userId: req.user!.id, period: day };
+    if (!done) {
+      await prisma.taskCompletion.deleteMany({ where: { ...key, madeUp: true } });
+      return res.json({ id: task.id, day, done, points: 0 });
+    }
+    const points = makeupPoints(task.points, day, today);
+    const row = await prisma.taskCompletion.upsert({
+      where: { taskId_userId_period: key },
+      create: { ...key, day, points, madeUp: true },
+      update: {},
+      select: { points: true },
+    });
+    return res.json({ id: task.id, day, done, points: row.points });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const MAX_EXCUSES_PER_30_DAYS = 7;
+const excuseSchema = z.object({
+  date: todaySchema,
+  day: anyDateSchema,
+  reason: z.enum(['sick', 'travel', 'other'], { message: 'سبب غير صالح' }).nullable(),
+});
+
+/**
+ * «عذر»: «إذا مرض العبد أو سافر كُتب له مثل ما كان يعمل مقيمًا صحيحًا».
+ * An excused day keeps the streak and drops out of the make-up list. Today or
+ * the last few days; at most a week's worth a month. `reason: null` removes it.
+ */
+router.put('/excuse', requireAuth, validate(excuseSchema), async (req, res, next) => {
+  try {
+    const { date, day, reason } = req.body as z.infer<typeof excuseSchema>;
+    const userId = req.user!.id;
+    if (day > date || day < shiftDate(date, -MAKEUP_DAYS)) throw new HttpError(400, `العذر لليوم أو لآخر ${MAKEUP_DAYS} أيام فقط`);
+    if (reason === null) {
+      await prisma.taskExcuse.deleteMany({ where: { userId, day } });
+      return res.json({ day, reason });
+    }
+    const used = await prisma.taskExcuse.count({ where: { userId, day: { gte: shiftDate(date, -29), lte: date, not: day } } });
+    if (used >= MAX_EXCUSES_PER_30_DAYS) throw new HttpError(400, `بلغت ${MAX_EXCUSES_PER_30_DAYS} أيام عذر هذا الشهر — شفاك الله ويسّر أمرك`);
+    await prisma.taskExcuse.upsert({ where: { userId_day: { userId, day } }, create: { userId, day, reason }, update: { reason } });
+    return res.json({ day, reason });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const NUDGE_WINDOW_MS = 20 * 60 * 60 * 1000;
+const MAX_NUDGES_RECEIVED = 3;
+
+/**
+ * «ذكّره بلطف»: a member reminds a brother who's been away from the tasks.
+ * Once a day per pair, and a member gets at most three a day.
+ */
+router.post('/nudge/:userId', requireAuth, async (req, res, next) => {
+  try {
+    const actor = req.user!;
+    const targetId = req.params.userId;
+    if (targetId === actor.id) throw new HttpError(400, 'لا يمكنك تذكير نفسك هنا');
+    const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+    if (!target) throw new HttpError(404, 'العضو غير موجود');
+    const since = new Date(Date.now() - NUDGE_WINDOW_MS);
+    const [mine, theirs] = await Promise.all([
+      prisma.notification.count({ where: { type: 'task_nudge', actorId: actor.id, userId: targetId, createdAt: { gte: since } } }),
+      prisma.notification.count({ where: { type: 'task_nudge', userId: targetId, createdAt: { gte: since } } }),
+    ]);
+    if (mine > 0) throw new HttpError(429, 'ذكّرته اليوم — جزاك الله خيرًا');
+    if (theirs >= MAX_NUDGES_RECEIVED) throw new HttpError(429, 'ذكّره إخوانه اليوم بما يكفي — ادعُ له بظهر الغيب');
+    const n = await prisma.notification.create({ data: { type: 'task_nudge', userId: targetId, actorId: actor.id }, select: { id: true } });
+    pushToUsers([
+      {
+        userId: targetId,
+        payload: {
+          title: 'رجال الأمة',
+          body: `${actor.name} يشدّ أزرك: إخوانك في المهام بانتظارك`,
+          url: `/tasks?n=${n.id}`,
+          tag: `nudge:${actor.id}`,
+        },
+      },
+    ]);
+    return res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
   }
@@ -136,6 +302,7 @@ const BADGES = [
   { id: 'firm', test: (s: Stats) => s.bestStreak >= 30 },
   { id: 'qawwam', test: (s: Stats) => s.nights >= 7 },
   { id: 'hundred', test: (s: Stats) => s.ticks >= 100 },
+  { id: 'mudarik', test: (s: Stats) => s.madeUp >= 10 },
 ] as const;
 
 interface Stats {
@@ -146,6 +313,7 @@ interface Stats {
   streak: number;
   bestStreak: number;
   nights: number;
+  madeUp: number;
 }
 
 /** Days in a row with at least one task, ending today — or yesterday, since today isn't over. */
@@ -179,7 +347,7 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
     const { date } = req.query as z.infer<typeof boardQuery>;
     const weekStart = weekStartIso(date);
     const weekEnd = shiftDate(weekStart, 6);
-    const [totals, week, today, days, nights, recent, first] = await Promise.all([
+    const [totals, week, today, days, nights, recent, first, excuses, madeUp] = await Promise.all([
       prisma.taskCompletion.groupBy({ by: ['userId'], _sum: { points: true }, _count: { _all: true } }),
       prisma.taskCompletion.groupBy({ by: ['userId'], where: { day: { gte: weekStart, lte: weekEnd } }, _sum: { points: true } }),
       prisma.taskCompletion.groupBy({ by: ['userId'], where: { day: date }, _count: { _all: true } }),
@@ -188,17 +356,21 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
       prisma.taskCompletion.findMany({
         orderBy: { createdAt: 'desc' },
         take: 15,
-        select: { createdAt: true, points: true, userId: true, task: { select: { title: true } } },
+        select: { createdAt: true, points: true, madeUp: true, userId: true, task: { select: { title: true } } },
       }),
-      prisma.taskCompletion.findFirst({ where: { day: date }, orderBy: { createdAt: 'asc' }, select: { userId: true, createdAt: true } }),
+      prisma.taskCompletion.findFirst({ where: { day: date, madeUp: false }, orderBy: { createdAt: 'asc' }, select: { userId: true, createdAt: true } }),
+      prisma.taskExcuse.findMany({ select: { userId: true, day: true } }),
+      prisma.taskCompletion.groupBy({ by: ['userId'], where: { madeUp: true }, _count: { _all: true } }),
     ]);
 
     const ids = new Set([req.user!.id, ...totals.map((t) => t.userId)]);
     const users = await prisma.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true, avatarUrl: true } });
     const daysOf = new Map<string, Set<string>>();
-    for (const d of days) (daysOf.get(d.userId) ?? daysOf.set(d.userId, new Set()).get(d.userId)!).add(d.day);
+    // An excused day keeps the streak going, just like a day with work in it.
+    for (const d of [...days, ...excuses]) (daysOf.get(d.userId) ?? daysOf.set(d.userId, new Set()).get(d.userId)!).add(d.day);
+    const excusedToday = new Set(excuses.filter((e) => e.day === date).map((e) => e.userId));
     const pick = <T extends { userId: string }>(rows: T[]) => new Map(rows.map((r) => [r.userId, r]));
-    const [totalOf, weekOf, todayOf, nightsOf] = [pick(totals), pick(week), pick(today), pick(nights)];
+    const [totalOf, weekOf, todayOf, nightsOf, madeUpOf] = [pick(totals), pick(week), pick(today), pick(nights), pick(madeUp)];
     const nameOf = new Map(users.map((u) => [u.id, u]));
 
     const members = users
@@ -209,9 +381,18 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
           week: weekOf.get(u.id)?._sum.points ?? 0,
           today: todayOf.get(u.id)?._count._all ?? 0,
           nights: nightsOf.get(u.id)?._count._all ?? 0,
+          madeUp: madeUpOf.get(u.id)?._count._all ?? 0,
           ...streaks(daysOf.get(u.id) ?? new Set(), date),
         };
-        return { ...u, ...stats, badges: BADGES.filter((b) => b.test(stats)).map((b) => b.id) };
+        const active = [...(daysOf.get(u.id) ?? [])].filter((d) => d <= date).sort();
+        return {
+          ...u,
+          ...stats,
+          /** The last day they worked or were excused, for «إخوانٌ نفتقدهم». */
+          lastDay: active[active.length - 1] ?? null,
+          excusedToday: excusedToday.has(u.id),
+          badges: BADGES.filter((b) => b.test(stats)).map((b) => b.id),
+        };
       })
       .sort((a, b) => b.week - a.week || b.total - a.total || a.name.localeCompare(b.name, 'ar'));
 
@@ -227,6 +408,7 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
         userId: r.userId,
         title: r.task.title,
         points: r.points,
+        madeUp: r.madeUp,
         at: r.createdAt,
       })),
     });

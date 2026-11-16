@@ -23,6 +23,7 @@ import { checkAdhkarReminders } from '../lib/adhkarReminders';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import type { MyTask, MyTasks } from '../lib/types';
+import { loadPlace, prayerClockFor } from '../lib/prayerTimes';
 import { todayISO } from '../lib/dates';
 import { nowHHMM } from '../lib/taskSchedule';
 
@@ -97,7 +98,9 @@ export default function AdhkarPage() {
   const loadMemberTasks = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api<MyTasks>(`/tasks?date=${todayISO()}&time=${nowHHMM()}`);
+      // Fajr and Isha where the member is: a linked task may be «قيام الليل» (Isha → Fajr).
+      const { fajr, isha } = prayerClockFor(loadPlace());
+      const res = await api<MyTasks>(`/tasks?date=${todayISO()}&time=${nowHHMM()}&fajr=${fajr}&isha=${isha}`);
       setUserTasks(res.tasks ?? []);
     } catch {
       /* ignore */
@@ -165,7 +168,7 @@ export default function AdhkarPage() {
     try {
       await api(`/tasks/${matchingTask.id}/done`, {
         method: 'PUT',
-        body: { date: todayISO(), time: nowHHMM(), done: true },
+        body: { date: todayISO(), time: nowHHMM(), done: true, ...prayerClockFor(loadPlace()) },
       });
       setUserTasks((prev) =>
         prev.map((t) => (t.id === matchingTask.id ? { ...t, done: true } : t))

@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, CalendarClock, Check, ExternalLink, ListChecks, Lock, Sparkles, Users, X } from 'lucide-react';
+import { BookOpen, CalendarClock, Check, ExternalLink, History, ListChecks, Lock, Sparkles, Users, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { MyTask, MyTasks, TaskRepeat } from '../../lib/types';
 import { todayISO } from '../../lib/dates';
 import { isInternalPath, normalizeUrl } from '../../lib/url';
-import { DAWAM, NO_WASTE, fadailFor, type Text } from '../../lib/fadail';
-import { formatClock, loadPlace, type Place } from '../../lib/prayerTimes';
-import { REPEAT_LABELS, nowHHMM, opensAt, scheduleSummary } from '../../lib/taskSchedule';
+import { DAWAM, NO_WASTE, SADDIDU, fadailFor, type Text } from '../../lib/fadail';
+import { formatClock, loadPlace, prayerClockFor, type Place } from '../../lib/prayerTimes';
+import { REPEAT_LABELS, nowHHMM, opensAt, phaseKey, scheduleSummary } from '../../lib/taskSchedule';
 import Spinner from '../Spinner';
 import FadlText from './FadlText';
 import QiyamTimes from './QiyamTimes';
+import MakeUpSection from './MakeUpSection';
+import ExcuseControl from './ExcuseControl';
+
+/** Mirrors COMEBACK_BONUS in server/src/lib/taskSchedule.ts. */
+const COMEBACK_BONUS = 5;
+
+/** The good-news card: after an on-time tick, a make-up, or the first tick after time away. */
+interface Bushra {
+  kind: 'done' | 'makeup' | 'comeback';
+  taskId: string;
+  title: string;
+  points: number;
+  text: Text;
+  key: number;
+}
 
 export { REPEAT_LABELS };
 
@@ -49,30 +64,57 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [openFadl, setOpenFadl] = useState<string | null>(null);
-  const [bushra, setBushra] = useState<{ task: MyTask; text: Text; key: number } | null>(null);
+  const [bushra, setBushra] = useState<Bushra | null>(null);
   const [place, setPlace] = useState<Place>(loadPlace);
   const [, setTick] = useState(0);
   // When the list was loaded: reload when the page comes back after a while, or past midnight.
-  const loaded = useRef({ date: todayISO(), at: Date.now() });
+  const loaded = useRef({ date: todayISO(), at: Date.now(), phase: '' });
   const ticks = useRef(0);
+  const placeRef = useRef(place);
+  placeRef.current = place;
+  const tasksRef = useRef<MyTask[]>([]);
+  tasksRef.current = data?.tasks ?? [];
 
   const load = useCallback(async () => {
     const date = todayISO();
-    loaded.current = { date, at: Date.now() };
+    const { fajr, isha } = prayerClockFor(placeRef.current);
+    loaded.current = { date, at: Date.now(), phase: phaseKey(tasksRef.current, placeRef.current) };
     try {
-      setData(await api<MyTasks>(`/tasks?date=${date}&time=${nowHHMM()}`));
+      const res = await api<MyTasks>(`/tasks?date=${date}&time=${nowHHMM()}&fajr=${fajr}&isha=${isha}`);
+      loaded.current.phase = phaseKey(res.tasks, placeRef.current);
+      setData(res);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر تحميل المهام');
     }
   }, []);
 
+  // Another city means other prayer times: reload so qiyam shows the right night.
+  const firstPlace = useRef(true);
+  useEffect(() => {
+    if (firstPlace.current) {
+      firstPlace.current = false;
+      return;
+    }
+    void load();
+  }, [place, load]);
+
+  /** After an excuse is added or removed: the list (make-ups drop out) and the garden (streak). */
+  const reloadAll = () => {
+    void load();
+    onTicked?.();
+  };
+
   useEffect(() => {
     void load();
     const onFocus = () => (loaded.current.date !== todayISO() || Date.now() - loaded.current.at > 10 * 60_000) && void load();
     window.addEventListener('focus', onFocus);
-    // Re-render each minute so tasks unlock when their time comes.
-    const timer = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    // Each minute: re-render so tasks unlock when their time comes, and reload
+    // when Fajr, Isha or a night range's edge has passed (the night has changed).
+    const timer = window.setInterval(() => {
+      setTick((t) => t + 1);
+      if (phaseKey(tasksRef.current, placeRef.current) !== loaded.current.phase) void load();
+    }, 60_000);
     return () => {
       window.removeEventListener('focus', onFocus);
       window.clearInterval(timer);
@@ -89,14 +131,21 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
     setPending((p) => new Set(p).add(task.id));
     patch(task.id, (t) => flip(t, done));
     setError(null);
+    const key = ++ticks.current;
     if (done) {
-      ticks.current += 1;
-      setBushra({ task, text: bushraFor(task, ticks.current + new Date().getDate()), key: ticks.current });
-    } else if (bushra?.task.id === task.id) {
+      setBushra({ kind: 'done', taskId: task.id, title: task.title, points: task.points, text: bushraFor(task, key + new Date().getDate()), key });
+    } else if (bushra?.taskId === task.id) {
       setBushra(null);
     }
     try {
-      await api(`/tasks/${task.id}/done`, { method: 'PUT', body: { date: todayISO(), time: nowHHMM(), done } });
+      const res = await api<{ points: number; comeback: boolean }>(`/tasks/${task.id}/done`, {
+        method: 'PUT',
+        body: { date: todayISO(), time: nowHHMM(), done, ...prayerClockFor(place) },
+      });
+      // «عودة حميدة»: back after two days away — the bonus and a warm word.
+      if (done && res.comeback) {
+        setBushra((b) => (b?.key === key ? { ...b, kind: 'comeback', points: res.points, text: SADDIDU } : b));
+      }
       onTicked?.();
     } catch (err) {
       patch(task.id, (t) => flip(t, !done));
@@ -123,7 +172,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
       </div>
     );
   }
-  if (tasks.length === 0 && !data?.tomorrow.length) {
+  if (tasks.length === 0 && !data?.tomorrow.length && !data?.missed.length) {
     return compact ? null : (
       <div className="rounded-sm border border-dashed border-line-strong px-5 py-10 text-center">
         <ListChecks className="mx-auto h-8 w-8 text-muted" aria-hidden="true" />
@@ -164,9 +213,9 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
             >
               {task.done ? <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" /> : lockedUntil && <Lock className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
-            {bushra?.task.id === task.id && task.done && (
+            {bushra && bushra.kind !== 'makeup' && bushra.taskId === task.id && task.done && (
               <span key={bushra.key} className="points-pop pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-display text-sm font-bold text-accent" aria-hidden="true">
-                +{arNumber.format(task.points)}
+                +{arNumber.format(bushra.points)}
               </span>
             )}
           </span>
@@ -192,8 +241,13 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
             )}
             {lockedUntil && (
               <p className="text-xs text-warn">
-                {task.timeWindow === 'qiyam' ? `يُفتح بعد العشاء — ${formatClock(lockedUntil)}` : `يُفتح الساعة ${formatClock(lockedUntil)}`}
+                {task.timeWindow === 'qiyam'
+                  ? `قيام الليلة يبدأ بعد صلاة العشاء — ${formatClock(lockedUntil)}`
+                  : `يُفتح الساعة ${formatClock(lockedUntil)}`}
               </p>
+            )}
+            {lockedUntil && task.timeWindow === 'qiyam' && data?.missed.some((m) => m.id === task.id) && (
+              <p className="text-xs text-muted">انتهت ليلة البارحة بأذان الفجر — إن فاتتك فتداركها نهارًا من «تدارك ما فاتك» بنقاطها كاملة.</p>
             )}
             {!compact && task.description && <p className="mt-0.5 whitespace-pre-line text-sm leading-6 text-fg-2">{task.description}</p>}
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
@@ -269,13 +323,19 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
         </div>
       )}
 
+      {!compact && data && <ExcuseControl excuses={data.excuses} onChange={reloadAll} />}
+
       {/* Good news after a tick */}
       {bushra && (
         <div key={bushra.key} role="status" className="bushra-in mb-3 rounded-sm border border-accent/40 bg-accent-soft px-3.5 py-3">
           <div className="flex items-start justify-between gap-2">
             <p className="flex items-center gap-1.5 font-display text-sm text-accent">
-              <Sparkles className="h-4 w-4" aria-hidden="true" />
-              بُشراك — أتممت «{bushra.task.title}» (+{arNumber.format(bushra.task.points)} نقطة)
+              <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {bushra.kind === 'makeup'
+                ? `تداركت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة) — وعاد يومها إلى سلسلتك`
+                : bushra.kind === 'comeback'
+                  ? `عودة حميدة — أتممت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة، منها ${arNumber.format(COMEBACK_BONUS)} هدية العودة)`
+                  : `بُشراك — أتممت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة)`}
             </p>
             <button type="button" onClick={() => setBushra(null)} aria-label="إغلاق" className="-m-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface">
               <X className="h-4 w-4" />
@@ -309,7 +369,27 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
               </section>
             );
           })}
+          {data && data.missed.length > 0 && (
+            <MakeUpSection
+              key={data.missed.map((m) => `${m.id}|${m.day}`).join()}
+              place={place}
+              missed={data.missed}
+              onMadeUp={(m, points, text) => {
+                const key = ++ticks.current;
+                setBushra({ kind: 'makeup', taskId: m.id, title: m.title, points, text, key });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                onTicked?.();
+              }}
+            />
+          )}
         </div>
+      )}
+
+      {compact && data && data.missed.length > 0 && (
+        <Link to="/tasks" className="mt-3 flex items-center gap-1.5 text-sm text-warn hover:underline">
+          <History className="h-4 w-4" aria-hidden="true" />
+          {data.missed.length === 1 ? 'فاتتك مهمة في الأيام الماضية — تداركها' : `فاتتك ${arNumber.format(data.missed.length)} مهام في الأيام الماضية — تداركها`}
+        </Link>
       )}
 
       {data && data.tomorrow.length > 0 && (

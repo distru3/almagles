@@ -21,6 +21,9 @@ export function notificationText(n: NotificationItem): string {
   if (n.type === 'schedule_reminder') {
     return `حان وقت المجلس: «${n.scheduleItem?.title ?? ''}»`;
   }
+  if (n.type === 'task_nudge') {
+    return `${n.actor?.name ?? SOMEONE} يشدّ أزرك: إخوانك في المهام بانتظارك`;
+  }
 
   const who = n.actor?.name ?? SOMEONE;
   const title = `«${n.post?.title ?? ''}»`;
@@ -44,11 +47,13 @@ export function notificationExcerpt(n: NotificationItem): string | null {
     const details = [n.scheduleItem.section, n.scheduleItem.timeLabel].filter(Boolean).join(' · ');
     return [details, n.scheduleItem.reminderMessage].filter(Boolean).join(' — ') || null;
   }
+  if (n.type === 'task_nudge') return '«المؤمن للمؤمن كالبنيان يشدّ بعضه بعضًا»';
   return n.excerpt;
 }
 
 /** Where clicking it goes: the comment itself when there is one; the schedule on the right week. */
 export function notificationLink(n: NotificationItem): string {
+  if (n.type === 'task_nudge') return '/tasks';
   const scheduleDate = n.scheduleItem?.date ?? n.scheduleDates[0];
   if (!n.post) return scheduleDate ? `/?date=${scheduleDate}#schedule` : '/#schedule';
   return n.commentId ? `/post/${n.post.id}#comment-${n.commentId}` : `/post/${n.post.id}`;

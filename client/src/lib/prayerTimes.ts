@@ -208,5 +208,19 @@ export function nightOf(iso: string, place: Place): Night {
   };
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const localHHMM = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const localISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/**
+ * Today's Fajr and Isha at `place` on this device's clock ("04:50", "18:19").
+ * Sent with every task request: «قيام الليل» is open from Isha and the night
+ * ends at Fajr, and only the browser knows where the member is.
+ */
+export function prayerClockFor(place: Place, now = new Date()): { fajr: string; isha: string } {
+  const t = prayerTimes(localISO(now), place);
+  return { fajr: localHHMM(t.fajr), isha: localHHMM(t.isha) };
+}
+
 const clock = new Intl.DateTimeFormat('ar', { hour: 'numeric', minute: '2-digit' });
 export const formatClock = (d: Date) => clock.format(d);

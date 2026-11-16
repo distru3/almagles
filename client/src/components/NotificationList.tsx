@@ -1,4 +1,4 @@
-import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing } from 'lucide-react';
+import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing, HeartHandshake } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NotificationItem, NotificationType } from '../lib/types';
 import { notificationExcerpt, notificationText } from '../lib/notifications';
@@ -13,6 +13,7 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   new_post: FileText,
   schedule_change: CalendarDays,
   schedule_reminder: BellRing,
+  task_nudge: HeartHandshake,
 };
 
 export default function NotificationList({
