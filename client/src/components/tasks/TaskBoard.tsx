@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Flame, HandHeart, HeartHandshake, Sparkles, Trophy } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { BoardMember, TaskBoard as Board } from '../../lib/types';
@@ -254,10 +255,14 @@ export default function TaskBoard() {
                   <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-sm ${RANK_STYLES[i] ?? 'text-muted'}`}>
                     {arNumber.format(i + 1)}
                   </span>
-                  <Avatar name={m.name} src={m.avatarUrl} size="sm" />
+                  <Link to={`/u/${m.id}`} tabIndex={-1} aria-hidden="true" className="shrink-0">
+                    <Avatar name={m.name} src={m.avatarUrl} size="sm" />
+                  </Link>
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 truncate font-display text-[15px]">
-                      {isMe ? `${m.name} (أنت)` : m.name}
+                      <Link to={`/u/${m.id}`} className="truncate hover:text-accent">
+                        {isMe ? `${m.name} (أنت)` : m.name}
+                      </Link>
                       <Badges ids={m.badges} />
                     </p>
                     <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted">
@@ -305,8 +310,14 @@ export default function TaskBoard() {
           <ul className="mt-1 divide-y divide-line">
             {away.map((m) => (
               <li key={m.id} className="flex items-center gap-3 py-2.5">
-                <Avatar name={m.name} src={m.avatarUrl} size="sm" />
-                <p className="min-w-0 flex-1 truncate font-display text-[15px]">{m.name}</p>
+                <Link to={`/u/${m.id}`} tabIndex={-1} aria-hidden="true" className="shrink-0">
+                  <Avatar name={m.name} src={m.avatarUrl} size="sm" />
+                </Link>
+                <p className="min-w-0 flex-1 truncate font-display text-[15px]">
+                  <Link to={`/u/${m.id}`} className="hover:text-accent">
+                    {m.name}
+                  </Link>
+                </p>
                 <NudgeButton member={m} />
               </li>
             ))}
@@ -321,9 +332,13 @@ export default function TaskBoard() {
           <ul className="divide-y divide-line">
             {board.recent.map((r) => (
               <li key={`${r.userId}-${r.at}`} className="flex items-center gap-2.5 py-2 text-sm">
-                <Avatar name={r.name} src={r.avatarUrl} size="xs" />
+                <Link to={`/u/${r.userId}`} tabIndex={-1} aria-hidden="true" className="shrink-0">
+                  <Avatar name={r.name} src={r.avatarUrl} size="xs" />
+                </Link>
                 <p className="min-w-0 flex-1">
-                  <span className="font-display">{r.userId === user?.id ? 'أنت' : r.name}</span>
+                  <Link to={`/u/${r.userId}`} className="font-display hover:text-accent">
+                    {r.userId === user?.id ? 'أنت' : r.name}
+                  </Link>
                   <span className="text-fg-2">
                     {' '}
                     · {r.madeUp ? `تدارك «${r.title}»` : r.title}
