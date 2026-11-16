@@ -234,6 +234,39 @@ export const COMPETE: Text = ayah('﴿وَفِي ذَٰلِكَ فَلْيَتَ
 export const RACE: Text = ayah('﴿فَاسْتَبِقُوا الْخَيْرَاتِ﴾', 'البقرة: ١٤٨');
 export const GUIDE: Text = hadith('«الدالّ على الخير كفاعله»', 'رواه الترمذي');
 
+// ---- Making up what was missed, excuses, and coming back
+
+/** Ibn Abbas and al-Hasan: whoever misses a deed by night makes it up by day, and by day makes it up by night. */
+export const KHILFA: Text = ayah(
+  '﴿وَهُوَ الَّذِي جَعَلَ اللَّيْلَ وَالنَّهَارَ خِلْفَةً لِّمَنْ أَرَادَ أَن يَذَّكَّرَ أَوْ أَرَادَ شُكُورًا﴾',
+  'الفرقان: ٦٢',
+);
+export const HIZB: Text = hadith(
+  '«من نام عن حزبه أو عن شيء منه، فقرأه فيما بين صلاة الفجر وصلاة الظهر، كُتب له كأنما قرأه من الليل»',
+  'رواه مسلم',
+);
+export const AISHA_QIYAM: Text = hadith(
+  'كان رسول الله ﷺ «إذا فاتته الصلاة من الليل من وجع أو غيره صلّى من النهار ثنتي عشرة ركعة»',
+  'رواه مسلم عن عائشة رضي الله عنها',
+);
+export const FASTING_QADA: Text = ayah(
+  '﴿فَمَن كَانَ مِنكُم مَّرِيضًا أَوْ عَلَىٰ سَفَرٍ فَعِدَّةٌ مِّنْ أَيَّامٍ أُخَرَ﴾',
+  'البقرة: ١٨٤',
+);
+export const EXCUSED: Text = hadith('«إذا مرض العبد أو سافر كُتب له مثل ما كان يعمل مقيمًا صحيحًا»', 'رواه البخاري');
+export const SADDIDU: Text = hadith('«سدّدوا وقاربوا وأبشروا»', 'رواه البخاري');
+export const LA_YAMALL: Text = hadith('«خذوا من الأعمال ما تطيقون، فإن الله لا يملّ حتى تملّوا»', 'متفق عليه');
+export const BUNYAN: Text = hadith('«المؤمن للمؤمن كالبنيان يشدّ بعضه بعضًا»', 'متفق عليه');
+
+/** The good news for making up a task: the text closest to that deed. */
+export function makeupTextFor(title: string, timeWindow: string): Text {
+  const ids = new Set(fadailFor(title, 5).map((f) => f.id));
+  if (timeWindow === 'qiyam' || ids.has('qiyam')) return AISHA_QIYAM;
+  if (ids.has('quran') || ids.has('hifz') || ids.has('tadabbur') || ids.has('kahf') || ids.has('mulk')) return HIZB;
+  if (ids.has('siyam')) return FASTING_QADA;
+  return KHILFA;
+}
+
 /** Strips tashkeel and tatweel and folds letter variants, so «القُرآن» matches «قران». */
 export function normalizeArabic(s: string): string {
   return s

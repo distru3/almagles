@@ -161,7 +161,8 @@ export type NotificationType =
   | 'comment_reaction'
   | 'new_post'
   | 'schedule_change'
-  | 'schedule_reminder';
+  | 'schedule_reminder'
+  | 'task_nudge';
 
 export interface NotificationItem {
   id: string;
@@ -217,9 +218,25 @@ export interface MyTask extends Task {
   doneCount: number;
 }
 
+export type ExcuseReason = 'sick' | 'travel' | 'other';
+
+/** A daily task missed on a recent day that can still be made up («تدارك»). */
+export interface MissedTask {
+  id: string;
+  title: string;
+  description: string | null;
+  timeWindow: TaskTime;
+  day: string;
+  /** What making it up earns now: full the next day, half after. */
+  points: number;
+}
+
 export interface MyTasks {
   tasks: MyTask[];
   tomorrow: { id: string; title: string }[];
+  missed: MissedTask[];
+  /** The member's excused days among the last few. */
+  excuses: { day: string; reason: ExcuseReason }[];
 }
 
 export interface TaskProgress {
@@ -228,7 +245,7 @@ export interface TaskProgress {
   members: { id: string; name: string; avatarUrl: string | null; done: string[] }[];
 }
 
-export type BadgeId = 'steady' | 'firm' | 'qawwam' | 'hundred';
+export type BadgeId = 'steady' | 'firm' | 'qawwam' | 'hundred' | 'mudarik';
 
 export interface BoardMember {
   id: string;
@@ -241,6 +258,10 @@ export interface BoardMember {
   streak: number;
   bestStreak: number;
   nights: number;
+  madeUp: number;
+  /** The last day they worked or were excused. */
+  lastDay: string | null;
+  excusedToday: boolean;
   badges: BadgeId[];
 }
 
@@ -250,5 +271,5 @@ export interface TaskBoard {
   weekEnd: string;
   members: BoardMember[];
   first: { id: string; name: string; avatarUrl: string | null; at: string } | null;
-  recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; at: string }[];
+  recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; madeUp: boolean; at: string }[];
 }

@@ -1,6 +1,6 @@
-import { Flame, Medal, MoonStar, Sprout, Leaf, TreeDeciduous, TreePalm, Trees, Mountain, type LucideIcon } from 'lucide-react';
+import { Flame, Medal, MoonStar, Sprout, Leaf, TreeDeciduous, TreePalm, Trees, Mountain, History, type LucideIcon } from 'lucide-react';
 import type { BadgeId } from './types';
-import { DAWAM, type Text } from './fadail';
+import { DAWAM, KHILFA, type Text } from './fadail';
 
 /**
  * The garden every member grows. Points are only a nudge — the reward itself is
@@ -40,4 +40,5 @@ export const BADGES: Record<BadgeId, { name: string; hint: string; icon: LucideI
   firm: { name: 'الثابت', hint: 'ثلاثون يومًا متتالية', icon: Medal, text: DAWAM },
   qawwam: { name: 'قوّام الليل', hint: 'سبع ليالٍ من القيام', icon: MoonStar },
   hundred: { name: 'مئة عمل', hint: 'مئة مهمة منجزة', icon: Medal },
+  mudarik: { name: 'المتدارك', hint: 'تدارك عشر مهام فاتته', icon: History, text: KHILFA },
 };

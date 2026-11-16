@@ -1,5 +1,5 @@
 import type { Task, TaskRepeat } from './types';
-import { nightOf, type Place } from './prayerTimes';
+import { nightOf, prayerClockFor, type Place } from './prayerTimes';
 
 /** Mirrors server/src/lib/taskSchedule.ts: which day a tick counts for, and when a task opens. */
 
@@ -8,7 +8,6 @@ export function nowHHMM(d = new Date()): string {
 }
 
 const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 type Times = Pick<Task, 'timeWindow' | 'startTime' | 'endTime'>;
 
@@ -17,28 +16,36 @@ export function isOvernight(t: Times): boolean {
   return t.timeWindow === 'range' && !!t.startTime && !!t.endTime && minutes(t.startTime) > minutes(t.endTime);
 }
 
-export function nightCutoff(t: Times): string {
-  if (t.timeWindow !== 'range' || !t.startTime || !t.endTime) return '12:00';
-  return hhmm(Math.floor((minutes(t.endTime) + minutes(t.startTime)) / 2));
-}
-
 /**
- * When the task can't be ticked yet, the time it opens ("21:00", or Isha for
- * qiyam) — else null. Once open it stays open until the day or night turns over.
+ * When the task can't be ticked now, the time it opens next (Isha for qiyam,
+ * the start for a range) — else null. Qiyam is open from Isha until Fajr; a
+ * night range only inside it; a same-day range from its start until midnight.
  */
 export function opensAt(t: MyTaskLike, place: Place, now = new Date()): Date | null {
   const time = nowHHMM(now);
   if (t.timeWindow === 'qiyam') {
-    if (time < '12:00') return null; // still last night's
-    const { isha } = nightOf(t.day, place);
-    return now < isha ? isha : null;
+    const { fajr, isha } = prayerClockFor(place, now);
+    if (time < fajr || time >= isha) return null;
+    return nightOf(t.day, place).isha;
   }
   if (t.timeWindow !== 'range' || !t.startTime || !t.endTime) return null;
-  const closed = isOvernight(t) ? time >= nightCutoff(t) && time < t.startTime : time < t.startTime;
+  const closed = isOvernight(t) ? time >= t.endTime && time < t.startTime : time < t.startTime;
   if (!closed) return null;
   const at = new Date(now);
   at.setHours(Number(t.startTime.slice(0, 2)), Number(t.startTime.slice(3, 5)), 0, 0);
   return at;
+}
+
+/**
+ * Which side of a boundary the clock is on — Fajr, Isha, each night range's
+ * start and end. When it changes while the page is open, the list is reloaded
+ * so the night task shows the right night.
+ */
+export function phaseKey(tasks: Times[], place: Place, now = new Date()): string {
+  const time = nowHHMM(now);
+  const { fajr, isha } = prayerClockFor(place, now);
+  const marks = [fajr, isha, ...tasks.flatMap((t) => (t.timeWindow === 'range' && t.startTime && t.endTime ? [t.startTime, t.endTime] : []))];
+  return `${now.toDateString()}|${marks.map((m) => (time < m ? 0 : 1)).join('')}`;
 }
 
 type MyTaskLike = Times & { day: string };

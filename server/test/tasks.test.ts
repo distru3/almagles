@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, loginAs, prisma, resetDb } from './helpers.js';
 import { periodOf } from '../src/routes/tasks.js';
-import { appliesOn, effectiveDay, nightCutoff, notOpenYet, type TaskSchedule } from '../src/lib/taskSchedule.js';
+import { DEFAULT_PRAYERS, appliesOn, effectiveDay, nightCutoff, notOpenYet, prayerClock, type TaskSchedule } from '../src/lib/taskSchedule.js';
 
 beforeEach(resetDb);
 
@@ -39,23 +39,45 @@ const sched = (over: Partial<TaskSchedule>): TaskSchedule => ({
 });
 
 describe('schedules', () => {
-  it('counts a night task ticked after midnight for the evening before', () => {
+  it('runs qiyam from Isha to Fajr where the member is, then switches to tonight', () => {
     const qiyam = sched({ timeWindow: 'qiyam' });
-    expect(effectiveDay(qiyam, '2026-11-16', '02:10')).toBe('2026-11-15');
-    expect(effectiveDay(qiyam, '2026-11-16', '08:30')).toBe('2026-11-15'); // ticked after waking up
-    expect(effectiveDay(qiyam, '2026-11-15', '21:00')).toBe('2026-11-15');
-    expect(effectiveDay(sched({}), '2026-11-16', '02:10')).toBe('2026-11-16');
+    const cairo = prayerClock('04:50', '18:19');
+    expect(effectiveDay(qiyam, '2026-11-16', '02:10', cairo)).toBe('2026-11-15'); // after midnight: last night
+    expect(effectiveDay(qiyam, '2026-11-16', '04:49', cairo)).toBe('2026-11-15');
+    expect(effectiveDay(qiyam, '2026-11-16', '04:50', cairo)).toBe('2026-11-16'); // Fajr: the night is over
+    expect(effectiveDay(qiyam, '2026-11-16', '08:30', cairo)).toBe('2026-11-16'); // morning: tonight's, not ticked yet
+    expect(notOpenYet(qiyam, '08:30', cairo)).toBe(true);
+    expect(notOpenYet(qiyam, '18:18', cairo)).toBe(true);
+    expect(notOpenYet(qiyam, '18:19', cairo)).toBe(false); // Isha
+    expect(notOpenYet(qiyam, '02:10', cairo)).toBe(false);
 
+    // Casablanca's Fajr is later (Morocco keeps UTC+1): 06:00 there is still the night.
+    const casablanca = prayerClock('06:31', '19:49');
+    expect(effectiveDay(qiyam, '2026-11-16', '06:00', casablanca)).toBe('2026-11-15');
+    expect(notOpenYet(qiyam, '19:00', casablanca)).toBe(true);
+
+    expect(effectiveDay(sched({}), '2026-11-16', '02:10')).toBe('2026-11-16');
+  });
+
+  it('ignores implausible prayer times from the browser', () => {
+    expect(prayerClock('13:00', '03:00')).toEqual(DEFAULT_PRAYERS);
+    expect(prayerClock(undefined, 'nope')).toEqual(DEFAULT_PRAYERS);
+    expect(prayerClock('04:12', '20:45')).toEqual({ fajr: '04:12', isha: '20:45' });
+  });
+
+  it('ends a fixed night range at its end time', () => {
     const late = sched({ timeWindow: 'range', startTime: '21:00', endTime: '05:00' });
-    expect(nightCutoff(late)).toBe('13:00');
+    expect(nightCutoff(late)).toBe('05:00');
     expect(effectiveDay(late, '2026-11-16', '04:59')).toBe('2026-11-15');
+    expect(effectiveDay(late, '2026-11-16', '09:00')).toBe('2026-11-16');
     expect(notOpenYet(late, '16:00')).toBe(true);
+    expect(notOpenYet(late, '09:00')).toBe(true);
     expect(notOpenYet(late, '22:00')).toBe(false);
-    expect(notOpenYet(late, '09:00')).toBe(false); // still last night's
+    expect(notOpenYet(late, '03:00')).toBe(false);
 
     const morning = sched({ timeWindow: 'range', startTime: '05:00', endTime: '09:00' });
     expect(notOpenYet(morning, '04:30')).toBe(true);
-    expect(notOpenYet(morning, '10:00')).toBe(false);
+    expect(notOpenYet(morning, '10:00')).toBe(false); // did it on time, ticks it later
   });
 
   it('applies within its dates and on its weekdays', () => {
@@ -170,16 +192,41 @@ describe('ticking tasks', () => {
     expect((await v.put(`/api/tasks/${task.id}/done`, { date: daysFromToday(1), done: true })).status).toBe(200); // ahead of UTC
   });
 
-  it('counts qiyam ticked after midnight for the night before', async () => {
+  it('counts qiyam ticked after midnight for the night before, and starts fresh after Fajr', async () => {
     const m = await manager();
     const v = await member();
     const task = (await m.post('/api/tasks', { title: 'قيام الليل', repeat: 'daily', timeWindow: 'qiyam' })).body.task;
-    const res = await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '02:30', done: true });
+    const cairo = { fajr: '04:50', isha: '18:19' };
+    const res = await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '02:30', done: true, ...cairo });
     expect(res.status).toBe(200);
     expect(res.body.day).toBe(daysFromToday(-1));
-    // Still ticked when looked at after waking up; tonight is a fresh night.
-    expect((await v.get(`/api/tasks?date=${today()}&time=08:00`)).body.tasks[0].done).toBe(true);
-    expect((await v.get(`/api/tasks?date=${today()}&time=20:00`)).body.tasks[0].done).toBe(false);
+    const at = async (time: string) => (await v.get(`/api/tasks?date=${today()}&time=${time}&fajr=04:50&isha=18:19`)).body.tasks[0];
+    // Still last night's until Fajr…
+    expect(await at('04:00')).toMatchObject({ done: true, day: daysFromToday(-1) });
+    // …then tonight's, unticked — not «already done» in the morning.
+    expect(await at('08:00')).toMatchObject({ done: false, day: today() });
+    expect(await at('20:00')).toMatchObject({ done: false, day: today() });
+  });
+
+  it('refuses qiyam outside Isha to Fajr, and offers a missed night to make up', async () => {
+    const m = await manager();
+    const v = await member();
+    const task = (await m.post('/api/tasks', { title: 'قيام الليل', repeat: 'daily', timeWindow: 'qiyam' })).body.task;
+    await prisma.task.update({ where: { id: task.id }, data: { createdAt: new Date(Date.now() - 3 * 86_400_000) } });
+    await prisma.user.update({ where: { email: 'v@test.local' }, data: { createdAt: new Date(Date.now() - 3 * 86_400_000) } });
+    const cairo = { fajr: '04:50', isha: '18:19' };
+    const tick = (time: string) => v.put(`/api/tasks/${task.id}/done`, { date: today(), time, done: true, ...cairo });
+    const morning = await tick('08:00');
+    expect(morning.status).toBe(400);
+    expect(morning.body.message).toContain('تدارك ما فاتك');
+    expect((await tick('17:00')).status).toBe(400);
+
+    // Last night, unticked, is waiting in «تدارك» with full points, as the hadith of the hizb.
+    const list = (await v.get(`/api/tasks?date=${today()}&time=08:00&fajr=04:50&isha=18:19`)).body;
+    expect(list.missed[0]).toMatchObject({ id: task.id, day: daysFromToday(-1), points: 10 });
+    const made = await v.put(`/api/tasks/${task.id}/makeup`, { date: today(), time: '08:00', day: daysFromToday(-1), done: true, ...cairo });
+    expect(made.body.points).toBe(10);
+    expect((await tick('21:00')).status).toBe(200); // tonight, after Isha
   });
 
   it('hides tasks outside their days, and refuses ticks before their time', async () => {
@@ -272,5 +319,132 @@ describe('board', () => {
     const me = (await v.get(`/api/tasks/board?date=${today()}`)).body.members[0];
     expect(me).toMatchObject({ streak: 0, bestStreak: 8, nights: 8 });
     expect(me.badges).toEqual(['steady', 'qawwam']);
+  });
+});
+
+describe('making up what was missed', () => {
+  /** A daily task and a member that both existed a week ago. */
+  async function setup(points = 10) {
+    const m = await manager();
+    const task = (await m.post('/api/tasks', { title: 'ورد القرآن', repeat: 'daily', points })).body.task;
+    const v = await member('v@test.local', 'أحمد');
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000);
+    await prisma.task.update({ where: { id: task.id }, data: { createdAt: weekAgo } });
+    await prisma.user.update({ where: { email: 'v@test.local' }, data: { createdAt: weekAgo } });
+    const ahmad = (await prisma.user.findUnique({ where: { email: 'v@test.local' } }))!;
+    return { m, v, task, ahmad };
+  }
+  const list = async (v: Awaited<ReturnType<typeof member>>) => (await v.get(`/api/tasks?date=${today()}&time=15:00`)).body;
+
+  it('lists the last three days missed, full points for yesterday and half before', async () => {
+    const { v, task } = await setup(15);
+    const missed = (await list(v)).missed;
+    expect(missed.map((x: { day: string; points: number }) => [x.day, x.points])).toEqual([
+      [daysFromToday(-1), 15],
+      [daysFromToday(-2), 8],
+      [daysFromToday(-3), 8],
+    ]);
+
+    const res = await v.put(`/api/tasks/${task.id}/makeup`, { date: today(), time: '15:00', day: daysFromToday(-2), done: true });
+    expect(res.status).toBe(200);
+    expect(res.body.points).toBe(8);
+    expect((await list(v)).missed).toHaveLength(2);
+    const row = await prisma.taskCompletion.findFirst({ where: { day: daysFromToday(-2) } });
+    expect(row).toMatchObject({ madeUp: true, points: 8, period: daysFromToday(-2) });
+  });
+
+  it('refuses days too far back, today, and days the task did not apply', async () => {
+    const { v, task, m } = await setup();
+    const makeup = (day: string) => v.put(`/api/tasks/${task.id}/makeup`, { date: today(), time: '15:00', day, done: true });
+    expect((await makeup(daysFromToday(-4))).status).toBe(400);
+    expect((await makeup(today())).status).toBe(400);
+    await m.put(`/api/tasks/${task.id}`, { startDate: daysFromToday(-1) });
+    expect((await makeup(daysFromToday(-2))).status).toBe(400);
+    expect((await list(v)).missed.map((x: { day: string }) => x.day)).toEqual([daysFromToday(-1)]);
+  });
+
+  it('never lists days before the member joined or the task existed', async () => {
+    const m = await manager();
+    await m.post('/api/tasks', { title: 'ورد', repeat: 'daily' });
+    const v = await member();
+    expect((await list(v)).missed).toEqual([]);
+  });
+
+  it('undoing a make-up leaves an on-time tick alone', async () => {
+    const { v, task, ahmad } = await setup();
+    await prisma.taskCompletion.create({ data: { taskId: task.id, userId: ahmad.id, period: daysFromToday(-1), day: daysFromToday(-1) } });
+    await v.put(`/api/tasks/${task.id}/makeup`, { date: today(), time: '15:00', day: daysFromToday(-1), done: false });
+    expect(await prisma.taskCompletion.count()).toBe(1);
+  });
+
+  it('keeps the streak alive through made-up and excused days', async () => {
+    const { v, task } = await setup();
+    await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '15:00', done: true });
+    await v.put(`/api/tasks/${task.id}/makeup`, { date: today(), time: '15:00', day: daysFromToday(-1), done: true });
+    expect((await v.put('/api/tasks/excuse', { date: today(), day: daysFromToday(-2), reason: 'sick' })).status).toBe(200);
+    const me = (await v.get(`/api/tasks/board?date=${today()}`)).body.members[0];
+    expect(me).toMatchObject({ streak: 3, madeUp: 1, lastDay: today() });
+
+    const body = await list(v);
+    expect(body.missed.map((x: { day: string }) => x.day)).toEqual([daysFromToday(-3)]);
+    expect(body.excuses).toEqual([{ day: daysFromToday(-2), reason: 'sick' }]);
+
+    await v.put('/api/tasks/excuse', { date: today(), day: daysFromToday(-2), reason: null });
+    expect((await list(v)).excuses).toEqual([]);
+  });
+
+  it('limits excuses to recent days and a week a month', async () => {
+    const { v, ahmad } = await setup();
+    expect((await v.put('/api/tasks/excuse', { date: today(), day: daysFromToday(-4), reason: 'travel' })).status).toBe(400);
+    expect((await v.put('/api/tasks/excuse', { date: today(), day: daysFromToday(1), reason: 'travel' })).status).toBe(400);
+    await prisma.taskExcuse.createMany({ data: [5, 8, 11, 14, 17, 20, 23].map((n) => ({ userId: ahmad.id, day: daysFromToday(-n), reason: 'travel' as const })) });
+    expect((await v.put('/api/tasks/excuse', { date: today(), day: today(), reason: 'sick' })).status).toBe(400);
+  });
+
+  it('gives a comeback bonus on the first tick after two days away', async () => {
+    const { v, task, ahmad } = await setup(10);
+    await prisma.taskCompletion.create({ data: { taskId: task.id, userId: ahmad.id, period: daysFromToday(-5), day: daysFromToday(-5) } });
+    const first = await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '15:00', done: true });
+    expect(first.body).toMatchObject({ comeback: true, points: 15 });
+    // Ticking twice keeps the points it was given; the day's next task is ordinary.
+    expect((await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '15:00', done: true })).body.points).toBe(15);
+    const other = (await (await manager2()).post('/api/tasks', { title: 'أذكار', repeat: 'daily' })).body.task;
+    const second = await v.put(`/api/tasks/${other.id}/done`, { date: today(), time: '15:00', done: true });
+    expect(second.body).toMatchObject({ comeback: false, points: 10 });
+  });
+
+  it('no comeback bonus for a first-ever tick or a regular day', async () => {
+    const { v, task } = await setup();
+    expect((await v.put(`/api/tasks/${task.id}/done`, { date: today(), time: '15:00', done: true })).body.comeback).toBe(false);
+  });
+});
+
+async function manager2() {
+  await createUser({ email: 'm2@test.local', canManageSchedule: true });
+  return loginAs('m2@test.local');
+}
+
+describe('nudges', () => {
+  it('lets a member gently remind another, once a day, three a day at most', async () => {
+    const a = await member('a@test.local', 'أحمد');
+    const target = await createUser({ email: 't@test.local', name: 'طارق' });
+    const nudge = (c: Awaited<ReturnType<typeof member>>) => c.post(`/api/tasks/nudge/${target.id}`);
+
+    expect((await nudge(a)).status).toBe(201);
+    expect((await nudge(a)).status).toBe(429);
+    const n = await prisma.notification.findFirst({ where: { userId: target.id } });
+    expect(n).toMatchObject({ type: 'task_nudge' });
+
+    expect((await nudge(await member('b@test.local'))).status).toBe(201);
+    expect((await nudge(await member('c@test.local'))).status).toBe(201);
+    expect((await nudge(await member('d@test.local'))).status).toBe(429);
+
+    expect((await a.post(`/api/tasks/nudge/nobody`)).status).toBe(404);
+    const self = (await prisma.user.findUnique({ where: { email: 'a@test.local' } }))!;
+    expect((await a.post(`/api/tasks/nudge/${self.id}`)).status).toBe(400);
+
+    const list = await (await loginAs('t@test.local')).get('/api/notifications');
+    expect(list.body.notifications).toHaveLength(3);
+    expect(list.body.notifications.at(-1)).toMatchObject({ type: 'task_nudge', actor: { name: 'أحمد' } });
   });
 });

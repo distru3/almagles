@@ -36,6 +36,7 @@ model User {
   notificationsSent Notification[]     @relation("NotificationActor")
   tasksCreated      Task[]
   taskCompletions   TaskCompletion[]
+  taskExcuses       TaskExcuse[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -246,6 +247,8 @@ enum NotificationType {
   schedule_change
   /// A session's start time has come.
   schedule_reminder
+  /// A member gently reminded another, who has been away from the tasks, to come back.
+  task_nudge
 }
 
 /// One row per recipient. Deleting the post, comment, session or recipient removes it.
@@ -349,10 +352,31 @@ model TaskCompletion {
   day       String
   /// Points earned, kept as they were when ticked.
   points    Int      @default(10)
+  /// Made up on a later day («تدارك»): `day` is the day it was missed.
+  madeUp    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([taskId, userId, period])
   @@index([day])
   @@index([userId, period])
   @@index([taskId, period])
+}
+
+enum TaskExcuseReason {
+  sick
+  travel
+  other
+}
+
+/// A day a member couldn't do their tasks (illness, travel…). It keeps their
+/// streak alive and their missed tasks out of «تدارك ما فاتك».
+model TaskExcuse {
+  id        String           @id @default(cuid())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  day       String
+  reason    TaskExcuseReason
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, day])
 }

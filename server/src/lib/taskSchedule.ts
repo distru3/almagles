@@ -41,7 +41,6 @@ export function weekStartIso(iso: string): string {
 }
 
 const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
-const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 /** A night task: «قيام الليل», or a range that runs past midnight (21:00 → 05:00). */
 export function isOvernight(t: Pick<TaskSchedule, 'timeWindow' | 'startTime' | 'endTime'>): boolean {
@@ -50,25 +49,45 @@ export function isOvernight(t: Pick<TaskSchedule, 'timeWindow' | 'startTime' | '
 }
 
 /**
- * For a night task, the time of day at which "last night" becomes "tonight".
- * Halfway through the quiet hours between the window's end and its next start,
- * so a member who wakes at 08:00 can still tick last night's qiyam.
- * Qiyam (Isha → Fajr) turns over at noon everywhere in the Arab world.
+ * Today's Fajr and Isha where the member is ("HH:MM", their local clock). The
+ * browser works them out for the member's city and sends them along, since
+ * «قيام الليل» runs from Isha to Fajr and those differ from Cairo to Casablanca.
  */
-export function nightCutoff(t: Pick<TaskSchedule, 'timeWindow' | 'startTime' | 'endTime'>): string {
-  if (t.timeWindow !== 'range' || !t.startTime || !t.endTime) return '12:00';
-  const end = minutes(t.endTime);
-  const start = minutes(t.startTime);
-  return hhmm(Math.floor((end + start) / 2));
+export interface PrayerClock {
+  fajr: string;
+  isha: string;
+}
+
+/** Used when a request doesn't say (an old page still open): roughly Cairo's year-round. */
+export const DEFAULT_PRAYERS: PrayerClock = { fajr: '05:00', isha: '19:00' };
+
+/** Takes the times a browser sent, keeping each only if it's a plausible Fajr / Isha for the Arab world. */
+export function prayerClock(fajr: string | undefined, isha: string | undefined): PrayerClock {
+  const ok = (v: string | undefined, from: string, to: string) => !!v && HH_MM.test(v) && v >= from && v <= to;
+  return {
+    fajr: ok(fajr, '02:00', '08:00') ? fajr! : DEFAULT_PRAYERS.fajr,
+    isha: ok(isha, '16:30', '23:59') ? isha! : DEFAULT_PRAYERS.isha,
+  };
+}
+
+/**
+ * For a night task, the time of day at which the night is over: Fajr for
+ * «قيام الليل», the range's end for a fixed one (21:00 → 05:00). From then on
+ * the task is tonight's, locked until it opens again; a night that went
+ * unticked is made up from «تدارك ما فاتك».
+ */
+export function nightCutoff(t: Pick<TaskSchedule, 'timeWindow' | 'startTime' | 'endTime'>, prayers: PrayerClock = DEFAULT_PRAYERS): string {
+  if (t.timeWindow === 'qiyam') return prayers.fajr;
+  return t.endTime ?? '00:00';
 }
 
 /**
  * The day a tick at local `date` + `time` counts for. Ordinary tasks: that date.
- * Night tasks: before the cutoff it is still the night that began the evening before,
- * so qiyam prayed at 02:00 on the 16th belongs to the night of the 15th.
+ * Night tasks: until the night ends it's still the night that began the evening
+ * before, so qiyam prayed at 02:00 on the 16th belongs to the night of the 15th.
  */
-export function effectiveDay(t: TaskSchedule, date: string, time: string): string {
-  return isOvernight(t) && time < nightCutoff(t) ? shiftDate(date, -1) : date;
+export function effectiveDay(t: TaskSchedule, date: string, time: string, prayers: PrayerClock = DEFAULT_PRAYERS): string {
+  return isOvernight(t) && time < nightCutoff(t, prayers) ? shiftDate(date, -1) : date;
 }
 
 /** Which checkmark a task uses for its effective `day`. */
@@ -94,15 +113,29 @@ export function appliesOn(t: TaskSchedule, day: string): boolean {
   return true;
 }
 
+/** How many days back a missed daily task can still be made up («تدارك»). */
+export const MAKEUP_DAYS = 3;
+/** Extra points on the first tick after two or more days away. */
+export const COMEBACK_BONUS = 5;
+
 /**
- * A fixed-range task can't be ticked before its time comes: before the start
- * on an ordinary day, or between the cutoff and the start for a night task.
- * Once open it stays open until the day (or night) turns over, so a member who
- * did it on time can still tick it a little later. «قيام الليل» is locked to
- * Isha in the browser, which knows the member's city.
+ * Points for making up a task missed on `day` when it's now `today`: the full
+ * points the very next day — ﴿جَعَلَ اللَّيْلَ وَالنَّهَارَ خِلْفَةً﴾, what's missed
+ * in one is made up in the other — and half (rounded up) after that.
  */
-export function notOpenYet(t: TaskSchedule, time: string): boolean {
+export function makeupPoints(points: number, day: string, today: string): number {
+  return shiftDate(day, 1) === today ? points : Math.ceil(points / 2);
+}
+
+/**
+ * A task can't be ticked outside its time. «قيام الليل»: only from Isha until
+ * Fajr. A fixed night range: only inside it. A same-day range opens at its
+ * start and stays open until midnight, so a member who did it on time can
+ * still tick it a little later.
+ */
+export function notOpenYet(t: TaskSchedule, time: string, prayers: PrayerClock = DEFAULT_PRAYERS): boolean {
+  if (t.timeWindow === 'qiyam') return time >= prayers.fajr && time < prayers.isha;
   if (t.timeWindow !== 'range' || !t.startTime || !t.endTime) return false;
   if (!isOvernight(t)) return time < t.startTime;
-  return time >= nightCutoff(t) && time < t.startTime;
+  return time >= t.endTime && time < t.startTime;
 }
