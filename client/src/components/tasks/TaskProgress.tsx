@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, ChevronLeft, ChevronRight, Minus } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { TaskProgress as Progress } from '../../lib/types';
@@ -130,10 +131,10 @@ export default function TaskProgress() {
                   return (
                     <tr key={m.id}>
                       <th scope="row" className="px-4 py-2 text-start font-normal">
-                        <span className="flex items-center gap-2.5">
+                        <Link to={`/u/${m.id}`} className="flex items-center gap-2.5 hover:text-accent" title="عرض الملف الشخصي">
                           <Avatar name={m.name} src={m.avatarUrl} size="xs" />
                           <span className="truncate">{m.name}</span>
-                        </span>
+                        </Link>
                       </th>
                       {data.tasks.map((t) => (
                         <td key={t.id} className="px-2 py-2 text-center">
