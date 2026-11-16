@@ -71,9 +71,7 @@ export default function AdhkarPage() {
 
   // Member tasks integration state
   const [userTasks, setUserTasks] = useState<MyTask[]>([]);
-  const [taskUpdatedToast, setTaskUpdatedToast] = useState<string | null>(
-    'تم إتمام أذكار الصباح وتسجيلها في قائمة مهامك بنجاح (+٥ نقاط)'
-  );
+  const [taskUpdatedToast, setTaskUpdatedToast] = useState<string | null>(null);
   const [syncingTask, setSyncingTask] = useState(false);
   const [showRemindersModal, setShowRemindersModal] = useState(false);
 
@@ -82,14 +80,6 @@ export default function AdhkarPage() {
     checkAdhkarReminders();
     const timer = setInterval(checkAdhkarReminders, 30_000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Auto-dismiss initial preview toast after 8 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setTaskUpdatedToast(null);
-    }, 8000);
-    return () => clearTimeout(timer);
   }, []);
 
   // Font size cycle matching PostPage
@@ -231,10 +221,14 @@ export default function AdhkarPage() {
       allCounts[r.id] = getTarget(r.id, r.count);
     });
     setCounts(allCounts);
-    setTaskUpdatedToast(
-      `تم إتمام ${data.title} وتسجيلها في قائمة مهامك بنجاح (+${matchingTask?.points ?? 5} نقاط)`
-    );
-    setTimeout(() => setTaskUpdatedToast(null), 6000);
+    if (matchingTask) {
+      setTaskUpdatedToast(
+        `تم إتمام ${data.title} وتسجيلها في قائمة مهامك بنجاح (+${matchingTask.points} نقطة)`
+      );
+    } else {
+      setTaskUpdatedToast(`تم إتمام ${data.title}، تقبّل الله طاعتكم`);
+    }
+    setTimeout(() => setTaskUpdatedToast(null), 4500);
     void completeMatchingTask();
   };
 
