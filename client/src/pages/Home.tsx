@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, ExternalLink, Newspaper, PenLine } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ExternalLink, Newspaper, PenLine, Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { Category, CouncilNote, Post, ScheduleColumn, ScheduleItem, ScheduleResponse } from '../lib/types';
@@ -384,6 +384,15 @@ export default function Home() {
             </p>
             <h1 className="mt-2.5 font-display text-[44px] font-bold leading-[1.2] sm:text-[64px]">مقرّر يبني الإنسان</h1>
             <p className="mt-2.5 text-[20px] text-fg-2 sm:text-[22px]">ومجتمع يقرأ ويتفاعل</p>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Link
+                to="/adhkar"
+                className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface/85 px-4 py-2 font-display text-sm font-semibold text-fg shadow-2xs backdrop-blur-xs transition hover:border-accent hover:text-accent"
+              >
+                <Sparkles className="h-4 w-4 text-accent" />
+                <span>أذكار اليوم والليلة (الصباح والمساء والنوم)</span>
+              </Link>
+            </div>
           </div>
           <div className="lg:col-span-5">
             <LessonCard

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import Logo from './Logo';
 
 export default function Footer() {
@@ -11,6 +12,7 @@ export default function Footer() {
         <nav aria-label="روابط سريعة" className="flex gap-5 font-display">
           <a href="/#postList" className="text-fg-2 hover:text-accent">منشورات اليوم</a>
           <a href="/#schedule" className="text-fg-2 hover:text-accent">المقرر الأسبوعي</a>
+          <Link to="/adhkar" className="text-fg-2 hover:text-accent">أذكار الصباح والمساء</Link>
         </nav>
         <span>© {new Date().getFullYear()} رجال الأمة — جميع الحقوق محفوظة</span>
       </div>

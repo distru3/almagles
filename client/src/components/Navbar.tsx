@@ -83,6 +83,9 @@ export default function Navbar() {
             <a href="/#schedule" className="font-display text-[16px] text-fg-2 transition hover:text-fg">
               الجدول
             </a>
+            <NavLink to="/adhkar" className={navLinkClass}>
+              الأذكار
+            </NavLink>
             {user && (
               <NavLink to="/tasks" className={navLinkClass}>
                 مهامي
@@ -171,6 +174,9 @@ export default function Navbar() {
             <a href="/#schedule" className="py-2 font-display text-[16px] text-fg-2" onClick={() => setOpen(false)}>
               الجدول
             </a>
+            <NavLink to="/adhkar" className={navLinkClass} onClick={() => setOpen(false)}>
+              الأذكار
+            </NavLink>
             {user && (
               <NavLink to="/tasks" className={navLinkClass} onClick={() => setOpen(false)}>
                 <ListChecks className="h-4 w-4" />
