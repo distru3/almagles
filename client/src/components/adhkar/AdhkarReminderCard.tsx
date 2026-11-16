@@ -10,9 +10,14 @@ import {
   X,
   AlertCircle,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { enablePush, getPushState } from '../../lib/push';
 import {
   loadAdhkarPrefs,
   saveAdhkarPrefs,
+  fetchServerAdhkarPrefs,
+  saveServerAdhkarPrefs,
+  sendServerTestAdhkarPush,
   requestReminderPermission,
   getNotificationPermission,
   sendAdhkarNotification,
@@ -24,32 +29,53 @@ interface AdhkarReminderCardProps {
 }
 
 export default function AdhkarReminderCard({ onClose }: AdhkarReminderCardProps) {
+  const { user } = useAuth();
   const [prefs, setPrefs] = useState<AdhkarReminderPrefs>(loadAdhkarPrefs);
   const [permission, setPermission] = useState<NotificationPermission>(getNotificationPermission);
   const [testSent, setTestSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
     setPermission(getNotificationPermission());
-  }, []);
+    if (user) {
+      void fetchServerAdhkarPrefs().then((serverPrefs) => {
+        if (serverPrefs) setPrefs(serverPrefs);
+      });
+    }
+  }, [user]);
 
   const handleToggleMaster = async () => {
-    if (!prefs.enabled) {
-      if (permission !== 'granted') {
+    const willEnable = !prefs.enabled;
+    if (willEnable) {
+      if (user) {
+        const pushState = await enablePush();
+        if (pushState === 'denied') {
+          setPermission('denied');
+          return;
+        }
+      } else if (permission !== 'granted') {
         const res = await requestReminderPermission();
         setPermission(res);
         if (res !== 'granted') return;
       }
     }
-    const next = { ...prefs, enabled: !prefs.enabled };
+
+    const next: AdhkarReminderPrefs = { ...prefs, enabled: willEnable };
     setPrefs(next);
     saveAdhkarPrefs(next);
+    if (user) {
+      void saveServerAdhkarPrefs(next);
+    }
   };
 
   const handleUpdate = (updater: (prev: AdhkarReminderPrefs) => AdhkarReminderPrefs) => {
     setPrefs((prev) => {
       const next = updater(prev);
       saveAdhkarPrefs(next);
+      if (user) {
+        void saveServerAdhkarPrefs(next);
+      }
       return next;
     });
   };
@@ -57,12 +83,41 @@ export default function AdhkarReminderCard({ onClose }: AdhkarReminderCardProps)
   const handleSendTest = async () => {
     setBusy(true);
     setTestSent(false);
+    setTestError(null);
     try {
-      const ok = await sendAdhkarNotification('test');
-      if (ok) {
-        setTestSent(true);
-        setTimeout(() => setTestSent(false), 4000);
+      if (user) {
+        // Ensure device is subscribed first
+        const state = await getPushState();
+        if (state !== 'on') {
+          await enablePush();
+        }
+        const rep = await sendServerTestAdhkarPush();
+        if (rep && rep.sent > 0) {
+          setTestSent(true);
+          setTimeout(() => setTestSent(false), 4000);
+        } else if (rep && rep.devices === 0) {
+          setTestError('لم يُعثر على جهاز مسجّل، يرجى تفعيل الإشعارات وتأكيد الإذن');
+        } else {
+          // Fallback to local notification
+          const ok = await sendAdhkarNotification('test');
+          if (ok) {
+            setTestSent(true);
+            setTimeout(() => setTestSent(false), 4000);
+          } else {
+            setTestError('تعذّر إرسال التنبيه التجريبي');
+          }
+        }
+      } else {
+        const ok = await sendAdhkarNotification('test');
+        if (ok) {
+          setTestSent(true);
+          setTimeout(() => setTestSent(false), 4000);
+        } else {
+          setTestError('تعذّر إرسال التنبيه التجريبي');
+        }
       }
+    } catch {
+      setTestError('حدث خطأ أثناء إرسال التنبيه التجريبي');
     } finally {
       setBusy(false);
     }
@@ -294,6 +349,10 @@ export default function AdhkarReminderCard({ onClose }: AdhkarReminderCardProps)
           )}
         </button>
       </div>
+
+      {testError && (
+        <p className="mt-2 text-xs text-danger">{testError}</p>
+      )}
     </div>
   );
 }

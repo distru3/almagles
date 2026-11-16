@@ -162,7 +162,19 @@ export type NotificationType =
   | 'new_post'
   | 'schedule_change'
   | 'schedule_reminder'
-  | 'task_nudge';
+  | 'task_nudge'
+  | 'adhkar_morning'
+  | 'adhkar_evening'
+  | 'adhkar_sleep';
+
+export interface AdhkarReminderSettings {
+  enabled: boolean;
+  timeZone: string;
+  morning: { enabled: boolean; time: string };
+  evening: { enabled: boolean; time: string };
+  sleep: { enabled: boolean; time: string };
+  hasPushSubscription?: boolean;
+}
 
 export interface NotificationItem {
   id: string;

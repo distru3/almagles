@@ -1,7 +1,9 @@
 import { todayISO } from './dates';
+import { api } from './api';
 
 export interface AdhkarReminderPrefs {
   enabled: boolean;
+  timeZone?: string;
   morning: {
     enabled: boolean;
     time: string; // "06:00"
@@ -65,6 +67,52 @@ export function saveAdhkarPrefs(prefs: AdhkarReminderPrefs): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
   } catch {
     /* ignore */
+  }
+}
+
+export async function fetchServerAdhkarPrefs(): Promise<AdhkarReminderPrefs | null> {
+  try {
+    const res = await api<AdhkarReminderPrefs & { hasPushSubscription?: boolean }>('/adhkar/reminders');
+    const prefs: AdhkarReminderPrefs = {
+      enabled: res.enabled,
+      timeZone: res.timeZone,
+      morning: res.morning,
+      evening: res.evening,
+      sleep: res.sleep,
+    };
+    saveAdhkarPrefs(prefs);
+    return prefs;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveServerAdhkarPrefs(prefs: AdhkarReminderPrefs): Promise<boolean> {
+  try {
+    const tz = prefs.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Riyadh';
+    await api('/adhkar/reminders', {
+      method: 'PUT',
+      body: {
+        enabled: prefs.enabled,
+        timeZone: tz,
+        morning: prefs.morning,
+        evening: prefs.evening,
+        sleep: prefs.sleep,
+      },
+    });
+    saveAdhkarPrefs(prefs);
+    return true;
+  } catch {
+    saveAdhkarPrefs(prefs);
+    return false;
+  }
+}
+
+export async function sendServerTestAdhkarPush(): Promise<{ sent: number; devices: number; failures: unknown[] } | null> {
+  try {
+    return await api<{ sent: number; devices: number; failures: unknown[] }>('/adhkar/reminders/test', { method: 'POST' });
+  } catch {
+    return null;
   }
 }
 

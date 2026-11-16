@@ -24,6 +24,15 @@ export function notificationText(n: NotificationItem): string {
   if (n.type === 'task_nudge') {
     return `${n.actor?.name ?? SOMEONE} يشدّ أزرك: إخوانك في المهام بانتظارك`;
   }
+  if (n.type === 'adhkar_morning') {
+    return 'حان وقت أذكار الصباح لحفظك وبركة يومك';
+  }
+  if (n.type === 'adhkar_evening') {
+    return 'حان وقت أذكار المساء لتحصين نفسك وأهلك';
+  }
+  if (n.type === 'adhkar_sleep') {
+    return 'حان وقت أذكار النوم والاضطجاع';
+  }
 
   const who = n.actor?.name ?? SOMEONE;
   const title = `«${n.post?.title ?? ''}»`;
@@ -48,12 +57,18 @@ export function notificationExcerpt(n: NotificationItem): string | null {
     return [details, n.scheduleItem.reminderMessage].filter(Boolean).join(' — ') || null;
   }
   if (n.type === 'task_nudge') return '«المؤمن للمؤمن كالبنيان يشدّ بعضه بعضًا»';
+  if (n.type === 'adhkar_morning') return 'أصبحنا وأصبح الملك لله — أذكار الصباح';
+  if (n.type === 'adhkar_evening') return 'أمسينا وأمسى الملك لله — أذكار المساء';
+  if (n.type === 'adhkar_sleep') return 'باسمك ربي وضعت جنبي وبك أرفعه — أذكار النوم';
   return n.excerpt;
 }
 
 /** Where clicking it goes: the comment itself when there is one; the schedule on the right week. */
 export function notificationLink(n: NotificationItem): string {
   if (n.type === 'task_nudge') return '/tasks';
+  if (n.type === 'adhkar_morning') return '/adhkar?type=morning';
+  if (n.type === 'adhkar_evening') return '/adhkar?type=evening';
+  if (n.type === 'adhkar_sleep') return '/adhkar?type=sleep';
   const scheduleDate = n.scheduleItem?.date ?? n.scheduleDates[0];
   if (!n.post) return scheduleDate ? `/?date=${scheduleDate}#schedule` : '/#schedule';
   return n.commentId ? `/post/${n.post.id}#comment-${n.commentId}` : `/post/${n.post.id}`;

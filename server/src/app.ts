@@ -20,6 +20,7 @@ import userRoutes from './routes/users.js';
 import profileRoutes from './routes/profile.js';
 import notificationRoutes from './routes/notifications.js';
 import pushRoutes from './routes/push.js';
+import adhkarRoutes from './routes/adhkar.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 import { LOCAL_UPLOADS_DIR } from './lib/postImages.js';
 
@@ -105,6 +106,7 @@ app.use('/api/posts/:postId/reactions', reactionRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/adhkar', adhkarRoutes);
 
 app.use('/api', notFoundApi);
 

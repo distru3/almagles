@@ -37,6 +37,7 @@ model User {
   tasksCreated      Task[]
   taskCompletions   TaskCompletion[]
   taskExcuses       TaskExcuse[]
+  adhkarReminder    AdhkarReminder?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -249,6 +250,10 @@ enum NotificationType {
   schedule_reminder
   /// A member gently reminded another, who has been away from the tasks, to come back.
   task_nudge
+  /// Daily adhkar reminders.
+  adhkar_morning
+  adhkar_evening
+  adhkar_sleep
 }
 
 /// One row per recipient. Deleting the post, comment, session or recipient removes it.
@@ -380,3 +385,26 @@ model TaskExcuse {
 
   @@unique([userId, day])
 }
+
+/// A member's reminder times and schedule for morning, evening, and sleep adhkar.
+model AdhkarReminder {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String   @unique
+  enabled         Boolean  @default(false)
+  timeZone        String   @default("Asia/Riyadh")
+  morningEnabled  Boolean  @default(true)
+  morningTime     String   @default("06:00")
+  eveningEnabled  Boolean  @default(true)
+  eveningTime     String   @default("16:30")
+  sleepEnabled    Boolean  @default(true)
+  sleepTime       String   @default("22:30")
+  lastMorningDate String?
+  lastEveningDate String?
+  lastSleepDate   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled])
+}
+

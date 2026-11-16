@@ -2,6 +2,7 @@
 import app from './app.js';
 import { env, isProd } from './env.js';
 import { startScheduleReminders } from './lib/scheduleNotifications.js';
+import { startAdhkarReminders } from './lib/adhkarNotifications.js';
 
 app.listen(env.PORT, () => {
   console.log(`[server] listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
@@ -13,3 +14,5 @@ app.listen(env.PORT, () => {
 // «حان وقت المجلس» popups. On a host that sleeps when idle (Render free), something must
 // call /api/health every few minutes or reminders are missed while it sleeps.
 startScheduleReminders();
+startAdhkarReminders();
+
