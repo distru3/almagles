@@ -1,4 +1,3 @@
-import { todayISO } from './dates';
 import { api } from './api';
 
 export interface AdhkarReminderPrefs {
@@ -19,10 +18,20 @@ export interface AdhkarReminderPrefs {
 }
 
 const STORAGE_KEY = 'almagles_adhkar_reminders';
-const NOTIFIED_PREFIX = 'almagles_adhkar_last_notified_';
+
+export function detectDeviceTimeZone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && typeof tz === 'string' && tz.includes('/')) return tz;
+  } catch {
+    /* fallback */
+  }
+  return 'Asia/Riyadh';
+}
 
 export const DEFAULT_PREFS: AdhkarReminderPrefs = {
   enabled: false,
+  timeZone: detectDeviceTimeZone(),
   morning: {
     enabled: true,
     time: '06:00',
@@ -44,6 +53,7 @@ export function loadAdhkarPrefs(): AdhkarReminderPrefs {
     const parsed = JSON.parse(raw);
     return {
       enabled: Boolean(parsed.enabled),
+      timeZone: parsed.timeZone || detectDeviceTimeZone(),
       morning: {
         enabled: Boolean(parsed.morning?.enabled ?? true),
         time: parsed.morning?.time || '06:00',
@@ -72,10 +82,13 @@ export function saveAdhkarPrefs(prefs: AdhkarReminderPrefs): void {
 
 export async function fetchServerAdhkarPrefs(): Promise<AdhkarReminderPrefs | null> {
   try {
-    const res = await api<AdhkarReminderPrefs & { hasPushSubscription?: boolean }>('/adhkar/reminders');
+    const deviceTz = detectDeviceTimeZone();
+    const res = await api<AdhkarReminderPrefs & { hasPushSubscription?: boolean }>(
+      `/adhkar/reminders?tz=${encodeURIComponent(deviceTz)}`
+    );
     const prefs: AdhkarReminderPrefs = {
       enabled: res.enabled,
-      timeZone: res.timeZone,
+      timeZone: res.timeZone || deviceTz,
       morning: res.morning,
       evening: res.evening,
       sleep: res.sleep,
@@ -89,7 +102,7 @@ export async function fetchServerAdhkarPrefs(): Promise<AdhkarReminderPrefs | nu
 
 export async function saveServerAdhkarPrefs(prefs: AdhkarReminderPrefs): Promise<boolean> {
   try {
-    const tz = prefs.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Riyadh';
+    const tz = detectDeviceTimeZone();
     await api('/adhkar/reminders', {
       method: 'PUT',
       body: {
@@ -100,7 +113,7 @@ export async function saveServerAdhkarPrefs(prefs: AdhkarReminderPrefs): Promise
         sleep: prefs.sleep,
       },
     });
-    saveAdhkarPrefs(prefs);
+    saveAdhkarPrefs({ ...prefs, timeZone: tz });
     return true;
   } catch {
     saveAdhkarPrefs(prefs);
@@ -210,30 +223,3 @@ export async function sendAdhkarNotification(
   }
 }
 
-/** Check if current time matches any adhkar schedule, and dispatch if not yet sent today. */
-export function checkAdhkarReminders(): void {
-  const prefs = loadAdhkarPrefs();
-  if (!prefs.enabled) return;
-  if (getNotificationPermission() !== 'granted') return;
-
-  const now = new Date();
-  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const today = todayISO();
-
-  const types: ('morning' | 'evening' | 'sleep')[] = ['morning', 'evening', 'sleep'];
-
-  for (const t of types) {
-    const conf = prefs[t];
-    if (!conf.enabled) continue;
-
-    // Check if within 2 minutes of the target time
-    if (conf.time === currentHHMM) {
-      const lastKey = `${NOTIFIED_PREFIX}${t}`;
-      const lastDate = localStorage.getItem(lastKey);
-      if (lastDate !== today) {
-        localStorage.setItem(lastKey, today);
-        void sendAdhkarNotification(t);
-      }
-    }
-  }
-}

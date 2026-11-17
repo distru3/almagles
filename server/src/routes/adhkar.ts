@@ -67,13 +67,23 @@ const DEFAULT_SETTINGS = {
 router.get('/reminders', requireAuth, async (req, res, next) => {
   try {
     const userId = req.user!.id;
+    const clientTz = typeof req.query.tz === 'string' && isTimeZone(req.query.tz) ? req.query.tz : null;
+
     const [row, pushCount] = await Promise.all([
       prisma.adhkarReminder.findUnique({ where: { userId } }),
       prisma.pushSubscription.count({ where: { userId } }),
     ]);
 
-    const data = row ?? DEFAULT_SETTINGS;
-    return res.json(serialize(data, pushCount > 0));
+    if (row) {
+      if (clientTz && row.timeZone !== clientTz) {
+        await prisma.adhkarReminder.update({ where: { userId }, data: { timeZone: clientTz } });
+        row.timeZone = clientTz;
+      }
+      return res.json(serialize(row, pushCount > 0));
+    }
+
+    const initial = { ...DEFAULT_SETTINGS, timeZone: clientTz ?? 'Asia/Riyadh' };
+    return res.json(serialize(initial, pushCount > 0));
   } catch (err) {
     next(err);
   }

@@ -19,7 +19,6 @@ import { ADHKAR_DATA } from '../lib/adhkarData';
 import OrnateDivider from '../components/adhkar/OrnateDivider';
 import DhikrCounter from '../components/adhkar/DhikrCounter';
 import AdhkarReminderCard from '../components/adhkar/AdhkarReminderCard';
-import { checkAdhkarReminders } from '../lib/adhkarReminders';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import type { MyTask, MyTasks } from '../lib/types';
@@ -75,13 +74,6 @@ export default function AdhkarPage() {
   const [taskUpdatedToast, setTaskUpdatedToast] = useState<string | null>(null);
   const [syncingTask, setSyncingTask] = useState(false);
   const [showRemindersModal, setShowRemindersModal] = useState(false);
-
-  // Background reminder scheduler check
-  useEffect(() => {
-    checkAdhkarReminders();
-    const timer = setInterval(checkAdhkarReminders, 30_000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Font size cycle matching PostPage
   const cycleTextSize = () => {
