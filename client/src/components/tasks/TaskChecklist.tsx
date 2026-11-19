@@ -162,6 +162,30 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
 
   const tasks = data?.tasks ?? null;
   const fadail = useMemo(() => new Map((tasks ?? []).map((t) => [t.id, fadailFor(`${t.title} ${t.description ?? ''}`)])), [tasks]);
+  const possible = useMemo(() => {
+    if (!tasks) return 0;
+    let sum = 0;
+    const handledMutex = new Set<string>();
+    for (const t of tasks) {
+      if (t.done) {
+        sum += t.points;
+      } else {
+        const conflict = tasks.find((o) => o.id !== t.id && areMutuallyExclusive(t.title, o.title));
+        if (!conflict) {
+          sum += t.points;
+        } else if (conflict.done) {
+          // Locked out by conflict: 0 points possible
+        } else {
+          const pairKey = [t.id, conflict.id].sort().join('|');
+          if (!handledMutex.has(pairKey)) {
+            handledMutex.add(pairKey);
+            sum += Math.max(t.points, conflict.points);
+          }
+        }
+      }
+    }
+    return sum;
+  }, [tasks]);
 
   if (tasks === null) {
     return error ? (
@@ -187,29 +211,6 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
   const doneCount = tasks.filter((t) => t.done).length;
   const allDone = activeTasks.length > 0 && doneCount >= activeTasks.length;
   const earned = tasks.filter((t) => t.done).reduce((s, t) => s + t.points, 0);
-  const possible = useMemo(() => {
-    let sum = 0;
-    const handledMutex = new Set<string>();
-    for (const t of tasks) {
-      if (t.done) {
-        sum += t.points;
-      } else {
-        const conflict = tasks.find((o) => o.id !== t.id && areMutuallyExclusive(t.title, o.title));
-        if (!conflict) {
-          sum += t.points;
-        } else if (conflict.done) {
-          // Locked out by conflict: 0 points possible
-        } else {
-          const pairKey = [t.id, conflict.id].sort().join('|');
-          if (!handledMutex.has(pairKey)) {
-            handledMutex.add(pairKey);
-            sum += Math.max(t.points, conflict.points);
-          }
-        }
-      }
-    }
-    return sum;
-  }, [tasks]);
 
   const row = (task: MyTask) => {
     const conflict = findConflictingTask(task, tasks);
