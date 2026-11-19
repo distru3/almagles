@@ -19,12 +19,12 @@ export function isOvernight(t: Times): boolean {
 /**
  * When the task can't be ticked now, the time it opens next (Isha for qiyam,
  * the start for a range) — else null. Qiyam is open from Isha until Fajr; a
- * night range only inside it; a same-day range from its start until midnight.
+ * night range only inside it; a same-day range from its start until the day renews at Fajr.
  */
 export function opensAt(t: MyTaskLike, place: Place, now = new Date()): Date | null {
   const time = nowHHMM(now);
+  const { fajr, isha } = prayerClockFor(place, now);
   if (t.timeWindow === 'qiyam') {
-    const { fajr, isha } = prayerClockFor(place, now);
     if (time < fajr || time >= isha) return null;
     return nightOf(t.day, place).isha;
   }

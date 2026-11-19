@@ -71,23 +71,25 @@ export function prayerClock(fajr: string | undefined, isha: string | undefined):
 }
 
 /**
- * For a night task, the time of day at which the night is over: Fajr for
- * «قيام الليل», the range's end for a fixed one (21:00 → 05:00). From then on
- * the task is tonight's, locked until it opens again; a night that went
- * unticked is made up from «تدارك ما فاتك».
+ * For any task, the time of day at which the previous devotional day ends and the new
+ * day's tasks begin: Fajr for ordinary tasks and «قيام الليل», or the range's end
+ * for a night range extending past Fajr (e.g. 21:00 → 06:00).
  */
 export function nightCutoff(t: Pick<TaskSchedule, 'timeWindow' | 'startTime' | 'endTime'>, prayers: PrayerClock = DEFAULT_PRAYERS): string {
   if (t.timeWindow === 'qiyam') return prayers.fajr;
-  return t.endTime ?? '00:00';
+  if (t.timeWindow === 'range' && isOvernight(t) && t.endTime && t.endTime > prayers.fajr) {
+    return t.endTime;
+  }
+  return prayers.fajr;
 }
 
 /**
- * The day a tick at local `date` + `time` counts for. Ordinary tasks: that date.
- * Night tasks: until the night ends it's still the night that began the evening
- * before, so qiyam prayed at 02:00 on the 16th belongs to the night of the 15th.
+ * The day a tick at local `date` + `time` counts for.
+ * Tasks renew at Fajr: before Fajr it is still the night belonging to the day before,
+ * so tasks ticked at 02:00 on the 16th belong to the day of the 15th.
  */
 export function effectiveDay(t: TaskSchedule, date: string, time: string, prayers: PrayerClock = DEFAULT_PRAYERS): string {
-  return isOvernight(t) && time < nightCutoff(t, prayers) ? shiftDate(date, -1) : date;
+  return time < nightCutoff(t, prayers) ? shiftDate(date, -1) : date;
 }
 
 /** Which checkmark a task uses for its effective `day`. */
@@ -130,7 +132,7 @@ export function makeupPoints(points: number, day: string, today: string): number
 /**
  * A task can't be ticked outside its time. «قيام الليل»: only from Isha until
  * Fajr. A fixed night range: only inside it. A same-day range opens at its
- * start and stays open until midnight, so a member who did it on time can
+ * start and stays open until the day ends, so a member who did it on time can
  * still tick it a little later.
  */
 export function notOpenYet(t: TaskSchedule, time: string, prayers: PrayerClock = DEFAULT_PRAYERS): boolean {

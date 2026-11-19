@@ -18,13 +18,22 @@ const DAY_CHOICES = [
  * of days. It keeps the member's streak and drops those days from «تدارك».
  * «إذا مرض العبد أو سافر كُتب له مثل ما كان يعمل مقيمًا صحيحًا».
  */
-export default function ExcuseControl({ excuses, onChange }: { excuses: { day: string; reason: ExcuseReason }[]; onChange: () => void }) {
+export default function ExcuseControl({
+  excuses,
+  currentDay,
+  onChange,
+}: {
+  excuses: { day: string; reason: ExcuseReason }[];
+  currentDay?: string;
+  onChange: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [offset, setOffset] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const day = toISODate(addDays(new Date(), offset));
-  const todays = excuses.find((e) => e.day === todayISO());
+  const baseDay = currentDay ?? todayISO();
+  const day = toISODate(addDays(new Date(`${baseDay}T12:00:00Z`), offset));
+  const todays = excuses.find((e) => e.day === baseDay);
 
   const save = async (reason: ExcuseReason | null, forDay = day) => {
     setBusy(true);

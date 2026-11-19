@@ -323,7 +323,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
         </div>
       )}
 
-      {!compact && data && <ExcuseControl excuses={data.excuses} onChange={reloadAll} />}
+      {!compact && data && <ExcuseControl excuses={data.excuses} currentDay={data.tasks[0]?.day} onChange={reloadAll} />}
 
       {/* Good news after a tick */}
       {bushra && (

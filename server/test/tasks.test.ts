@@ -56,7 +56,12 @@ describe('schedules', () => {
     expect(effectiveDay(qiyam, '2026-11-16', '06:00', casablanca)).toBe('2026-11-15');
     expect(notOpenYet(qiyam, '19:00', casablanca)).toBe(true);
 
-    expect(effectiveDay(sched({}), '2026-11-16', '02:10')).toBe('2026-11-16');
+    // Tasks renew at Fajr: before Fajr is yesterday's devotional day.
+    expect(effectiveDay(sched({}), '2026-11-16', '02:10', cairo)).toBe('2026-11-15');
+    expect(effectiveDay(sched({}), '2026-11-16', '04:49', cairo)).toBe('2026-11-15');
+    expect(effectiveDay(sched({}), '2026-11-16', '04:50', cairo)).toBe('2026-11-16');
+    expect(effectiveDay(sched({}), '2026-11-16', '06:00', casablanca)).toBe('2026-11-15');
+    expect(effectiveDay(sched({}), '2026-11-16', '06:31', casablanca)).toBe('2026-11-16');
   });
 
   it('ignores implausible prayer times from the browser', () => {
