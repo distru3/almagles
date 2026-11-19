@@ -33,8 +33,8 @@ const arNumber = new Intl.NumberFormat('ar');
 
 /** Section headings, in the order they're shown. */
 const GROUPS: { repeat: TaskRepeat; title: string; hint: string }[] = [
-  { repeat: 'daily', title: 'مهام اليوم', hint: 'تتجدد كل يوم' },
-  { repeat: 'weekly', title: 'مهام الأسبوع', hint: 'تتجدد كل سبت' },
+  { repeat: 'daily', title: 'مهام اليوم', hint: 'تتجدد مع صلاة الفجر' },
+  { repeat: 'weekly', title: 'مهام الأسبوع', hint: 'تتجدد فجر كل سبت' },
   { repeat: 'once', title: 'مهام مستمرة', hint: 'تُنجز مرة واحدة' },
 ];
 
@@ -396,7 +396,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
         <p className={`mt-3 flex items-start gap-1.5 text-sm text-fg-2 ${compact ? '' : 'rounded-sm border border-dashed border-line-strong px-4 py-2.5'}`}>
           <CalendarClock className="mt-1 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
           <span>
-            <span className="font-display">غدًا: </span>
+            <span className="font-display">غدًا (مع الفجر): </span>
             {data.tomorrow.map((t) => t.title).join('، ')}
           </span>
         </p>
