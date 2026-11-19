@@ -7,7 +7,7 @@ import { todayISO } from '../../lib/dates';
 import { isInternalPath, normalizeUrl } from '../../lib/url';
 import { DAWAM, NO_WASTE, SADDIDU, fadailFor, type Text } from '../../lib/fadail';
 import { formatClock, loadPlace, prayerClockFor, type Place } from '../../lib/prayerTimes';
-import { REPEAT_LABELS, nowHHMM, opensAt, phaseKey, scheduleSummary } from '../../lib/taskSchedule';
+import { REPEAT_LABELS, areMutuallyExclusive, findConflictingTask, nowHHMM, opensAt, phaseKey, scheduleSummary } from '../../lib/taskSchedule';
 import Spinner from '../Spinner';
 import FadlText from './FadlText';
 import QiyamTimes from './QiyamTimes';
@@ -182,14 +182,40 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
     );
   }
 
+  // Tasks that are not locked out by a completed mutually exclusive task
+  const activeTasks = tasks.filter((t) => !findConflictingTask(t, tasks));
   const doneCount = tasks.filter((t) => t.done).length;
-  const allDone = tasks.length > 0 && doneCount === tasks.length;
+  const allDone = activeTasks.length > 0 && doneCount >= activeTasks.length;
   const earned = tasks.filter((t) => t.done).reduce((s, t) => s + t.points, 0);
-  const possible = tasks.reduce((s, t) => s + t.points, 0);
+  const possible = useMemo(() => {
+    let sum = 0;
+    const handledMutex = new Set<string>();
+    for (const t of tasks) {
+      if (t.done) {
+        sum += t.points;
+      } else {
+        const conflict = tasks.find((o) => o.id !== t.id && areMutuallyExclusive(t.title, o.title));
+        if (!conflict) {
+          sum += t.points;
+        } else if (conflict.done) {
+          // Locked out by conflict: 0 points possible
+        } else {
+          const pairKey = [t.id, conflict.id].sort().join('|');
+          if (!handledMutex.has(pairKey)) {
+            handledMutex.add(pairKey);
+            sum += Math.max(t.points, conflict.points);
+          }
+        }
+      }
+    }
+    return sum;
+  }, [tasks]);
 
   const row = (task: MyTask) => {
-    const lockedUntil = task.done ? null : opensAt(task, place);
-    const disabled = pending.has(task.id) || lockedUntil !== null;
+    const conflict = findConflictingTask(task, tasks);
+    const isLockedOut = !task.done && conflict !== undefined;
+    const lockedUntil = task.done || isLockedOut ? null : opensAt(task, place);
+    const disabled = pending.has(task.id) || lockedUntil !== null || isLockedOut;
     const entries = fadail.get(task.id) ?? [];
     const plain = task.timeWindow === 'anytime' && task.weekdays.length === 0 && !task.startDate && !task.endDate;
     return (
@@ -206,12 +232,19 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 transition ${
                 task.done
                   ? 'border-accent-fill bg-accent-fill text-on-accent'
-                  : lockedUntil
-                    ? 'border-line bg-surface-2 text-muted'
-                    : 'border-line-strong hover:border-accent'
+                  : isLockedOut
+                    ? 'border-line bg-surface-2 text-muted opacity-60 cursor-not-allowed'
+                    : lockedUntil
+                      ? 'border-line bg-surface-2 text-muted'
+                      : 'border-line-strong hover:border-accent'
               }`}
+              title={isLockedOut && conflict ? `أنجزت «${conflict.title}» — لا يُجمع بينهما` : undefined}
             >
-              {task.done ? <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" /> : lockedUntil && <Lock className="h-3.5 w-3.5" aria-hidden="true" />}
+              {task.done ? (
+                <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
+              ) : (lockedUntil || isLockedOut) && (
+                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
             </button>
             {bushra && bushra.kind !== 'makeup' && bushra.taskId === task.id && task.done && (
               <span key={bushra.key} className="points-pop pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-display text-sm font-bold text-accent" aria-hidden="true">
@@ -224,7 +257,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
               <button
                 type="button"
                 onClick={() => !disabled && void toggle(task)}
-                className={`text-start font-display text-[16px] leading-7 transition ${task.done ? 'text-muted line-through decoration-1' : 'text-fg'}`}
+                className={`text-start font-display text-[16px] leading-7 transition ${task.done ? 'text-muted line-through decoration-1' : isLockedOut ? 'text-muted' : 'text-fg'}`}
                 tabIndex={-1}
               >
                 {task.title}
@@ -233,6 +266,12 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
                 {arNumber.format(task.points)} نقطة
               </span>
             </div>
+            {isLockedOut && conflict && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                <Lock className="h-3 w-3 shrink-0 text-accent/70" aria-hidden="true" />
+                <span>أنجزت «{conflict.title}» — لا يُجمع بينهما</span>
+              </p>
+            )}
             {!plain && (
               <p className="flex items-center gap-1 text-xs text-muted">
                 <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -306,7 +345,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
         <div className="mb-3">
           <div className="flex items-baseline justify-between gap-3">
             <p className={`font-display ${compact ? 'text-sm' : 'text-base'} ${allDone ? 'text-success' : 'text-fg-2'}`}>
-              {allDone ? 'أتممت مهامك — بارك الله فيك' : `أنجزت ${arNumber.format(doneCount)} من ${arNumber.format(tasks.length)}`}
+              {allDone ? 'أتممت مهامك — بارك الله فيك' : `أنجزت ${arNumber.format(doneCount)} من ${arNumber.format(activeTasks.length)}`}
               <span className="ms-2 text-xs text-muted">
                 {arNumber.format(earned)} / {arNumber.format(possible)} نقطة
               </span>
@@ -318,7 +357,7 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
             )}
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
-            <div className="h-full rounded-full bg-accent-fill transition-[width] duration-500" style={{ width: `${(doneCount / tasks.length) * 100}%` }} />
+            <div className="h-full rounded-full bg-accent-fill transition-[width] duration-500" style={{ width: `${(doneCount / Math.max(1, activeTasks.length)) * 100}%` }} />
           </div>
         </div>
       )}

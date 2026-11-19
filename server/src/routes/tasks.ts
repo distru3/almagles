@@ -11,6 +11,7 @@ import {
   HH_MM,
   MAKEUP_DAYS,
   appliesOn,
+  areMutuallyExclusive,
   effectiveDay,
   makeupPoints,
   notOpenYet,
@@ -100,15 +101,20 @@ router.get('/', requireAuth, validate(listQuery, 'query'), async (req, res, next
         .filter((d) => appliesOn(t, d) && d >= isoOf(t.createdAt) && d >= joined && !excused.has(d))
         .map((d) => ({ task: t, day: d, today }));
     });
-    const madeKeys = candidates.length
+    const candidateDays = [...new Set(candidates.map((c) => c.day))];
+    const madeKeys = candidateDays.length
       ? await prisma.taskCompletion.findMany({
-          where: { userId, OR: candidates.map((c) => ({ taskId: c.task.id, period: c.day })) },
-          select: { taskId: true, period: true },
+          where: { userId, period: { in: candidateDays } },
+          select: { taskId: true, period: true, task: { select: { title: true } } },
         })
       : [];
     const madeSet = new Set(madeKeys.map((k) => `${k.taskId}|${k.period}`));
     const missed = candidates
-      .filter((c) => !madeSet.has(`${c.task.id}|${c.day}`))
+      .filter((c) => {
+        if (madeSet.has(`${c.task.id}|${c.day}`)) return false;
+        const doneOnDay = madeKeys.filter((k) => k.period === c.day);
+        return !doneOnDay.some((k) => areMutuallyExclusive(c.task.title, k.task.title));
+      })
       .map(({ task, day, today }) => ({ id: task.id, title: task.title, description: task.description, timeWindow: task.timeWindow, day, points: makeupPoints(task.points, day, today) }));
 
     const tasks = all
@@ -169,6 +175,14 @@ router.put('/:id/done', requireAuth, validate(tickSchema), async (req, res, next
     }
     const existing = await prisma.taskCompletion.findUnique({ where: { taskId_userId_period: key }, select: { points: true } });
     if (existing) return res.json({ id: task.id, done, day, points: existing.points, comeback: false });
+    const periodCompletions = await prisma.taskCompletion.findMany({
+      where: { userId, period: key.period },
+      select: { task: { select: { id: true, title: true } } },
+    });
+    const conflict = periodCompletions.find((c) => c.task.id !== task.id && areMutuallyExclusive(task.title, c.task.title));
+    if (conflict) {
+      throw new HttpError(400, `أنجزت بالفعل «${conflict.task.title}» — لا يمكن الجمع بينهما`);
+    }
     const comeback = await isComeback(userId, day);
     const points = task.points + (comeback ? COMEBACK_BONUS : 0);
     // upsert keeps a double-tap from failing on the unique key.
@@ -213,6 +227,14 @@ router.put('/:id/makeup', requireAuth, validate(makeupSchema), async (req, res, 
     if (!done) {
       await prisma.taskCompletion.deleteMany({ where: { ...key, madeUp: true } });
       return res.json({ id: task.id, day, done, points: 0 });
+    }
+    const dayCompletions = await prisma.taskCompletion.findMany({
+      where: { userId: req.user!.id, period: day },
+      select: { task: { select: { id: true, title: true } } },
+    });
+    const conflict = dayCompletions.find((c) => c.task.id !== task.id && areMutuallyExclusive(task.title, c.task.title));
+    if (conflict) {
+      throw new HttpError(400, `أنجزت بالفعل «${conflict.task.title}» لذلك اليوم`);
     }
     const points = makeupPoints(task.points, day, today);
     const row = await prisma.taskCompletion.upsert({

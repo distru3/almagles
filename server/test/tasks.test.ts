@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, loginAs, prisma, resetDb } from './helpers.js';
 import { periodOf } from '../src/routes/tasks.js';
-import { DEFAULT_PRAYERS, appliesOn, effectiveDay, nightCutoff, notOpenYet, prayerClock, type TaskSchedule } from '../src/lib/taskSchedule.js';
+import { DEFAULT_PRAYERS, appliesOn, areMutuallyExclusive, effectiveDay, nightCutoff, notOpenYet, prayerClock, type TaskSchedule } from '../src/lib/taskSchedule.js';
 
 beforeEach(resetDb);
 
@@ -96,6 +96,18 @@ describe('schedules', () => {
     // A weekly task shows for any week overlapping its dates.
     expect(appliesOn(sched({ repeat: 'weekly', startDate: '2026-11-20' }), '2026-11-14')).toBe(true);
     expect(appliesOn(sched({ repeat: 'weekly', startDate: '2026-11-21' }), '2026-11-20')).toBe(false);
+  });
+
+  it('detects mutually exclusive congregation vs on-time tasks for the same prayer', () => {
+    expect(areMutuallyExclusive('صلاة الفجر في جماعة', 'صلاة الفجر في وقتها')).toBe(true);
+    expect(areMutuallyExclusive('الفجر في جماعة', 'الفجر في وقتها')).toBe(true);
+    expect(areMutuallyExclusive('صلاة الفجر جماعة', 'صلاة الفجر في وقتها')).toBe(true);
+    expect(areMutuallyExclusive('صلاة العصر في جماعة', 'صلاة العصر في وقتها')).toBe(true);
+    // Different prayers are not exclusive
+    expect(areMutuallyExclusive('صلاة الفجر في جماعة', 'صلاة العصر في وقتها')).toBe(false);
+    expect(areMutuallyExclusive('صلاة الفجر في جماعة', 'أذكار الصباح')).toBe(false);
+    // Identical tasks are not mutually exclusive with themselves
+    expect(areMutuallyExclusive('صلاة الفجر في جماعة', 'صلاة الفجر في جماعة')).toBe(false);
   });
 });
 
@@ -252,6 +264,35 @@ describe('ticking tasks', () => {
     expect((await v.put(`/api/tasks/${elsewhere.id}/done`, { date: today(), done: true })).status).toBe(400);
     expect((await v.put(`/api/tasks/${morning.id}/done`, { date: today(), time: '04:00', done: true })).status).toBe(400);
     expect((await v.put(`/api/tasks/${morning.id}/done`, { date: today(), time: '10:30', done: true })).status).toBe(200);
+  });
+
+  it('locks out mutually exclusive tasks (e.g. Fajr in congregation vs on-time)', async () => {
+    const m = await manager();
+    const jamaah = (await m.post('/api/tasks', { title: 'صلاة الفجر في جماعة', repeat: 'daily', points: 10 })).body.task;
+    const onTime = (await m.post('/api/tasks', { title: 'صلاة الفجر في وقتها', repeat: 'daily', points: 5 })).body.task;
+    const v = await member();
+
+    // Ticking Fajr in congregation succeeds
+    const res1 = await v.put(`/api/tasks/${jamaah.id}/done`, { date: today(), time: '06:00', done: true });
+    expect(res1.status).toBe(200);
+
+    // Ticking Fajr on time is rejected because congregation was already ticked
+    const res2 = await v.put(`/api/tasks/${onTime.id}/done`, { date: today(), time: '06:00', done: true });
+    expect(res2.status).toBe(400);
+    expect(res2.body.message).toContain('جماعة');
+
+    // Unticking congregation unlocks on-time
+    const res3 = await v.put(`/api/tasks/${jamaah.id}/done`, { date: today(), time: '06:00', done: false });
+    expect(res3.status).toBe(200);
+
+    // Now ticking on-time succeeds
+    const res4 = await v.put(`/api/tasks/${onTime.id}/done`, { date: today(), time: '06:00', done: true });
+    expect(res4.status).toBe(200);
+
+    // And congregation is locked out
+    const res5 = await v.put(`/api/tasks/${jamaah.id}/done`, { date: today(), time: '06:00', done: true });
+    expect(res5.status).toBe(400);
+    expect(res5.body.message).toContain('وقتها');
   });
 
   it('requires login', async () => {

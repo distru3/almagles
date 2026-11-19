@@ -141,3 +141,54 @@ export function notOpenYet(t: TaskSchedule, time: string, prayers: PrayerClock =
   if (!isOvernight(t)) return time < t.startTime;
   return time >= t.endTime && time < t.startTime;
 }
+
+/** Strips tashkeel and tatweel and folds letter variants so Arabic text matches reliably. */
+export function normalizeArabic(s: string): string {
+  return s
+    .replace(/[ً-ٰٟۖ-ۭـ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .toLowerCase();
+}
+
+const PRAYER_NAMES = [
+  ['فجر', 'صبح'],
+  ['ظهر'],
+  ['عصر'],
+  ['مغرب'],
+  ['عشاء'],
+];
+
+/**
+ * Tasks that are mutually exclusive for the same period (e.g. praying Fajr in congregation
+ * vs praying Fajr on time individually). Completing one locks out the other.
+ */
+export function areMutuallyExclusive(titleA: string, titleB: string): boolean {
+  if (titleA === titleB) return false;
+  const a = normalizeArabic(titleA);
+  const b = normalizeArabic(titleB);
+
+  const isJamaah = (s: string) => s.includes('جماع');
+  const isOnTime = (s: string) => s.includes('وقت') || s.includes('فرد');
+
+  const matchesOne = (isJamaah(a) && isOnTime(b)) || (isOnTime(a) && isJamaah(b));
+  if (!matchesOne) return false;
+
+  for (const aliases of PRAYER_NAMES) {
+    const aHas = aliases.some((p) => a.includes(p));
+    const bHas = aliases.some((p) => b.includes(p));
+    if (aHas && bHas) return true;
+  }
+  return false;
+}
+
+/** Finds any completed task in `tasks` that is mutually exclusive with `task`. */
+export function findConflictingTask<T extends { id: string; title: string; done?: boolean }>(
+  task: T,
+  tasks: T[],
+): T | undefined {
+  return tasks.find((other) => other.id !== task.id && !!other.done && areMutuallyExclusive(task.title, other.title));
+}
