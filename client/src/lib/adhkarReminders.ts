@@ -1,16 +1,14 @@
 import { api } from './api';
+import { loadPlace, loadSavedPlace, prayerTimes, type Place } from './prayerTimes';
+import type { AdhkarPrayerWard, AdhkarReminderSettings } from './types';
 
 export interface AdhkarReminderPrefs {
   enabled: boolean;
   timeZone?: string;
-  morning: {
-    enabled: boolean;
-    time: string; // "06:00"
-  };
-  evening: {
-    enabled: boolean;
-    time: string; // "16:30"
-  };
+  /** Minutes after Fajr, or a fixed clock time ("06:00"). */
+  morning: AdhkarPrayerWard;
+  /** Minutes after Asr, or a fixed clock time ("16:30"). */
+  evening: AdhkarPrayerWard;
   sleep: {
     enabled: boolean;
     time: string; // "22:30"
@@ -18,6 +16,10 @@ export interface AdhkarReminderPrefs {
 }
 
 const STORAGE_KEY = 'almagles_adhkar_reminders';
+
+/** Minutes after the prayer offered in «تنبيهات أوقات الأذكار». */
+export const PRAYER_OFFSETS = [0, 10, 20, 30, 45, 60];
+export const DEFAULT_OFFSET = 20;
 
 export function detectDeviceTimeZone(): string {
   try {
@@ -32,19 +34,19 @@ export function detectDeviceTimeZone(): string {
 export const DEFAULT_PREFS: AdhkarReminderPrefs = {
   enabled: false,
   timeZone: detectDeviceTimeZone(),
-  morning: {
-    enabled: true,
-    time: '06:00',
-  },
-  evening: {
-    enabled: true,
-    time: '16:30',
-  },
-  sleep: {
-    enabled: true,
-    time: '22:30',
-  },
+  morning: { enabled: true, time: '06:00', mode: 'prayer', offset: DEFAULT_OFFSET },
+  evening: { enabled: true, time: '16:30', mode: 'prayer', offset: DEFAULT_OFFSET },
+  sleep: { enabled: true, time: '22:30' },
 };
+
+function ward(raw: Partial<AdhkarPrayerWard> | undefined, fallback: AdhkarPrayerWard): AdhkarPrayerWard {
+  return {
+    enabled: Boolean(raw?.enabled ?? fallback.enabled),
+    time: raw?.time || fallback.time,
+    mode: raw?.mode === 'fixed' ? 'fixed' : 'prayer',
+    offset: Number.isInteger(raw?.offset) ? raw!.offset! : fallback.offset,
+  };
+}
 
 export function loadAdhkarPrefs(): AdhkarReminderPrefs {
   try {
@@ -54,14 +56,8 @@ export function loadAdhkarPrefs(): AdhkarReminderPrefs {
     return {
       enabled: Boolean(parsed.enabled),
       timeZone: parsed.timeZone || detectDeviceTimeZone(),
-      morning: {
-        enabled: Boolean(parsed.morning?.enabled ?? true),
-        time: parsed.morning?.time || '06:00',
-      },
-      evening: {
-        enabled: Boolean(parsed.evening?.enabled ?? true),
-        time: parsed.evening?.time || '16:30',
-      },
+      morning: ward(parsed.morning, DEFAULT_PREFS.morning),
+      evening: ward(parsed.evening, DEFAULT_PREFS.evening),
       sleep: {
         enabled: Boolean(parsed.sleep?.enabled ?? true),
         time: parsed.sleep?.time || '22:30',
@@ -80,17 +76,51 @@ export function saveAdhkarPrefs(prefs: AdhkarReminderPrefs): void {
   }
 }
 
+/**
+ * The place to time reminders for. If the member never chose a city on this
+ * device it's a guess from the time zone, flagged so the server won't let it
+ * replace a city they chose elsewhere.
+ */
+function placePayload(place?: Place) {
+  const chosen = place ?? loadSavedPlace();
+  const p = chosen ?? loadPlace();
+  return { lat: p.lat, lng: p.lng, method: p.method, label: p.label, guessed: !chosen };
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * When each reminder arrives today on this device's clock — the same rule as
+ * the server's `reminderTimes`: Fajr/Asr plus the offset, or the fixed time.
+ */
+export function todaysReminderTimes(prefs: AdhkarReminderPrefs, place: Place, now = new Date()) {
+  const iso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const prayers = prayerTimes(iso, place);
+  const clock = (hhmm: string) => {
+    const d = new Date(now);
+    d.setHours(Number(hhmm.slice(0, 2)), Number(hhmm.slice(3, 5)), 0, 0);
+    return d;
+  };
+  const after = (at: Date, minutes: number) => new Date(at.getTime() + minutes * 60_000);
+  return {
+    morning: prefs.morning.mode === 'prayer' ? after(prayers.fajr, prefs.morning.offset) : clock(prefs.morning.time),
+    evening: prefs.evening.mode === 'prayer' ? after(prayers.asr, prefs.evening.offset) : clock(prefs.evening.time),
+    sleep: clock(prefs.sleep.time),
+  };
+}
+
 export async function fetchServerAdhkarPrefs(): Promise<AdhkarReminderPrefs | null> {
   try {
     const deviceTz = detectDeviceTimeZone();
-    const res = await api<AdhkarReminderPrefs & { hasPushSubscription?: boolean }>(
-      `/adhkar/reminders?tz=${encodeURIComponent(deviceTz)}`
-    );
+    const p = placePayload();
+    const q = new URLSearchParams({ tz: deviceTz, lat: String(p.lat), lng: String(p.lng), method: p.method, label: p.label });
+    if (p.guessed) q.set('guessed', '1');
+    const res = await api<AdhkarReminderSettings>(`/adhkar/reminders?${q}`);
     const prefs: AdhkarReminderPrefs = {
       enabled: res.enabled,
       timeZone: res.timeZone || deviceTz,
-      morning: res.morning,
-      evening: res.evening,
+      morning: ward(res.morning, DEFAULT_PREFS.morning),
+      evening: ward(res.evening, DEFAULT_PREFS.evening),
       sleep: res.sleep,
     };
     saveAdhkarPrefs(prefs);
@@ -108,6 +138,7 @@ export async function saveServerAdhkarPrefs(prefs: AdhkarReminderPrefs): Promise
       body: {
         enabled: prefs.enabled,
         timeZone: tz,
+        place: placePayload(),
         morning: prefs.morning,
         evening: prefs.evening,
         sleep: prefs.sleep,
@@ -118,6 +149,15 @@ export async function saveServerAdhkarPrefs(prefs: AdhkarReminderPrefs): Promise
   } catch {
     saveAdhkarPrefs(prefs);
     return false;
+  }
+}
+
+/** The member chose a city (here or on the tasks page): move their adhkar reminders with it. */
+export async function syncAdhkarPlace(place: Place): Promise<void> {
+  try {
+    await api('/adhkar/reminders', { method: 'PUT', body: { timeZone: detectDeviceTimeZone(), place: placePayload(place) } });
+  } catch {
+    /* not signed in or offline — the next visit to the adhkar page syncs it */
   }
 }
 

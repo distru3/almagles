@@ -7,6 +7,7 @@ import {
   todayInTz,
 } from '../src/lib/adhkarNotifications.js';
 import { zonedTime } from '../src/lib/scheduleNotifications.js';
+import { prayerTimes } from '../src/lib/prayerTimes.js';
 
 const realSend = pushTransport.send;
 let sent: { endpoint: string; payload: any }[] = [];
@@ -196,5 +197,99 @@ describe('sendDueAdhkarReminders worker', () => {
     await flushPushes();
     expect(sent).toHaveLength(1);
     expect(sent[0].endpoint).toContain('cairo@test.local');
+  });
+});
+
+describe('prayer-based adhkar reminders', () => {
+  const CASABLANCA = { lat: 33.5731, lng: -7.5898, method: 'morocco', label: 'الدار البيضاء، المغرب' };
+  const CAIRO = { lat: 30.0444, lng: 31.2357, method: 'egypt', label: 'القاهرة، مصر' };
+  const DAY = '2026-11-20';
+
+  it('works out Fajr and Asr for the member’s city', () => {
+    const casa = prayerTimes(DAY, { lat: CASABLANCA.lat, lng: CASABLANCA.lng, method: 'morocco' });
+    const cairo = prayerTimes(DAY, { lat: CAIRO.lat, lng: CAIRO.lng, method: 'egypt' });
+    // Published timetables give Casablanca 06:35/16:00 (UTC+1) and Cairo 04:53/14:38 (UTC+2), within a few minutes.
+    const near = (d: Date, iso: string) => expect(Math.abs(d.getTime() - new Date(iso).getTime())).toBeLessThanOrEqual(6 * 60_000);
+    near(casa.fajr, `${DAY}T05:35:00Z`);
+    near(casa.asr, `${DAY}T15:02:00Z`);
+    near(cairo.fajr, `${DAY}T02:53:00Z`);
+    near(cairo.asr, `${DAY}T12:38:00Z`);
+  });
+
+  it('sends morning adhkar after Fajr where the member is, not at a fixed clock time', async () => {
+    const c = await member('casa@test.local');
+    const res = await c.put('/api/adhkar/reminders', {
+      enabled: true,
+      timeZone: 'Africa/Casablanca',
+      place: CASABLANCA,
+      morning: { enabled: true, time: '06:00', mode: 'prayer', offset: 20 },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.place).toMatchObject({ lat: CASABLANCA.lat, method: 'morocco', label: CASABLANCA.label });
+    expect(res.body.morning).toMatchObject({ mode: 'prayer', offset: 20 });
+
+    const fajr = prayerTimes(DAY, { lat: CASABLANCA.lat, lng: CASABLANCA.lng, method: 'morocco' }).fajr;
+
+    // 06:00 on the clock is before Fajr in Casablanca in November — nothing yet.
+    expect(await sendDueAdhkarReminders(zonedTime(DAY, '06:00', 'Africa/Casablanca'))).toBe(0);
+    // Fajr itself, but the member asked for 20 minutes after it.
+    expect(await sendDueAdhkarReminders(new Date(fajr.getTime() + 10 * 60_000))).toBe(0);
+    expect(await sendDueAdhkarReminders(new Date(fajr.getTime() + 21 * 60_000))).toBe(1);
+
+    await flushPushes();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].payload.tag).toBe('adhkar-morning');
+  });
+
+  it('sends evening adhkar after Asr where the member is', async () => {
+    const c = await member('cairo-asr@test.local');
+    await c.put('/api/adhkar/reminders', {
+      enabled: true,
+      timeZone: 'Africa/Cairo',
+      place: CAIRO,
+      morning: { enabled: false, time: '06:00' },
+      evening: { enabled: true, time: '16:30', mode: 'prayer', offset: 0 },
+      sleep: { enabled: false, time: '22:30' },
+    });
+    const asr = prayerTimes(DAY, { lat: CAIRO.lat, lng: CAIRO.lng, method: 'egypt' }).asr;
+    expect(await sendDueAdhkarReminders(new Date(asr.getTime() - 60_000))).toBe(0);
+    expect(await sendDueAdhkarReminders(new Date(asr.getTime() + 60_000))).toBe(1);
+    await flushPushes();
+    expect(sent[0].payload.tag).toBe('adhkar-evening');
+  });
+
+  it('keeps a fixed clock time when the member chooses one', async () => {
+    const c = await member('fixed@test.local');
+    await c.put('/api/adhkar/reminders', {
+      enabled: true,
+      timeZone: 'Africa/Casablanca',
+      place: CASABLANCA,
+      morning: { enabled: true, time: '07:30', mode: 'fixed' },
+    });
+    expect(await sendDueAdhkarReminders(zonedTime(DAY, '07:31', 'Africa/Casablanca'))).toBe(1);
+  });
+
+  it('does not let a guessed place overwrite the city the member chose', async () => {
+    const c = await member('guess@test.local');
+    await c.put('/api/adhkar/reminders', { enabled: true, place: CASABLANCA });
+
+    // Another device with no city chosen guesses Cairo from its time zone.
+    const q = `lat=${CAIRO.lat}&lng=${CAIRO.lng}&method=egypt&guessed=1`;
+    const res = await c.get(`/api/adhkar/reminders?${q}`);
+    expect(res.body.place).toMatchObject({ lat: CASABLANCA.lat, method: 'morocco' });
+
+    // Choosing a city on that device does move the reminders.
+    const chosen = await c.get(`/api/adhkar/reminders?lat=${CAIRO.lat}&lng=${CAIRO.lng}&method=egypt`);
+    expect(chosen.body.place).toMatchObject({ lat: CAIRO.lat, method: 'egypt' });
+  });
+
+  it('rejects an impossible place or offset', async () => {
+    const c = await member('bad@test.local');
+    const badPlace = await c.put('/api/adhkar/reminders', { place: { lat: 120, lng: 0, method: 'egypt' } });
+    expect(badPlace.status).toBe(400);
+    const badMethod = await c.put('/api/adhkar/reminders', { place: { lat: 30, lng: 31, method: 'nowhere' } });
+    expect(badMethod.status).toBe(400);
+    const badOffset = await c.put('/api/adhkar/reminders', { morning: { enabled: true, time: '06:00', offset: 500 } });
+    expect(badOffset.status).toBe(400);
   });
 });

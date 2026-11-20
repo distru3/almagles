@@ -1,8 +1,9 @@
 /**
- * Maghrib, Isha and Fajr for «قيام الليل», worked out from the sun's position
- * (the usual astronomical method, as in PrayTimes.org) for the member's city
- * and their country's calculation method. Accurate to a minute or two — the
- * local mosque's timetable always wins.
+ * Fajr, Asr, Maghrib and Isha — for «قيام الليل» and «تنبيهات أوقات الأذكار» —
+ * worked out from the sun's position (the usual astronomical method, as in
+ * PrayTimes.org) for the member's city and their country's calculation method.
+ * Accurate to a minute or two — the local mosque's timetable always wins.
+ * `server/src/lib/prayerTimes.ts` repeats the astronomy; keep the two in step.
  */
 
 export type MethodId = 'egypt' | 'makkah' | 'mwl' | 'kuwait' | 'qatar' | 'gulf' | 'morocco' | 'algeria' | 'tunisia' | 'jordan';
@@ -95,14 +96,21 @@ export function cityPlace(city: City): Place {
   return { cityId: city.id, label: `${city.name}، ${city.country}`, lat: city.lat, lng: city.lng, method: city.method };
 }
 
-/** The member's chosen place, else a guess from their time zone, else Cairo. */
-export function loadPlace(): Place {
+/** The place the member chose on this device, or null if they never did. */
+export function loadSavedPlace(): Place | null {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as Place | null;
     if (saved && Number.isFinite(saved.lat) && Number.isFinite(saved.lng) && saved.method in METHODS) return saved;
   } catch {
-    /* storage blocked or corrupt — fall through to a guess */
+    /* storage blocked or corrupt */
   }
+  return null;
+}
+
+/** The member's chosen place, else a guess from their time zone, else Cairo. */
+export function loadPlace(): Place {
+  const saved = loadSavedPlace();
+  if (saved) return saved;
   let zone = '';
   try {
     zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -149,24 +157,26 @@ function sun(jd: number) {
 
 export interface DayTimes {
   fajr: Date;
+  asr: Date;
   maghrib: Date;
   isha: Date;
 }
 
-/** Fajr, Maghrib and Isha on the civil date `iso` ("2026-11-15") at `place`. */
+/** Fajr, Asr, Maghrib and Isha on the civil date `iso` ("2026-11-15") at `place`. */
 export function prayerTimes(iso: string, place: Place): DayTimes {
   const [y, m, d] = iso.split('-').map(Number);
   const method = METHODS[place.method];
   const jd = julian(y, m, d) - place.lng / (15 * 24);
   const lat = rad(place.lat);
 
-  /** Hours (local solar time) when the sun is `angle`° below the horizon, before or after noon. */
-  const at = (angle: number, guess: number, before: boolean) => {
+  /** Hours (local solar time) when the sun is `angle`° below the horizon (negative: above), before or after noon. */
+  const at = (angle: number | ((decl: number) => number), guess: number, before: boolean) => {
     let t = guess;
     for (let i = 0; i < 2; i++) {
       const { decl, eqt } = sun(jd + t / 24);
+      const a = typeof angle === 'number' ? angle : angle(decl);
       const noon = fix(12 - eqt, 24);
-      const cos = (-Math.sin(rad(angle)) - Math.sin(rad(decl)) * Math.sin(lat)) / (Math.cos(rad(decl)) * Math.cos(lat));
+      const cos = (-Math.sin(rad(a)) - Math.sin(rad(decl)) * Math.sin(lat)) / (Math.cos(rad(decl)) * Math.cos(lat));
       const span = deg(Math.acos(Math.min(1, Math.max(-1, cos)))) / 15;
       t = noon + (before ? -span : span);
     }
@@ -174,12 +184,14 @@ export function prayerTimes(iso: string, place: Place): DayTimes {
   };
 
   const fajr = at(method.fajr, 5, true);
+  // Asr: an object's shadow equals its length plus its noon shadow (the majority's reckoning).
+  const asr = at((decl) => -deg(Math.atan(1 / (1 + Math.tan(Math.abs(lat - rad(decl)))))), 15, false);
   const maghrib = at(0.833, 18, false);
   const isha = 'angle' in method.isha ? at(method.isha.angle, 18, false) : maghrib + method.isha.minutes / 60;
   // Local solar hours → an instant: subtract the longitude's offset from UTC.
   const base = Date.UTC(y, m - 1, d);
   const toDate = (h: number) => new Date(base + Math.round((h - place.lng / 15) * 60) * 60_000);
-  return { fajr: toDate(fajr), maghrib: toDate(maghrib), isha: toDate(isha) };
+  return { fajr: toDate(fajr), asr: toDate(asr), maghrib: toDate(maghrib), isha: toDate(isha) };
 }
 
 export interface Night {

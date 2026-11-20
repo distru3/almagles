@@ -167,11 +167,21 @@ export type NotificationType =
   | 'adhkar_evening'
   | 'adhkar_sleep';
 
+/** «أذكار الصباح» / «أذكار المساء»: minutes after Fajr / Asr where the member is, or a fixed clock time. */
+export interface AdhkarPrayerWard {
+  enabled: boolean;
+  time: string;
+  mode: 'prayer' | 'fixed';
+  offset: number;
+}
+
 export interface AdhkarReminderSettings {
   enabled: boolean;
   timeZone: string;
-  morning: { enabled: boolean; time: string };
-  evening: { enabled: boolean; time: string };
+  /** Where the reminders are timed for; null until the member's browser has sent it. */
+  place: { lat: number; lng: number; method: string; label: string | null } | null;
+  morning: AdhkarPrayerWard;
+  evening: AdhkarPrayerWard;
   sleep: { enabled: boolean; time: string };
   hasPushSubscription?: boolean;
 }

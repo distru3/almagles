@@ -19,6 +19,7 @@ import { ADHKAR_DATA } from '../lib/adhkarData';
 import OrnateDivider from '../components/adhkar/OrnateDivider';
 import DhikrCounter from '../components/adhkar/DhikrCounter';
 import AdhkarReminderCard from '../components/adhkar/AdhkarReminderCard';
+import { fetchServerAdhkarPrefs } from '../lib/adhkarReminders';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import type { MyTask, MyTasks } from '../lib/types';
@@ -102,6 +103,12 @@ export default function AdhkarPage() {
   useEffect(() => {
     void loadMemberTasks();
   }, [loadMemberTasks]);
+
+  // Keep «تنبيهات أوقات الأذكار» timed for the city and time zone this device is in,
+  // even if the member never reopens the reminders card.
+  useEffect(() => {
+    if (user) void fetchServerAdhkarPrefs();
+  }, [user]);
 
   // Find matching task for current active adhkar
   const matchingTask = useMemo(() => {
