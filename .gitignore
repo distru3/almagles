@@ -13,3 +13,6 @@ server/uploads/
 # Local tools and screenshots
 .claude/
 screenshots-mostaql/
+
+# Generated from client/quran/ by client/scripts/quran-pages.mjs at dev/build time
+client/public/quran/

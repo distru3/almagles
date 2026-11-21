@@ -7,6 +7,7 @@ import { todayISO } from '../../lib/dates';
 import { isInternalPath, normalizeUrl } from '../../lib/url';
 import { DAWAM, NO_WASTE, SADDIDU, fadailFor, type Text } from '../../lib/fadail';
 import { formatClock, loadPlace, prayerClockFor, type Place } from '../../lib/prayerTimes';
+import { quranLinkFor } from '../../lib/quran';
 import { REPEAT_LABELS, areMutuallyExclusive, findConflictingTask, nowHHMM, opensAt, phaseKey, scheduleSummary } from '../../lib/taskSchedule';
 import Spinner from '../Spinner';
 import FadlText from './FadlText';
@@ -307,6 +308,12 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
                   <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
                   فضلها
                 </button>
+              )}
+              {!compact && quranLinkFor(task) && (
+                <Link to={quranLinkFor(task)!} className="inline-flex items-center gap-1 text-accent hover:text-accent-strong">
+                  <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  افتح المصحف
+                </Link>
               )}
               {task.linkUrl && (
                 <a

@@ -18,6 +18,7 @@ import { ProfileSettingsPage, PublicProfilePage } from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
 import TasksPage from './pages/TasksPage';
 import AdhkarPage from './pages/AdhkarPage';
+import QuranPage from './pages/QuranPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -70,6 +71,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/adhkar" element={<AdhkarPage />} />
+          <Route path="/quran" element={<QuranPage />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/post/:id" element={<PostPage />} />
           <Route path="/login" element={<Login />} />

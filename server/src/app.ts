@@ -21,6 +21,7 @@ import profileRoutes from './routes/profile.js';
 import notificationRoutes from './routes/notifications.js';
 import pushRoutes from './routes/push.js';
 import adhkarRoutes from './routes/adhkar.js';
+import quranRoutes from './routes/quran.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 import { LOCAL_UPLOADS_DIR } from './lib/postImages.js';
 
@@ -88,6 +89,8 @@ if (isProd) {
   app.use('/api/auth/reset-password', limiter(15, 10));
   app.use('/api/comments', limiter(10, 60));
   app.use('/api/push', limiter(15, 30));
+  // «علاماتي»: a member moves their marks often while reading, but not hundreds of times.
+  app.use('/api/quran', limiter(15, 300));
   app.use('/api/posts/:postId/reactions', limiter(10, 120));
   app.use('/api/posts', limiter(60, 120));
 }
@@ -107,6 +110,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/adhkar', adhkarRoutes);
+app.use('/api/quran', quranRoutes);
 
 app.use('/api', notFoundApi);
 
