@@ -1,11 +1,14 @@
 import { prisma } from '../db.js';
 import { pushToUsers } from './push.js';
 import { zonedTime, isTimeZone } from './scheduleNotifications.js';
+import { isMethodId, prayerTimes, type PrayerPlace } from './prayerTimes.js';
+import type { AdhkarTiming } from '@prisma/client';
 
 /**
  * Adhkar reminders:
  * Daily push notifications for morning, evening, and sleep adhkar.
- * Checked every 30s. Each user's local date/time is respected using their timeZone.
+ * Checked every 30s. Each member's local date comes from their time zone, and
+ * morning/evening follow the prayer times at their place (see reminderTimes).
  */
 
 export const ADHKAR_REMINDER_TICK_MS = 30 * 1000;
@@ -48,6 +51,67 @@ export function todayInTz(tz: string, now = new Date()): string {
   }
 }
 
+type AdhkarKind = keyof typeof ADHKAR_NOTIFICATIONS;
+
+/** The reminder fields the worker and the route need to work out today's times. */
+export interface ReminderTiming {
+  morningEnabled: boolean;
+  morningTime: string;
+  morningMode: AdhkarTiming;
+  morningOffset: number;
+  eveningEnabled: boolean;
+  eveningTime: string;
+  eveningMode: AdhkarTiming;
+  eveningOffset: number;
+  sleepEnabled: boolean;
+  sleepTime: string;
+  lat: number | null;
+  lng: number | null;
+  method: string | null;
+}
+
+export function reminderPlace(r: Pick<ReminderTiming, 'lat' | 'lng' | 'method'>): PrayerPlace | null {
+  return r.lat != null && r.lng != null && isMethodId(r.method) ? { lat: r.lat, lng: r.lng, method: r.method } : null;
+}
+
+/**
+ * When each reminder is due on the member's local date `day`. «أذكار الصباح» follows
+ * Fajr and «أذكار المساء» follows Asr where the member is, so they never arrive
+ * before the prayer — Casablanca's Fajr is an hour later than Riyadh's on the
+ * clock. Without a known place, or when the member chose a clock time, the fixed
+ * time in their time zone is used. «أذكار النوم» is always the member's own bedtime.
+ */
+export function reminderTimes(r: ReminderTiming, day: string, tz: string): Record<AdhkarKind, Date | null> {
+  const place = reminderPlace(r);
+  const prayers = place ? prayerTimes(day, place) : null;
+  const after = (at: Date, minutes: number) => new Date(at.getTime() + minutes * 60_000);
+  return {
+    morning: !r.morningEnabled
+      ? null
+      : prayers && r.morningMode === 'prayer'
+        ? after(prayers.fajr, r.morningOffset)
+        : zonedTime(day, r.morningTime, tz),
+    evening: !r.eveningEnabled
+      ? null
+      : prayers && r.eveningMode === 'prayer'
+        ? after(prayers.asr, r.eveningOffset)
+        : zonedTime(day, r.eveningTime, tz),
+    sleep: r.sleepEnabled ? zonedTime(day, r.sleepTime, tz) : null,
+  };
+}
+
+const LAST_SENT = {
+  morning: 'lastMorningDate',
+  evening: 'lastEveningDate',
+  sleep: 'lastSleepDate',
+} as const;
+
+const ENABLED = {
+  morning: 'morningEnabled',
+  evening: 'eveningEnabled',
+  sleep: 'sleepEnabled',
+} as const;
+
 /** Sends all due adhkar reminders across all subscribed members. */
 export async function sendDueAdhkarReminders(now = new Date()): Promise<number> {
   const active = await prisma.adhkarReminder.findMany({
@@ -59,119 +123,45 @@ export async function sendDueAdhkarReminders(now = new Date()): Promise<number> 
   for (const item of active) {
     const tz = isTimeZone(item.timeZone) ? item.timeZone : 'Asia/Riyadh';
     const userToday = todayInTz(tz, now);
+    const due = reminderTimes(item, userToday, tz);
 
-    // 1. Morning
-    if (item.morningEnabled && item.lastMorningDate !== userToday) {
-      const targetUtc = zonedTime(userToday, item.morningTime, tz);
-      const diff = now.getTime() - targetUtc.getTime();
-      if (diff >= 0 && diff <= ADHKAR_REMINDER_GRACE_MS) {
-        const claimed = await prisma.adhkarReminder.updateMany({
-          where: {
-            id: item.id,
-            enabled: true,
-            morningEnabled: true,
-            OR: [{ lastMorningDate: null }, { lastMorningDate: { not: userToday } }],
+    for (const kind of Object.keys(ADHKAR_NOTIFICATIONS) as AdhkarKind[]) {
+      const target = due[kind];
+      if (!target || item[LAST_SENT[kind]] === userToday) continue;
+      const diff = now.getTime() - target.getTime();
+      if (diff < 0 || diff > ADHKAR_REMINDER_GRACE_MS) continue;
+
+      // Claim the day first so two overlapping ticks can't both send it.
+      const lastSent = LAST_SENT[kind];
+      const claimed = await prisma.adhkarReminder.updateMany({
+        where: {
+          id: item.id,
+          enabled: true,
+          [ENABLED[kind]]: true,
+          OR: [{ [lastSent]: null }, { [lastSent]: { not: userToday } }],
+        },
+        data: { [lastSent]: userToday },
+      });
+      if (claimed.count === 0) continue;
+
+      const config = ADHKAR_NOTIFICATIONS[kind];
+      const notif = await prisma.notification.create({
+        data: { type: config.type, userId: item.userId },
+        select: { id: true },
+      });
+
+      pushToUsers([
+        {
+          userId: item.userId,
+          payload: {
+            title: config.title,
+            body: config.body,
+            url: `${config.url}&n=${notif.id}`,
+            tag: config.tag,
           },
-          data: { lastMorningDate: userToday },
-        });
-
-        if (claimed.count > 0) {
-          const config = ADHKAR_NOTIFICATIONS.morning;
-          const notif = await prisma.notification.create({
-            data: { type: config.type, userId: item.userId },
-            select: { id: true },
-          });
-
-          pushToUsers([
-            {
-              userId: item.userId,
-              payload: {
-                title: config.title,
-                body: config.body,
-                url: `${config.url}&n=${notif.id}`,
-                tag: config.tag,
-              },
-            },
-          ]);
-          sent += 1;
-        }
-      }
-    }
-
-    // 2. Evening
-    if (item.eveningEnabled && item.lastEveningDate !== userToday) {
-      const targetUtc = zonedTime(userToday, item.eveningTime, tz);
-      const diff = now.getTime() - targetUtc.getTime();
-      if (diff >= 0 && diff <= ADHKAR_REMINDER_GRACE_MS) {
-        const claimed = await prisma.adhkarReminder.updateMany({
-          where: {
-            id: item.id,
-            enabled: true,
-            eveningEnabled: true,
-            OR: [{ lastEveningDate: null }, { lastEveningDate: { not: userToday } }],
-          },
-          data: { lastEveningDate: userToday },
-        });
-
-        if (claimed.count > 0) {
-          const config = ADHKAR_NOTIFICATIONS.evening;
-          const notif = await prisma.notification.create({
-            data: { type: config.type, userId: item.userId },
-            select: { id: true },
-          });
-
-          pushToUsers([
-            {
-              userId: item.userId,
-              payload: {
-                title: config.title,
-                body: config.body,
-                url: `${config.url}&n=${notif.id}`,
-                tag: config.tag,
-              },
-            },
-          ]);
-          sent += 1;
-        }
-      }
-    }
-
-    // 3. Sleep
-    if (item.sleepEnabled && item.lastSleepDate !== userToday) {
-      const targetUtc = zonedTime(userToday, item.sleepTime, tz);
-      const diff = now.getTime() - targetUtc.getTime();
-      if (diff >= 0 && diff <= ADHKAR_REMINDER_GRACE_MS) {
-        const claimed = await prisma.adhkarReminder.updateMany({
-          where: {
-            id: item.id,
-            enabled: true,
-            sleepEnabled: true,
-            OR: [{ lastSleepDate: null }, { lastSleepDate: { not: userToday } }],
-          },
-          data: { lastSleepDate: userToday },
-        });
-
-        if (claimed.count > 0) {
-          const config = ADHKAR_NOTIFICATIONS.sleep;
-          const notif = await prisma.notification.create({
-            data: { type: config.type, userId: item.userId },
-            select: { id: true },
-          });
-
-          pushToUsers([
-            {
-              userId: item.userId,
-              payload: {
-                title: config.title,
-                body: config.body,
-                url: `${config.url}&n=${notif.id}`,
-                tag: config.tag,
-              },
-            },
-          ]);
-          sent += 1;
-        }
-      }
+        },
+      ]);
+      sent += 1;
     }
   }
 

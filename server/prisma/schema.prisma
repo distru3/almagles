@@ -387,6 +387,12 @@ model TaskExcuse {
 }
 
 /// A member's reminder times and schedule for morning, evening, and sleep adhkar.
+/// «تنبيهات أوقات الأذكار»: minutes after the prayer (Fajr/Asr), or a fixed clock time.
+enum AdhkarTiming {
+  prayer
+  fixed
+}
+
 model AdhkarReminder {
   id              String   @id @default(cuid())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -399,6 +405,16 @@ model AdhkarReminder {
   eveningTime     String   @default("16:30")
   sleepEnabled    Boolean  @default(true)
   sleepTime       String   @default("22:30")
+  /// Morning and evening follow Fajr and Asr at the member's place unless they pick a clock time.
+  morningMode     AdhkarTiming @default(prayer)
+  morningOffset   Int          @default(20)
+  eveningMode     AdhkarTiming @default(prayer)
+  eveningOffset   Int          @default(20)
+  /// Where the member prays (from their browser); null until it's known — fixed times are used meanwhile.
+  lat             Float?
+  lng             Float?
+  method          String?
+  placeLabel      String?
   lastMorningDate String?
   lastEveningDate String?
   lastSleepDate   String?

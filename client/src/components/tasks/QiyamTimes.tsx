@@ -1,6 +1,8 @@
-import { useId, useMemo, useState } from 'react';
-import { LocateFixed, MapPin, MoonStar } from 'lucide-react';
-import { CITIES, METHODS, cityPlace, formatClock, nightOf, savePlace, type MethodId, type Place } from '../../lib/prayerTimes';
+import { useMemo, useState } from 'react';
+import { MapPin, MoonStar } from 'lucide-react';
+import { METHODS, formatClock, nightOf, type Place } from '../../lib/prayerTimes';
+import { syncAdhkarPlace } from '../../lib/adhkarReminders';
+import PlacePicker from '../PlacePicker';
 
 /**
  * Tonight's qiyam window for the member's city: from Isha to Fajr, with the
@@ -9,36 +11,14 @@ import { CITIES, METHODS, cityPlace, formatClock, nightOf, savePlace, type Metho
  */
 export default function QiyamTimes({ day, place, onPlace }: { day: string; place: Place; onPlace: (p: Place) => void }) {
   const [editing, setEditing] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
   const night = useMemo(() => nightOf(day, place), [day, place]);
-  const uid = useId();
   const now = Date.now();
   const inLastThird = now >= night.lastThird.getTime() && now < night.fajr.getTime();
 
+  // The adhkar reminders follow the same city, so tell the server too.
   const choose = (p: Place) => {
-    savePlace(p);
     onPlace(p);
-  };
-
-  const locate = () => {
-    if (!('geolocation' in navigator)) {
-      setGeoError('متصفحك لا يدعم تحديد الموقع');
-      return;
-    }
-    setLocating(true);
-    setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        choose({ cityId: null, label: 'موقعي الحالي', lat: pos.coords.latitude, lng: pos.coords.longitude, method: place.method });
-      },
-      () => {
-        setLocating(false);
-        setGeoError('تعذّر تحديد موقعك — اختر مدينتك من القائمة');
-      },
-      { timeout: 10_000, maximumAge: 86_400_000 },
-    );
+    void syncAdhkarPlace(p);
   };
 
   const steps = [
@@ -71,55 +51,7 @@ export default function QiyamTimes({ day, place, onPlace }: { day: string; place
           {editing ? 'تم' : 'تغيير المدينة'}
         </button>
       </div>
-      {editing && (
-        <div className="mt-2 grid gap-2 border-t border-line pt-2 sm:grid-cols-2">
-          <div>
-            <label className="label !text-xs" htmlFor={`city-${uid}`}>
-              المدينة
-            </label>
-            <select
-              id={`city-${uid}`}
-              className="input !h-10 !py-1"
-              value={place.cityId ?? ''}
-              onChange={(e) => {
-                const city = CITIES.find((c) => c.id === e.target.value);
-                if (city) choose(cityPlace(city));
-              }}
-            >
-              {place.cityId === null && <option value="">موقعي الحالي</option>}
-              {[...new Set(CITIES.map((c) => c.country))].map((country) => (
-                <optgroup key={country} label={country}>
-                  {CITIES.filter((c) => c.country === country).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label !text-xs" htmlFor={`method-${uid}`}>
-              طريقة الحساب
-            </label>
-            <select id={`method-${uid}`} className="input !h-10 !py-1" value={place.method} onChange={(e) => choose({ ...place, method: e.target.value as MethodId })}>
-              {(Object.keys(METHODS) as MethodId[]).map((m) => (
-                <option key={m} value={m}>
-                  {METHODS[m].name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <button type="button" onClick={locate} disabled={locating} className="inline-flex items-center gap-1.5 text-accent hover:text-accent-strong disabled:opacity-60">
-              <LocateFixed className="h-4 w-4" aria-hidden="true" />
-              {locating ? 'جارٍ تحديد موقعك…' : 'استخدم موقعي الحالي'}
-            </button>
-            {geoError && <p className="mt-1 text-danger">{geoError}</p>}
-            <p className="mt-1 text-muted">المواقيت محسوبة فلكيًا وقد تختلف دقيقة أو دقيقتين — والعبرة بتقويم بلدك ومسجدك.</p>
-          </div>
-        </div>
-      )}
+      {editing && <PlacePicker place={place} onPlace={choose} />}
     </div>
   );
 }
