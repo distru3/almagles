@@ -9,7 +9,7 @@ import NotificationBell from './NotificationBell';
 import { useNotifications } from '../context/NotificationsContext';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `inline-flex items-center gap-1.5 py-2 font-display text-[16px] transition ${
+  `inline-flex items-center gap-1.5 whitespace-nowrap py-2 font-display text-[16px] transition ${
     isActive ? 'text-accent' : 'text-fg-2 hover:text-fg'
   }`;
 
@@ -45,58 +45,69 @@ export default function Navbar() {
     navigate('/');
   };
 
-  const roleLinks = (onClick?: () => void) => (
-    <>
-      {user?.role === 'admin' && (
-        <NavLink to="/admin" className={navLinkClass} onClick={onClick}>
-          <Shield className="h-4 w-4" />
-          لوحة التحكم
-        </NavLink>
-      )}
-      {user?.role === 'writer' && (
-        <NavLink to="/write" className={navLinkClass} onClick={onClick}>
-          <PenLine className="h-4 w-4" />
-          النشر
-        </NavLink>
-      )}
-      {user && user.role !== 'admin' && user.canManageSchedule && (
-        <NavLink to="/manage/schedule" className={navLinkClass} onClick={onClick}>
-          <CalendarDays className="h-4 w-4" />
-          إدارة الجدول
-        </NavLink>
-      )}
-    </>
-  );
+  /**
+   * Admin and writer links. In the desktop bar (`compact`) they're icons, named in a
+   * tooltip and for screen readers: the page is never wider than the 1180px container,
+   * so with their words the bar ran into the search and account controls.
+   */
+  const roleLinks = (onClick?: () => void, compact = false) => {
+    const label = (text: string) => <span className={compact ? 'sr-only' : undefined}>{text}</span>;
+    return (
+      <>
+        {user?.role === 'admin' && (
+          <NavLink to="/admin" className={navLinkClass} onClick={onClick} title={compact ? 'لوحة التحكم' : undefined}>
+            <Shield className="h-4 w-4" />
+            {label('لوحة التحكم')}
+          </NavLink>
+        )}
+        {user?.role === 'writer' && (
+          <NavLink to="/write" className={navLinkClass} onClick={onClick} title={compact ? 'النشر' : undefined}>
+            <PenLine className="h-4 w-4" />
+            {label('النشر')}
+          </NavLink>
+        )}
+        {user && user.role !== 'admin' && user.canManageSchedule && (
+          <NavLink to="/manage/schedule" className={navLinkClass} onClick={onClick} title={compact ? 'إدارة الجدول' : undefined}>
+            <CalendarDays className="h-4 w-4" />
+            {label('إدارة الجدول')}
+          </NavLink>
+        )}
+      </>
+    );
+  };
 
   return (
     <header className="site-header sticky top-0 z-40">
       <div className="container-site flex h-[4.5rem] items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-8">
+        <div className="flex min-w-0 items-center gap-6">
           <Link to="/" className="flex shrink-0 items-center gap-2.5 text-fg" onClick={() => setOpen(false)}>
             <Logo className="h-10 w-auto shrink-0" />
             <span className="font-display text-[22px] font-bold sm:text-[26px]">رجال الأمة</span>
           </Link>
-          <nav aria-label="التنقل الرئيسي" className="hidden items-center gap-6 lg:flex">
+          <nav aria-label="التنقل الرئيسي" className="hidden items-center gap-5 xl:flex">
             <NavLink to="/" className={navLinkClass} end>
               الرئيسية
             </NavLink>
-            <a href="/#schedule" className="font-display text-[16px] text-fg-2 transition hover:text-fg">
+            <a href="/#schedule" className="whitespace-nowrap font-display text-[16px] text-fg-2 transition hover:text-fg">
               الجدول
             </a>
             <NavLink to="/adhkar" className={navLinkClass}>
               الأذكار
+            </NavLink>
+            <NavLink to="/quran" className={navLinkClass}>
+              المصحف
             </NavLink>
             {user && (
               <NavLink to="/tasks" className={navLinkClass}>
                 مهامي
               </NavLink>
             )}
-            {roleLinks()}
+            {roleLinks(undefined, true)}
           </nav>
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <div className="hidden w-52 sm:block lg:w-60">
+          <div className="hidden w-48 sm:block">
             <SearchInput />
           </div>
           <button
@@ -125,8 +136,12 @@ export default function Navbar() {
 
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
-              <Link to="/profile" className="flex items-center gap-2 rounded-full py-1 pe-1 ps-3 font-display text-sm text-fg-2 transition hover:bg-surface-2 hover:text-fg" title="الملف الشخصي">
-                <span className="hidden md:inline">{user.name}</span>
+              <Link
+                to="/profile"
+                className="flex items-center rounded-full p-1 text-fg-2 transition hover:bg-surface-2 hover:text-fg"
+                title={`الملف الشخصي — ${user.name}`}
+                aria-label={`الملف الشخصي — ${user.name}`}
+              >
                 <Avatar name={user.name} src={user.avatarUrl} size="sm" />
               </Link>
               <button onClick={handleLogout} className="btn-outline !min-h-10 !px-4 !text-sm">
@@ -146,7 +161,7 @@ export default function Navbar() {
           )}
 
           <button
-            className={`${iconButton} lg:hidden`}
+            className={`${iconButton} xl:hidden`}
             onClick={() => {
               setOpen((v) => !v);
               setMobileSearchOpen(false);
@@ -166,7 +181,7 @@ export default function Navbar() {
       )}
 
       {open && (
-        <div className="border-t border-line bg-canvas lg:hidden">
+        <div className="border-t border-line bg-canvas xl:hidden">
           <nav aria-label="القائمة" className="container-site flex flex-col gap-1 py-3">
             <NavLink to="/" className={navLinkClass} end onClick={() => setOpen(false)}>
               الرئيسية
@@ -176,6 +191,9 @@ export default function Navbar() {
             </a>
             <NavLink to="/adhkar" className={navLinkClass} onClick={() => setOpen(false)}>
               الأذكار
+            </NavLink>
+            <NavLink to="/quran" className={navLinkClass} onClick={() => setOpen(false)}>
+              المصحف
             </NavLink>
             {user && (
               <NavLink to="/tasks" className={navLinkClass} onClick={() => setOpen(false)}>

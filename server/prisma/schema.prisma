@@ -38,6 +38,7 @@ model User {
   taskCompletions   TaskCompletion[]
   taskExcuses       TaskExcuse[]
   adhkarReminder    AdhkarReminder?
+  quranBookmarks    QuranBookmark[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -424,3 +425,32 @@ model AdhkarReminder {
   @@index([enabled])
 }
 
+/// «علاماتي» in «المصحف»: what a mark is for.
+enum QuranMarkKind {
+  tilawa
+  hifz
+  muraja
+  tadabbur
+  custom
+}
+
+/// A member's place in the mushaf. One mark per built-in kind (moved as they go), plus
+/// their own named marks. `slot` is the kind for a built-in, or "custom:<id>" for a named one,
+/// so the database itself keeps it to one of each built-in.
+model QuranBookmark {
+  id        String        @id @default(cuid())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      QuranMarkKind
+  slot      String
+  /// The member's own name for a custom mark («ورد الفجر»); null for the built-ins.
+  label     String?
+  sura      Int
+  aya       Int
+  /// The Madinah page the ayah is on, worked out by the server.
+  page      Int
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, slot])
+}

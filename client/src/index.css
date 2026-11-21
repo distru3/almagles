@@ -74,6 +74,8 @@
 @theme inline {
   --font-sans: "Noto Naskh Arabic", "Amiri", ui-serif, serif;
   --font-display: "Reem Kufi", "Noto Naskh Arabic", ui-sans-serif, sans-serif;
+  /* «المصحف» only: a face drawn for the Uthmani script and its marks. */
+  --font-quran: "Amiri Quran", "Noto Naskh Arabic", serif;
 
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
@@ -179,6 +181,26 @@ body {
   /* Quranic text set inside ﴿ ﴾ */
   .ayah {
     @apply text-accent-strong;
+  }
+
+  /* «المصحف»: a page of the mushaf, set justified like the printed page. */
+  .mushaf {
+    @apply font-quran text-[25px] leading-[2.35] text-fg;
+    text-align: justify;
+    text-align-last: center;
+    word-spacing: 0.04em;
+  }
+  .mushaf-ayah {
+    @apply cursor-pointer rounded-sm transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  /* The ayah opened from a mark or a link. */
+  .mushaf-ayah[data-current="true"] {
+    @apply bg-accent-soft;
+  }
+  .mushaf-end {
+    @apply text-accent;
   }
 
   /* Hadith set inside (( )) */

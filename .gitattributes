@@ -3,3 +3,7 @@
 *.jpg binary
 *.webp binary
 *.ico binary
+
+# Tanzil's Qur'an text and metadata are kept byte for byte (their terms forbid changes,
+# and the build checks their fingerprints), so Git must not rewrite their line endings.
+client/quran/** -text

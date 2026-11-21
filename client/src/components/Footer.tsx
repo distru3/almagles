@@ -13,6 +13,7 @@ export default function Footer() {
           <a href="/#postList" className="text-fg-2 hover:text-accent">منشورات اليوم</a>
           <a href="/#schedule" className="text-fg-2 hover:text-accent">المقرر الأسبوعي</a>
           <Link to="/adhkar" className="text-fg-2 hover:text-accent">أذكار الصباح والمساء</Link>
+          <Link to="/quran" className="text-fg-2 hover:text-accent">المصحف</Link>
         </nav>
         <span>© {new Date().getFullYear()} رجال الأمة — جميع الحقوق محفوظة</span>
       </div>
