@@ -22,6 +22,7 @@ import {
   weekStartIso,
   type TaskSchedule,
 } from '../lib/taskSchedule.js';
+import { keepCount, partnersOf, periodsBetween, slotState, taskStreak, type HistoryTask, type MemberLog } from '../lib/taskHistory.js';
 
 export { periodOf };
 
@@ -433,6 +434,240 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
         madeUp: r.madeUp,
         at: r.createdAt,
       })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------- history
+
+const historyQuery = z.object({ date: anyDateSchema, time: timeSchema, ...prayerFields });
+/** Weeks shown in «بستان العام» (the current one included). */
+const HISTORY_WEEKS = 26;
+/** Days a task's «ثباتي» looks back over, and weeks for a weekly task. */
+const KEEP_DAYS = 30;
+const KEEP_WEEKS = 8;
+
+/** The member's devotional "today": before Fajr it's still the day before, as for ticking. */
+function devotionalToday(q: z.infer<typeof historyQuery>): string {
+  return q.time < prayerClock(q.fajr, q.isha).fajr ? shiftDate(q.date, -1) : q.date;
+}
+
+const HISTORY_TASK_SELECT = { ...TASK_SELECT, createdAt: true } as const;
+
+/**
+ * «سجلّي», the member's own record and nobody else's: points and ticks for
+ * every day since they started, what they did on each day of the last six
+ * months, their excused days, and for each current task how faithfully
+ * they've kept it lately (with a strip of the last 30 days / 8 weeks).
+ * Nothing is ever pruned — the whole history stays.
+ */
+router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req, res, next) => {
+  try {
+    const q = req.query as unknown as z.infer<typeof historyQuery>;
+    const userId = req.user!.id;
+    const today = devotionalToday(q);
+    const from = shiftDate(weekStartIso(today), -7 * (HISTORY_WEEKS - 1));
+    const [completions, excuses, tasks] = await Promise.all([
+      prisma.taskCompletion.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+        select: { taskId: true, period: true, day: true, points: true, madeUp: true },
+      }),
+      prisma.taskExcuse.findMany({ where: { userId }, orderBy: { day: 'asc' }, select: { day: true, reason: true } }),
+      prisma.task.findMany({ orderBy: ORDER, select: HISTORY_TASK_SELECT }),
+    ]);
+
+    const days = new Map<string, { day: string; points: number; count: number }>();
+    const log = new Map<string, { taskId: string; points: number; madeUp: boolean }[]>();
+    for (const c of completions) {
+      const d = days.get(c.day) ?? days.set(c.day, { day: c.day, points: 0, count: 0 }).get(c.day)!;
+      d.points += c.points;
+      d.count += 1;
+      if (c.day >= from) (log.get(c.day) ?? log.set(c.day, []).get(c.day)!).push({ taskId: c.taskId, points: c.points, madeUp: c.madeUp });
+    }
+    const sortedDays = [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
+    const memberLog: MemberLog = {
+      done: new Set(completions.map((c) => `${c.taskId}|${c.period}`)),
+      excused: new Set(excuses.map((e) => e.day)),
+      firstDay: sortedDays[0]?.day ?? null,
+    };
+    const partners = partnersOf(tasks);
+    const totalOf = new Map<string, number>();
+    const lastOf = new Map<string, string>();
+    for (const c of completions) {
+      totalOf.set(c.taskId, (totalOf.get(c.taskId) ?? 0) + 1);
+      if ((lastOf.get(c.taskId) ?? '') < c.day) lastOf.set(c.taskId, c.day);
+    }
+    const summary = (t: (typeof tasks)[number]) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      repeat: t.repeat,
+      timeWindow: t.timeWindow,
+      total: totalOf.get(t.id) ?? 0,
+      lastDay: lastOf.get(t.id) ?? null,
+    });
+    // A task that's archived or whose last day has passed: its record stays, under «من سجلّك السابق».
+    const isPast = (t: (typeof tasks)[number]) => !t.active || (!!t.endDate && t.endDate < today);
+
+    const keep = tasks
+      .filter((t) => !isPast(t))
+      .map((t) => {
+        if (t.repeat === 'once') {
+          // A one-off task: done (and when), or still waiting.
+          const done = totalOf.has(t.id);
+          return { ...summary(t), kept: done ? 1 : 0, possible: done ? 1 : 0, streak: 0, strip: [] as string[] };
+        }
+        const weekly = t.repeat === 'weekly';
+        const start = weekly ? shiftDate(weekStartIso(today), -7 * (KEEP_WEEKS - 1)) : shiftDate(today, -(KEEP_DAYS - 1));
+        const mine = partners.get(t.id) ?? [];
+        const periods = weekly
+          ? Array.from({ length: KEEP_WEEKS }, (_, i) => shiftDate(start, 7 * i))
+          : Array.from({ length: KEEP_DAYS }, (_, i) => shiftDate(start, i));
+        return {
+          ...summary(t),
+          ...keepCount(t, start, today, memberLog, mine, today),
+          streak: taskStreak(t, memberLog, mine, today),
+          // A period outside the task's days (a Monday-only fast on Tuesday) is "off".
+          strip: periods.map((p) => (appliesOn(t, p) ? slotState(t, p, memberLog, mine, today) : 'off')),
+        };
+      });
+    const past = tasks.filter((t) => isPast(t) && totalOf.has(t.id)).map(summary);
+
+    const referenced = new Set(completions.filter((c) => c.day >= from).map((c) => c.taskId));
+    return res.json({
+      today,
+      from,
+      days: sortedDays,
+      log: [...log.entries()].map(([day, items]) => ({ day, items })),
+      titles: Object.fromEntries(tasks.filter((t) => referenced.has(t.id)).map((t) => [t.id, t.title])),
+      excused: excuses,
+      tasks: keep,
+      past,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Days «حال المجلس» measures over, and how many days its activity chart shows. */
+const COMMUNITY_DAYS = 30;
+const COMMUNITY_SERIES_DAYS = 56;
+/** A task needs at least this many chances across the members before it can be «همّة الأسبوع». */
+const FOCUS_MIN_POSSIBLE = 5;
+
+/** Kept / possible for each task across `members`, over [from, to]. */
+function communityRates(tasks: HistoryTask[], logs: Map<string, MemberLog>, members: string[], from: string, to: string, today: string) {
+  const partners = partnersOf(tasks);
+  return tasks.map((t) => {
+    let kept = 0;
+    let possible = 0;
+    for (const id of members) {
+      if (t.repeat === 'once') {
+        // A one-off task: of the brothers active now, how many have done it (once it had opened).
+        const done = logs.get(id)!.done.has(`${t.id}|once`);
+        if (done || !t.startDate || t.startDate <= to) {
+          possible += 1;
+          if (done) kept += 1;
+        }
+        continue;
+      }
+      const r = keepCount(t, from, to, logs.get(id)!, partners.get(t.id) ?? [], today);
+      kept += r.kept;
+      possible += r.possible;
+    }
+    return { task: t, kept, possible, rate: possible ? kept / possible : 0 };
+  });
+}
+
+/**
+ * «حال المجلس», for every member — and anonymous: what the circle did together
+ * in the last 30 days, which tasks are kept most and which need our himma, the
+ * daily activity of the last eight weeks, and «همّة الأسبوع»: the least-kept
+ * task of the month before this Saturday, to revive together this week. Only
+ * members who did something in a window are counted in it.
+ */
+router.get('/community', requireAuth, validate(historyQuery, 'query'), async (req, res, next) => {
+  try {
+    const q = req.query as unknown as z.infer<typeof historyQuery>;
+    const today = devotionalToday(q);
+    const from = shiftDate(today, -COMMUNITY_DAYS);
+    const to = shiftDate(today, -1);
+    const weekStart = weekStartIso(today);
+    const focusFrom = shiftDate(weekStart, -COMMUNITY_DAYS);
+    const focusTo = shiftDate(weekStart, -1);
+    const seriesFrom = shiftDate(today, -(COMMUNITY_SERIES_DAYS - 1));
+    const since = shiftDate([focusFrom, from, seriesFrom].sort()[0], -6);
+
+    const [completions, onceDone, firsts, excuses, allTasks] = await Promise.all([
+      prisma.taskCompletion.findMany({
+        where: { day: { gte: since } },
+        select: { taskId: true, userId: true, period: true, day: true, points: true, madeUp: true, task: { select: { timeWindow: true } } },
+      }),
+      // One-off tasks may have been done long before this window.
+      prisma.taskCompletion.findMany({ where: { period: 'once' }, select: { taskId: true, userId: true } }),
+      prisma.taskCompletion.groupBy({ by: ['userId'], _min: { day: true } }),
+      prisma.taskExcuse.findMany({ where: { day: { gte: since } }, select: { userId: true, day: true } }),
+      prisma.task.findMany({ where: { active: true }, orderBy: ORDER, select: HISTORY_TASK_SELECT }),
+    ]);
+    // Every kind of task is measured; one whose last day has passed no longer is.
+    const tasks = allTasks.filter((t) => !t.endDate || t.endDate >= from);
+    const repeating = tasks.filter((t) => t.repeat !== 'once');
+
+    const logs = new Map<string, MemberLog>(
+      firsts.map((f) => [f.userId, { done: new Set<string>(), excused: new Set<string>(), firstDay: f._min.day }]),
+    );
+    for (const c of [...completions, ...onceDone]) logs.get(c.userId)?.done.add(`${c.taskId}|${'period' in c ? c.period : 'once'}`);
+    for (const e of excuses) logs.get(e.userId)?.excused.add(e.day);
+    const activeIn = (a: string, b: string) => [...new Set(completions.filter((c) => c.day >= a && c.day <= b).map((c) => c.userId))];
+
+    const inWindow = completions.filter((c) => c.day >= from && c.day <= today);
+    const members = activeIn(from, today);
+    const rates = communityRates(tasks, logs, members, from, to, today)
+      .filter((r) => r.possible > 0)
+      .sort((a, b) => b.rate - a.rate || b.kept - a.kept);
+
+    const perDay = new Map<string, number>();
+    for (const c of completions) if (c.day >= seriesFrom && c.day <= today) perDay.set(c.day, (perDay.get(c.day) ?? 0) + 1);
+    const series = Array.from({ length: COMMUNITY_SERIES_DAYS }, (_, i) => {
+      const day = shiftDate(seriesFrom, i);
+      return { day, count: perDay.get(day) ?? 0 };
+    });
+
+    // «همّة الأسبوع» is chosen from the month before this Saturday, so it holds all week.
+    const weekEnd = shiftDate(weekStart, 6);
+    const thisWeek = (t: HistoryTask) => periodsBetween(t, weekStart, weekEnd).length > 0;
+    const lowest = communityRates(repeating.filter(thisWeek), logs, activeIn(focusFrom, focusTo), focusFrom, focusTo, today)
+      .filter((r) => r.possible >= FOCUS_MIN_POSSIBLE)
+      .sort((a, b) => a.rate - b.rate || a.task.order - b.task.order)[0];
+    let focus = null;
+    if (lowest) {
+      const [week] = communityRates([lowest.task], logs, activeIn(focusFrom, today), weekStart, today, today);
+      focus = {
+        id: lowest.task.id,
+        title: lowest.task.title,
+        timeWindow: lowest.task.timeWindow,
+        before: lowest.rate,
+        // Done today counts already; today's not-yet-done is still pending.
+        week: { kept: week.kept, possible: week.possible },
+      };
+    }
+
+    return res.json({
+      today,
+      from,
+      members: members.length,
+      totals: {
+        ticks: inWindow.length,
+        points: inWindow.reduce((n, c) => n + c.points, 0),
+        nights: inWindow.filter((c) => c.task.timeWindow === 'qiyam').length,
+        madeUp: inWindow.filter((c) => c.madeUp).length,
+      },
+      tasks: rates.map((r) => ({ id: r.task.id, title: r.task.title, timeWindow: r.task.timeWindow, repeat: r.task.repeat, rate: r.rate, kept: r.kept, possible: r.possible })),
+      series,
+      focus,
     });
   } catch (err) {
     next(err);

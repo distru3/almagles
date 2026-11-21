@@ -287,6 +287,57 @@ export interface BoardMember {
   badges: BadgeId[];
 }
 
+/** One period of a task in «ثباتي»: kept, missed, still open today, or not a chance (excused, before starting…). */
+export type SlotState = 'done' | 'miss' | 'off' | 'pending';
+
+/** «سجلّي»: the member's own record, all of it. */
+export interface TaskHistory {
+  /** The member's devotional today (before Fajr: yesterday). */
+  today: string;
+  /** First day of the day-by-day log (26 weeks back, a Saturday). */
+  from: string;
+  /** Every day with work in it, oldest first. */
+  days: { day: string; points: number; count: number }[];
+  /** What was done on each day since `from`. */
+  log: { day: string; items: { taskId: string; points: number; madeUp: boolean }[] }[];
+  titles: Record<string, string>;
+  excused: { day: string; reason: 'sick' | 'travel' | 'other' }[];
+  /** Current tasks of every kind; a one-off task has an empty strip. */
+  tasks: (HistoryTaskSummary & {
+    kept: number;
+    possible: number;
+    streak: number;
+    /** The last 30 days (daily) or 8 weeks (weekly), oldest first. */
+    strip: SlotState[];
+  })[];
+  /** Archived tasks, or ones whose last day has passed, that the member did — «من سجلّك السابق». */
+  past: HistoryTaskSummary[];
+}
+
+export interface HistoryTaskSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  repeat: TaskRepeat;
+  timeWindow: TaskTime;
+  /** Times done, ever. */
+  total: number;
+  lastDay: string | null;
+}
+
+/** «حال المجلس»: what the circle did together — no names. */
+export interface TaskCommunity {
+  today: string;
+  from: string;
+  members: number;
+  totals: { ticks: number; points: number; nights: number; madeUp: number };
+  /** Most faithfully kept first. */
+  tasks: { id: string; title: string; timeWindow: TaskTime; repeat: TaskRepeat; rate: number; kept: number; possible: number }[];
+  series: { day: string; count: number }[];
+  /** «همّة الأسبوع»: last month's least-kept task, revived together this week. */
+  focus: { id: string; title: string; timeWindow: TaskTime; before: number; week: { kept: number; possible: number } } | null;
+}
+
 export interface TaskBoard {
   date: string;
   weekStart: string;

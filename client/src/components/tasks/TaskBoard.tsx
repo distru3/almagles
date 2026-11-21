@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import Avatar from '../Avatar';
 import Spinner from '../Spinner';
 import FadlText from './FadlText';
+import CommunityPulse from './CommunityPulse';
 
 const arNumber = new Intl.NumberFormat('ar');
 
@@ -295,6 +296,8 @@ export default function TaskBoard() {
           </ol>
         )}
       </section>
+
+      <CommunityPulse />
 
       {/* Brothers who've been away: one tap to remind them kindly */}
       {away.length > 0 && (
