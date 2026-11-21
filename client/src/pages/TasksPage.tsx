@@ -5,9 +5,11 @@ import TaskChecklist from '../components/tasks/TaskChecklist';
 import TaskManager from '../components/tasks/TaskManager';
 import TaskProgress from '../components/tasks/TaskProgress';
 import TaskBoard, { MyGarden, useBoard } from '../components/tasks/TaskBoard';
+import MyRecord from '../components/tasks/MyRecord';
 
 const TABS = [
   ['mine', 'مهامي', false],
+  ['history', 'سجلّي', false],
   ['board', 'ساحة الهمّة', false],
   ['manage', 'إدارة المهام', true],
   ['progress', 'متابعة الأعضاء', true],
@@ -16,7 +18,8 @@ type Tab = (typeof TABS)[number][0];
 
 const HINTS: Record<Tab, string> = {
   mine: 'ضع علامة على كل مهمة تنجزها، واجمع النقاط وانمُ ببستانك — والأجر عند الله.',
-  board: 'أين إخوانك اليوم وهذا الأسبوع — ليشدّ بعضنا بعضًا.',
+  history: 'كل ما عملته منذ بدأت، محفوظ يومًا بيوم — لك وحدك.',
+  board: 'أين إخوانك اليوم وهذا الأسبوع، وحال المجلس — ليشدّ بعضنا بعضًا.',
   manage: 'المهام التي يراها كل الأعضاء في صفحة «مهامي».',
   progress: 'من أنجز ماذا — المهام اليومية لليوم المختار، والأسبوعية لأسبوعه.',
 };
@@ -75,7 +78,17 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {tab === 'manage' ? <TaskManager /> : tab === 'progress' ? <TaskProgress /> : tab === 'board' ? <TaskBoard /> : <MineTab />}
+      {tab === 'manage' ? (
+        <TaskManager />
+      ) : tab === 'progress' ? (
+        <TaskProgress />
+      ) : tab === 'board' ? (
+        <TaskBoard />
+      ) : tab === 'history' ? (
+        <MyRecord />
+      ) : (
+        <MineTab />
+      )}
     </div>
   );
 }
