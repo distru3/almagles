@@ -370,7 +370,7 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
     const { date } = req.query as z.infer<typeof boardQuery>;
     const weekStart = weekStartIso(date);
     const weekEnd = shiftDate(weekStart, 6);
-    const [totals, week, today, days, nights, recent, first, excuses, madeUp] = await Promise.all([
+    const [taskTotals, taskWeek, taskToday, taskDays, nights, taskRecent, first, excuses, taskMadeUp, learning] = await Promise.all([
       prisma.taskCompletion.groupBy({ by: ['userId'], _sum: { points: true }, _count: { _all: true } }),
       prisma.taskCompletion.groupBy({ by: ['userId'], where: { day: { gte: weekStart, lte: weekEnd } }, _sum: { points: true } }),
       prisma.taskCompletion.groupBy({ by: ['userId'], where: { day: date }, _count: { _all: true } }),
@@ -384,7 +384,17 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
       prisma.taskCompletion.findFirst({ where: { day: date, madeUp: false }, orderBy: { createdAt: 'asc' }, select: { userId: true, createdAt: true } }),
       prisma.taskExcuse.findMany({ select: { userId: true, day: true } }),
       prisma.taskCompletion.groupBy({ by: ['userId'], where: { madeUp: true }, _count: { _all: true } }),
+      learningOnBoard(date, weekStart, weekEnd),
     ]);
+    // «رحلة العلم» lessons count here like tasks: points, ticks, streak days, the feed.
+    const totals = [...taskTotals, ...learning.totals];
+    const days = [...taskDays, ...learning.days];
+    const recent = [
+      ...taskRecent.map(({ task, ...r }) => ({ ...r, title: task.title, learning: false })),
+      ...learning.recent.map(({ item, ...r }) => ({ ...r, title: item.title, learning: true })),
+    ]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 15);
 
     const ids = new Set([req.user!.id, ...totals.map((t) => t.userId)]);
     const users = await prisma.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true, avatarUrl: true } });
@@ -392,19 +402,32 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
     // An excused day keeps the streak going, just like a day with work in it.
     for (const d of [...days, ...excuses]) (daysOf.get(d.userId) ?? daysOf.set(d.userId, new Set()).get(d.userId)!).add(d.day);
     const excusedToday = new Set(excuses.filter((e) => e.day === date).map((e) => e.userId));
-    const pick = <T extends { userId: string }>(rows: T[]) => new Map(rows.map((r) => [r.userId, r]));
-    const [totalOf, weekOf, todayOf, nightsOf, madeUpOf] = [pick(totals), pick(week), pick(today), pick(nights), pick(madeUp)];
+    /** Points and counts per member, tasks and lessons added together. */
+    const sum = (rows: { userId: string; _sum?: { points: number | null }; _count?: { _all: number } }[]) => {
+      const out = new Map<string, { points: number; count: number }>();
+      for (const r of rows) {
+        const s = out.get(r.userId) ?? out.set(r.userId, { points: 0, count: 0 }).get(r.userId)!;
+        s.points += r._sum?.points ?? 0;
+        s.count += r._count?._all ?? 0;
+      }
+      return out;
+    };
+    const totalOf = sum(totals);
+    const weekOf = sum([...taskWeek, ...learning.week]);
+    const todayOf = sum([...taskToday, ...learning.today]);
+    const nightsOf = sum(nights);
+    const madeUpOf = sum([...taskMadeUp, ...learning.madeUp]);
     const nameOf = new Map(users.map((u) => [u.id, u]));
 
     const members = users
       .map((u) => {
         const stats: Stats = {
-          total: totalOf.get(u.id)?._sum.points ?? 0,
-          ticks: totalOf.get(u.id)?._count._all ?? 0,
-          week: weekOf.get(u.id)?._sum.points ?? 0,
-          today: todayOf.get(u.id)?._count._all ?? 0,
-          nights: nightsOf.get(u.id)?._count._all ?? 0,
-          madeUp: madeUpOf.get(u.id)?._count._all ?? 0,
+          total: totalOf.get(u.id)?.points ?? 0,
+          ticks: totalOf.get(u.id)?.count ?? 0,
+          week: weekOf.get(u.id)?.points ?? 0,
+          today: todayOf.get(u.id)?.count ?? 0,
+          nights: nightsOf.get(u.id)?.count ?? 0,
+          madeUp: madeUpOf.get(u.id)?.count ?? 0,
           ...streaks(daysOf.get(u.id) ?? new Set(), date),
         };
         const active = [...(daysOf.get(u.id) ?? [])].filter((d) => d <= date).sort();
@@ -429,9 +452,10 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
         name: nameOf.get(r.userId)?.name ?? '',
         avatarUrl: nameOf.get(r.userId)?.avatarUrl ?? null,
         userId: r.userId,
-        title: r.task.title,
+        title: r.title,
         points: r.points,
         madeUp: r.madeUp,
+        learning: r.learning,
         at: r.createdAt,
       })),
     });
@@ -439,6 +463,23 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
     next(err);
   }
 });
+
+/** The same sums as «ساحة الهمّة» takes from tasks, from the lessons of «رحلة العلم». */
+async function learningOnBoard(date: string, weekStart: string, weekEnd: string) {
+  const [totals, week, today, days, madeUp, recent] = await Promise.all([
+    prisma.learningCompletion.groupBy({ by: ['userId'], _sum: { points: true }, _count: { _all: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: { gte: weekStart, lte: weekEnd } }, _sum: { points: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: date }, _count: { _all: true } }),
+    prisma.learningCompletion.findMany({ distinct: ['userId', 'day'], select: { userId: true, day: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: { madeUp: true }, _count: { _all: true } }),
+    prisma.learningCompletion.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 15,
+      select: { createdAt: true, points: true, madeUp: true, userId: true, item: { select: { title: true } } },
+    }),
+  ]);
+  return { totals, week, today, days, madeUp, recent };
+}
 
 // ---------------------------------------------------------------- history
 

@@ -57,6 +57,28 @@ function uploadImage(buffer: Buffer, folder: string): Promise<UploadedImage> {
   });
 }
 
+export interface UploadedPdf extends UploadedImage {
+  pages: number | null;
+}
+
+/**
+ * A «رحلة العلم» PDF. Stored as an image-type asset (Cloudinary's own way of
+ * keeping PDFs, which also counts the pages). Free accounts must allow PDF
+ * delivery once: Settings → Security → "Allow delivery of PDF and ZIP files".
+ */
+export function uploadLearningPdf(buffer: Buffer): Promise<UploadedPdf> {
+  const c = getCloud();
+  if (!c) return Promise.reject(new Error('خدمة الملفات غير مكوّنة على الخادم'));
+  return new Promise((resolve, reject) => {
+    const stream = c.uploader.upload_stream({ folder: 'learning', resource_type: 'image', format: 'pdf' }, (error, result) => {
+      if (error) return reject(error);
+      if (!result) return reject(new Error('فشل رفع الملف'));
+      resolve({ publicId: result.public_id, secureUrl: result.secure_url, pages: typeof result.pages === 'number' ? result.pages : null });
+    });
+    stream.end(buffer);
+  });
+}
+
 export async function deletePostImage(publicId: string): Promise<void> {
   const c = getCloud();
   if (!c) return;

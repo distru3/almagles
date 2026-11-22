@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, Shield, PenLine, CalendarDays, Search, Moon, Sun, Bell, ListChecks } from 'lucide-react';
+import { Menu, X, LogOut, Shield, PenLine, CalendarDays, Search, Moon, Sun, Bell, ListChecks, GraduationCap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Logo from './Logo';
 import SearchInput from './SearchInput';
@@ -102,6 +102,11 @@ export default function Navbar() {
                 مهامي
               </NavLink>
             )}
+            {user && (
+              <NavLink to="/learn" className={navLinkClass}>
+                رحلة العلم
+              </NavLink>
+            )}
             {roleLinks(undefined, true)}
           </nav>
         </div>
@@ -199,6 +204,12 @@ export default function Navbar() {
               <NavLink to="/tasks" className={navLinkClass} onClick={() => setOpen(false)}>
                 <ListChecks className="h-4 w-4" />
                 مهامي
+              </NavLink>
+            )}
+            {user && (
+              <NavLink to="/learn" className={navLinkClass} onClick={() => setOpen(false)}>
+                <GraduationCap className="h-4 w-4" />
+                رحلة العلم
               </NavLink>
             )}
             {roleLinks(() => setOpen(false))}

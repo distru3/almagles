@@ -1,8 +1,8 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 /**
- * Unsaved edits in the schedule editors. Nothing there saves by itself: each
- * session row or note with changes registers here, so the page can offer
+ * Unsaved edits in the schedule and «رحلة العلم» editors. Nothing there saves
+ * by itself: each row, lesson or note with changes registers here, so the page can offer
  * «حفظ الكل», count what is pending, and warn before those edits are lost.
  */
 interface Entry {
@@ -43,7 +43,7 @@ export async function saveAll(): Promise<boolean> {
   return ok;
 }
 
-const LEAVE_MESSAGE = 'لديك تغييرات غير محفوظة في الجدول. هل تريد تجاهلها والمتابعة؟';
+const LEAVE_MESSAGE = 'لديك تغييرات غير محفوظة. هل تريد تجاهلها والمتابعة؟';
 
 /** Before an action that would drop unsaved edits: true when there are none or the user agrees to lose them. */
 export function confirmDiscard(): boolean {

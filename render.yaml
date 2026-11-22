@@ -24,6 +24,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      # Largest «رحلة العلم» PDF in MB (Cloudinary's free plan stops at 10).
+      - key: LEARNING_FILE_MAX_MB
+        value: 10
       - key: BREVO_API_KEY
         sync: false
       # The sender address verified in Brevo (Senders & IP → Senders).

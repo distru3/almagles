@@ -89,6 +89,7 @@ npm run db:import-schedule -- --apply            # الاستيراد الفعل
 | `JWT_SECRET` | نعم | لتوقيع التوكنات |
 | `PORT` | لا | الافتراضي 4000 |
 | `CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET` | لا | تفعيل رفع الصور |
+| `LEARNING_FILE_MAX_MB` | لا | أكبر حجم لملف PDF في «رحلة العلم» بالميغابايت (الافتراضي 10، وهو حدّ خطة Cloudinary المجانية). في الحساب المجاني فعّل مرة واحدة: Settings → Security → *Allow delivery of PDF and ZIP files* وإلا لن تُفتح الملفات |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | للبذر فقط | حساب المشرف الأول إن لم يوجد مشرف (لا يحتاجهما الخادم) |
 | `SEED_DEMO_PASSWORD` | للبيانات التجريبية فقط | كلمة مرور الحسابات التجريبية في `db:seed:demo` (محلياً فقط) |
 | `ACCESS_TTL_MINUTES` | لا | مدة صلاحية رمز الدخول بالدقائق (الافتراضي 15) |

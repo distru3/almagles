@@ -6,6 +6,7 @@ import TaskManager from '../components/tasks/TaskManager';
 import TaskProgress from '../components/tasks/TaskProgress';
 import TaskBoard, { MyGarden, useBoard } from '../components/tasks/TaskBoard';
 import MyRecord from '../components/tasks/MyRecord';
+import LearningTodayCard from '../components/learning/LearningTodayCard';
 
 const TABS = [
   ['mine', 'مهامي', false],
@@ -31,6 +32,7 @@ function MineTab() {
   return (
     <>
       <MyGarden me={board?.members.find((m) => m.id === user?.id)} />
+      <LearningTodayCard />
       <TaskChecklist onTicked={() => void reload()} />
     </>
   );
