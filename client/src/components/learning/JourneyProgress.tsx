@@ -1,4 +1,5 @@
-import { BookCheck, Flame, Gem, Target } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BookCheck, Flame, Gem, Target, Trophy } from 'lucide-react';
 import type { LearningJourney } from '../../lib/types';
 import { arNumber, daysLabel, lessonsLabel, milestone } from '../../lib/learning';
 
@@ -33,7 +34,7 @@ function Ring({ value }: { value: number }) {
   );
 }
 
-function Stat({ icon: Icon, label, value, hint }: { icon: typeof Flame; label: string; value: string; hint?: string }) {
+function Stat({ icon: Icon, label, value, hint }: { icon: typeof Flame; label: string; value: string; hint?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-line bg-surface-2/40 px-3 py-2.5">
       <p className="flex items-center gap-1.5 font-display text-xs text-fg-2">
@@ -72,8 +73,24 @@ export default function JourneyProgress({ stats }: { stats: LearningJourney['sta
             />
             <Stat icon={Target} label="مواظبتي" value={stats.due ? percent.format(kept) : '—'} hint={stats.due ? `${arNumber.format(stats.keptDue)} من ${arNumber.format(stats.due)} منذ انضممت` : 'تبدأ بدرس اليوم'} />
             <Stat icon={BookCheck} label="دروس أتممتها" value={arNumber.format(stats.done)} hint={stats.madeUp ? `منها ${arNumber.format(stats.madeUp)} تداركًا` : undefined} />
-            <Stat icon={Gem} label="نقاط العلم" value={arNumber.format(stats.points)} hint="تُحسب في «ساحة الهمّة»" />
+            <Stat
+              icon={Gem}
+              label="نقاط العلم"
+              value={arNumber.format(stats.points)}
+              hint={
+                <Link to="/tasks?tab=board&race=ilm" className="text-ilm hover:underline">
+                  تُحسب في «ساحة الهمّة»
+                </Link>
+              }
+            />
           </div>
+          <Link
+            to="/tasks?tab=board&race=ilm"
+            className="mt-3 flex items-center justify-center gap-1.5 rounded-full border border-ilm/40 bg-ilm-soft px-4 py-2 font-display text-sm text-ilm transition hover:border-ilm sm:justify-start"
+          >
+            <Trophy className="h-4 w-4" aria-hidden="true" />
+            ترتيبك في سباق طلب العلم هذا الأسبوع
+          </Link>
         </div>
       </div>
     </section>

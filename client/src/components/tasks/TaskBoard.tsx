@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Check, Flame, HandHeart, HeartHandshake, Sparkles, Trophy } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Check, Flame, GraduationCap, HandHeart, HeartHandshake, ListChecks, Sparkles, Trophy } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { BoardMember, TaskBoard as Board } from '../../lib/types';
 import { addDays, dateTime, dateTimeTitle, toISODate, todayISO } from '../../lib/dates';
-import { BUNYAN, COMPETE, GUIDE, LA_YAMALL, RACE } from '../../lib/fadail';
+import { BUNYAN, COMPETE, FADAIL, GUIDE, LA_YAMALL, RACE } from '../../lib/fadail';
 import { BADGES, levelOf } from '../../lib/rewards';
+import { lessonsLabel } from '../../lib/learning';
 import { useAuth } from '../../context/AuthContext';
 import Avatar from '../Avatar';
 import Spinner from '../Spinner';
@@ -19,6 +20,56 @@ function daysLabel(n: number): string {
   if (n === 2) return 'يومان';
   if (n >= 3 && n <= 10) return `${arNumber.format(n)} أيام`;
   return `${arNumber.format(n)} يومًا`;
+}
+
+/** ﴿يَرْفَعِ اللَّهُ الَّذِينَ آمَنُوا مِنكُمْ وَالَّذِينَ أُوتُوا الْعِلْمَ دَرَجَاتٍ﴾, from the texts on «طلب العلم». */
+const RAISE = FADAIL.find((f) => f.id === 'ilm')?.texts.find((t) => t.kind === 'ayah') ?? COMPETE;
+
+/** The race can be read whole, or in worship or in «طلب العلم» alone. */
+type Race = 'all' | 'ibada' | 'ilm';
+const RACES: { key: Race; label: string }[] = [
+  { key: 'all', label: 'الكل' },
+  { key: 'ibada', label: 'العبادة' },
+  { key: 'ilm', label: 'طلب العلم' },
+];
+const weekIn = (m: BoardMember, race: Race) => (race === 'all' ? m.week : race === 'ilm' ? m.ilmWeek : m.week - m.ilmWeek);
+const totalIn = (m: BoardMember, race: Race) => (race === 'all' ? m.total : race === 'ilm' ? m.ilmTotal : m.total - m.ilmTotal);
+
+/**
+ * This week's points, split: worship in gold, «طلب العلم» in ink — so the
+ * member sees both fields of the garden growing.
+ */
+function WeekSplit({ me }: { me: Pick<BoardMember, 'week' | 'ilmWeek' | 'lessons' | 'ilmStreak'> }) {
+  const ibada = me.week - me.ilmWeek;
+  const whole = Math.max(1, me.week);
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="flex h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+        <div className="h-full bg-accent-fill transition-[width] duration-500" style={{ width: `${(ibada / whole) * 100}%` }} />
+        <div className="h-full bg-ilm-fill transition-[width] duration-500" style={{ width: `${(me.ilmWeek / whole) * 100}%` }} />
+      </div>
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-2">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-accent-fill" aria-hidden="true" />
+          العبادة هذا الأسبوع: <span className="font-display text-accent">{arNumber.format(ibada)}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-ilm-fill" aria-hidden="true" />
+          طلب العلم: <span className="font-display text-ilm">{arNumber.format(me.ilmWeek)}</span>
+        </span>
+        {me.ilmStreak > 0 ? (
+          <span className="inline-flex items-center gap-1 text-ilm">
+            <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+            سلسلة العلم {daysLabel(me.ilmStreak)}
+          </span>
+        ) : (
+          <Link to="/learn" className="text-ilm hover:underline">
+            {me.lessons ? 'درس اليوم في «رحلة العلم»' : 'ازرع حقل العلم أيضًا — «رحلة العلم»'}
+          </Link>
+        )}
+      </p>
+    </div>
+  );
 }
 
 export function useBoard() {
@@ -101,7 +152,7 @@ function Encouragement({ me }: { me: BoardMember }) {
 
 /** «بستاني»: the member's own level, points, streak and badges. */
 export function MyGarden({ me }: { me: BoardMember | undefined }) {
-  const stats = me ?? { total: 0, week: 0, streak: 0, bestStreak: 0, badges: [] as BoardMember['badges'] };
+  const stats = me ?? { total: 0, week: 0, streak: 0, bestStreak: 0, ilmWeek: 0, lessons: 0, ilmStreak: 0, badges: [] as BoardMember['badges'] };
   const { level, next, progress } = levelOf(stats.total);
   const Icon = level.icon;
   return (
@@ -143,6 +194,7 @@ export function MyGarden({ me }: { me: BoardMember | undefined }) {
             </div>
           </div>
         </div>
+        <WeekSplit me={stats} />
         {stats.badges.length > 0 && (
           <div className="mt-3 border-t border-line pt-3">
             <Badges ids={stats.badges} size="lg" />
@@ -201,6 +253,9 @@ const RANK_STYLES = ['bg-accent-fill text-on-accent', 'bg-accent-soft text-accen
 export default function TaskBoard() {
   const { user } = useAuth();
   const { board, error } = useBoard();
+  // «رحلة العلم» links here with ?race=ilm, to open on the race in learning.
+  const [params] = useSearchParams();
+  const [race, setRace] = useState<Race>(() => RACES.find((r) => r.key === params.get('race'))?.key ?? 'all');
 
   if (error) return <p className="rounded border border-danger/40 bg-danger-soft px-4 py-3 text-danger">{error}</p>;
   if (!board) {
@@ -211,7 +266,9 @@ export default function TaskBoard() {
     );
   }
   const me = board.members.find((m) => m.id === user?.id);
-  const ranked = board.members.filter((m) => m.total > 0);
+  const ranked = board.members
+    .filter((m) => totalIn(m, race) > 0)
+    .sort((a, b) => weekIn(b, race) - weekIn(a, race) || totalIn(b, race) - totalIn(a, race) || a.name.localeCompare(b.name, 'ar'));
   const away = board.members.filter((m) => m.id !== user?.id && isAway(m) && !m.excusedToday);
 
   return (
@@ -219,8 +276,12 @@ export default function TaskBoard() {
       <MyGarden me={me} />
 
       <div className="rounded-sm border border-line bg-surface-2/40 px-4 py-3 text-center">
-        <FadlText text={COMPETE} />
-        <p className="mt-1 text-xs text-muted">تنافسٌ في الخير يشدّ بعضنا بعضًا — فأخلص النية، ولا تجعل النقاط غايتك.</p>
+        <FadlText text={race === 'ilm' ? RAISE : COMPETE} />
+        <p className="mt-1 text-xs text-muted">
+          {race === 'ilm'
+            ? 'سباقٌ في طلب العلم: درسٌ كل يوم — فأخلص النية، واجعل العلم للعمل.'
+            : 'تنافسٌ في الخير، عبادةً وعلمًا، يشدّ بعضنا بعضًا — فأخلص النية، ولا تجعل النقاط غايتك.'}
+        </p>
       </div>
 
       {board.first && (
@@ -234,6 +295,19 @@ export default function TaskBoard() {
         </div>
       )}
 
+      {board.firstIlm && (
+        <div className="flex items-center gap-3 rounded-sm border border-ilm/40 bg-ilm-soft px-4 py-3">
+          <GraduationCap className="h-5 w-5 shrink-0 text-ilm" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="font-display text-ilm">السبّاق إلى العلم اليوم: </span>
+            {board.firstIlm.id === user?.id ? 'أنت' : board.firstIlm.name} — أول من أتمّ درس اليوم
+            <Link to="/learn" className="ms-2 text-xs text-ilm hover:underline">
+              درس اليوم
+            </Link>
+          </p>
+        </div>
+      )}
+
       {/* This week's standings */}
       <section className="rounded-sm border border-line bg-surface px-4 py-3 sm:px-5">
         <h2 className="flex items-center justify-between gap-3 border-b border-line pb-2 font-display text-[18px] font-semibold">
@@ -243,8 +317,33 @@ export default function TaskBoard() {
           </span>
           <span className="text-xs font-normal text-muted">يبدأ كل سبت</span>
         </h2>
+        <div role="tablist" aria-label="ميدان السباق" className="mt-2.5 flex flex-wrap gap-1.5">
+          {RACES.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={race === key}
+              onClick={() => setRace(key)}
+              className={`min-h-9 rounded-full px-3.5 font-display text-sm transition ${
+                race === key ? (key === 'ilm' ? 'bg-ilm-fill text-on-accent' : 'bg-accent-fill text-on-accent') : 'border border-line text-fg-2 hover:border-accent'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {ranked.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">لم يُنجز أحد مهمة بعد — كن أول السابقين.</p>
+          race === 'ilm' ? (
+            <p className="py-6 text-center text-sm text-muted">
+              لم يُتمّ أحد درسًا بعد —{' '}
+              <Link to="/learn" className="text-ilm hover:underline">
+                كن أول السابقين في «رحلة العلم»
+              </Link>
+            </p>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted">لم يُنجز أحد مهمة بعد — كن أول السابقين.</p>
+          )
         ) : (
           <ol className="divide-y divide-line">
             {ranked.map((m, i) => {
@@ -271,12 +370,25 @@ export default function TaskBoard() {
                         <LevelIcon className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
                         {level.name}
                       </span>
-                      {m.streak > 0 && (
-                        <span className="inline-flex items-center gap-0.5 text-warn" title="أيام متتالية">
-                          <Flame className="h-3.5 w-3.5" aria-hidden="true" />
-                          {daysLabel(m.streak)}
+                      {race === 'ilm'
+                        ? m.ilmStreak > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-ilm" title="سلسلة العلم">
+                              <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+                              {daysLabel(m.ilmStreak)}
+                            </span>
+                          )
+                        : m.streak > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-warn" title="أيام متتالية">
+                              <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+                              {daysLabel(m.streak)}
+                            </span>
+                          )}
+                      {race === 'all' && m.ilmWeek > 0 && (
+                        <span>
+                          عبادة {arNumber.format(m.week - m.ilmWeek)} · <span className="text-ilm">علم {arNumber.format(m.ilmWeek)}</span>
                         </span>
                       )}
+                      {race === 'ilm' && <span>{lessonsLabel(m.lessons)}</span>}
                       {m.today > 0 && <span>اليوم: {arNumber.format(m.today)}</span>}
                       {m.excusedToday && (
                         <span className="inline-flex items-center gap-0.5" title="معذور اليوم — سلسلته محفوظة">
@@ -287,7 +399,7 @@ export default function TaskBoard() {
                     </p>
                   </div>
                   <p className="text-end font-display">
-                    <span className="block text-[18px] font-bold text-accent tabular-nums">{arNumber.format(m.week)}</span>
+                    <span className={`block text-[18px] font-bold tabular-nums ${race === 'ilm' ? 'text-ilm' : 'text-accent'}`}>{arNumber.format(weekIn(m, race))}</span>
                     <span className="block text-[11px] text-muted">هذا الأسبوع</span>
                   </p>
                 </li>
@@ -338,6 +450,11 @@ export default function TaskBoard() {
                 <Link to={`/u/${r.userId}`} tabIndex={-1} aria-hidden="true" className="shrink-0">
                   <Avatar name={r.name} src={r.avatarUrl} size="xs" />
                 </Link>
+                {r.learning ? (
+                  <GraduationCap className="h-4 w-4 shrink-0 text-ilm" aria-label="طلب العلم" />
+                ) : (
+                  <ListChecks className="h-4 w-4 shrink-0 text-accent" aria-label="عبادة" />
+                )}
                 <p className="min-w-0 flex-1">
                   <Link to={`/u/${r.userId}`} className="font-display hover:text-accent">
                     {r.userId === user?.id ? 'أنت' : r.name}
@@ -346,7 +463,7 @@ export default function TaskBoard() {
                     {' '}
                     · {r.learning ? (r.madeUp ? `تدارك درس «${r.title}»` : `درس «${r.title}»`) : r.madeUp ? `تدارك «${r.title}»` : r.title}
                   </span>
-                  <span className="ms-1 text-xs text-accent">+{arNumber.format(r.points)}</span>
+                  <span className={`ms-1 text-xs ${r.learning ? 'text-ilm' : 'text-accent'}`}>+{arNumber.format(r.points)}</span>
                 </p>
                 <time dateTime={r.at} title={dateTimeTitle(r.at)} className="shrink-0 text-xs text-muted">
                   {dateTime(r.at)}

@@ -33,6 +33,10 @@
   --warn: #7a4e05;
   --warn-soft: #fbebc9;
   --hadith: #1f5878;
+  /* «طلب العلم» beside worship's gold on «ساحة الهمّة» and «سجلّي»: the ink of the hadith. */
+  --ilm: #1f5878;
+  --ilm-fill: #4d87a6;
+  --ilm-soft: #e1ecf1;
   /* Brand mark (Logo.tsx): the logo's own inks, as drawn on paper. */
   --brand-ink: #18252e;
   --brand-olive: #4c4f3e;
@@ -64,6 +68,9 @@
   --warn: #e9c277;
   --warn-soft: #33280f;
   --hadith: #93c8e8;
+  --ilm: #93c8e8;
+  --ilm-fill: #6fa7c6;
+  --ilm-soft: #16252d;
   /* Same mark lifted for night: ink turns to parchment, the rest keep their hue. */
   --brand-ink: #e9e4d8;
   --brand-olive: #a3a688;
@@ -98,6 +105,9 @@
   --color-success-soft: var(--success-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-ilm: var(--ilm);
+  --color-ilm-fill: var(--ilm-fill);
+  --color-ilm-soft: var(--ilm-soft);
 }
 
 html {

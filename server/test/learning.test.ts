@@ -311,3 +311,73 @@ describe('PDFs attached to lessons', () => {
     expect((await m.del('/api/learning/files/posts/abc')).status).toBe(400);
   });
 });
+
+describe('one race, in worship and in «طلب العلم»', () => {
+  async function taskTicked(c: Awaited<ReturnType<typeof loginAs>>, points = 10) {
+    const task = await prisma.task.create({ data: { title: `مهمة ${points}`, repeat: 'daily', points } });
+    expect((await c.put(`/api/tasks/${task.id}/done`, { date: today, time: '12:00', done: true })).status).toBe(200);
+    return task;
+  }
+
+  it('shows each member’s week in worship and in learning, and who was first to today’s lesson', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    const b = await joined('b@test.local', 'بلال');
+    const item = await lesson(today);
+    await taskTicked(a, 10);
+    await b.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+
+    const { body } = await a.get(`/api/tasks/board?date=${today}`);
+    const ahmad = body.members.find((m: { name: string }) => m.name === 'أحمد');
+    expect(ahmad).toMatchObject({ week: 30, ilmWeek: 20, ilmTotal: 20, lessons: 1, ilmStreak: 1 });
+    expect(body.firstIlm.name).toBe('بلال');
+  });
+
+  it('gives «طالب علم» for ten lessons and «ملازم العلم» for seven lesson days in a row', async () => {
+    const c = await joined();
+    const user = (await prisma.user.findFirst({ where: { email: 'a@test.local' } }))!;
+    // Seven lesson days back from today (Fridays skipped), plus three more lessons today.
+    const dates: string[] = [];
+    for (let d = today; dates.length < 7; d = shiftDate(d, -1)) if (!isRestDay(d)) dates.push(d);
+    await prisma.learningEnrollment.update({ where: { userId: user.id }, data: { startDay: dates[6] } });
+    for (const [i, date] of [...dates, today, today, today].entries()) {
+      const item = await lesson(date, { title: `درس ${i}` });
+      await prisma.learningCompletion.create({ data: { itemId: item.id, userId: user.id, day: date, points: 20 } });
+    }
+    const me = (await c.get(`/api/tasks/board?date=${today}`)).body.members[0];
+    expect(me.lessons).toBe(10);
+    expect(me.ilmStreak).toBe(7);
+    expect(me.badges).toEqual(expect.arrayContaining(['talib', 'mulazim']));
+  });
+
+  it('keeps lessons in «سجلّي», day by day, apart from how each task is kept', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await taskTicked(c, 10);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const { body } = await c.get(`/api/tasks/history?date=${today}&time=12:00`);
+    expect(body.days.find((d: { day: string }) => d.day === today)).toMatchObject({ points: 30, count: 2, lessons: 1, ilmPoints: 20 });
+    const log = body.log.find((l: { day: string }) => l.day === today).items;
+    expect(log).toEqual(expect.arrayContaining([expect.objectContaining({ taskId: `lesson:${item.id}`, learning: true, points: 20 })]));
+    expect(body.titles[`lesson:${item.id}`]).toBe(item.title);
+    expect(body.learning).toMatchObject({ enrolled: true, lessons: 1, points: 20, streak: 1 });
+  });
+
+  it('counts the circle’s lessons in «حال المجلس»', async () => {
+    const a = await joined('a@test.local');
+    const item = await lesson(today);
+    await taskTicked(a, 10);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const { body } = await a.get(`/api/tasks/community?date=${today}&time=12:00`);
+    expect(body.totals).toMatchObject({ lessons: 1, ilmPoints: 20, learners: 1 });
+    expect(body.series.find((s: { day: string }) => s.day === today)).toMatchObject({ count: 2, ilm: 1 });
+  });
+
+  it('shows this week’s learning points among «رفقاء الرحلة»', async () => {
+    const a = await joined('a@test.local');
+    const item = await lesson(today);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const { body } = await a.get(`/api/learning/companions?date=${today}`);
+    expect(body.members[0].week).toBe(20);
+  });
+});

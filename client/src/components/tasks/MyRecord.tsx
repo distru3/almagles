@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Archive, CalendarDays, Flame, Medal, Sprout, Trees, TrendingUp, Wheat, type LucideIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Archive, CalendarDays, Flame, GraduationCap, Medal, Sprout, Trees, TrendingUp, Wheat, type LucideIcon } from 'lucide-react';
+import { lessonsLabel, worksLabel as worksWord } from '../../lib/learning';
 import { api, ApiError } from '../../lib/api';
 import type { HistoryTaskSummary, SlotState, TaskHistory } from '../../lib/types';
 import { gregorianShort, hijriDate, hijriShort, todayISO } from '../../lib/dates';
@@ -15,13 +17,8 @@ import { REASON_LABELS } from './ExcuseControl';
 
 const arNumber = new Intl.NumberFormat('ar');
 const ar = (n: number) => arNumber.format(n);
+const percent = new Intl.NumberFormat('ar', { style: 'percent', maximumFractionDigits: 0 });
 
-function tasksWord(n: number): string {
-  if (n === 1) return 'مهمة واحدة';
-  if (n === 2) return 'مهمتان';
-  if (n >= 3 && n <= 10) return `${ar(n)} مهام`;
-  return `${ar(n)} مهمة`;
-}
 
 function Section({ icon: Icon, title, aside, children }: { icon: LucideIcon; title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -83,7 +80,7 @@ function Garden({ history }: { history: TaskHistory }) {
       </div>
       <div className="grid grid-flow-col grid-rows-7 gap-[2px]" style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}>
         {weeks.flat().map((d) => {
-          const label = `${hijriDate(d.day)}: ${d.count ? tasksWord(d.count) : d.excused ? 'يوم عذر' : 'لا شيء'}`;
+          const label = `${hijriDate(d.day)}: ${d.count ? worksWord(d.count) : d.excused ? 'يوم عذر' : 'لا شيء'}`;
           return (
             <button
               key={d.day}
@@ -123,12 +120,16 @@ function Garden({ history }: { history: TaskHistory }) {
           <ul className="mt-1.5 space-y-1 text-sm">
             {items.map((it, i) => (
               <li key={`${it.taskId}-${i}`} className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-fill" aria-hidden="true" />
+                {it.learning ? (
+                  <GraduationCap className="h-3.5 w-3.5 shrink-0 text-ilm" aria-label="درس" />
+                ) : (
+                  <span className="mx-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-fill" aria-hidden="true" />
+                )}
                 <span className="min-w-0 flex-1">
-                  {history.titles[it.taskId] ?? 'مهمة'}
+                  {history.titles[it.taskId] ?? (it.learning ? 'درس' : 'مهمة')}
                   {it.madeUp && <span className="ms-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-accent">تدارك</span>}
                 </span>
-                <span className="text-xs text-accent tabular-nums">+{ar(it.points)}</span>
+                <span className={`text-xs tabular-nums ${it.learning ? 'text-ilm' : 'text-accent'}`}>+{ar(it.points)}</span>
               </li>
             ))}
           </ul>
@@ -160,6 +161,11 @@ function WeeklyBars({ history }: { history: TaskHistory }) {
       <p className="mb-2 text-sm" aria-live="polite">
         <span className="font-display">{active === current ? 'هذا الأسبوع' : `أسبوع ${hijriShort(shown.week)}`}: </span>
         <span className="font-display text-accent tabular-nums">{ar(shown.points)}</span> نقطة
+        {shown.ilm > 0 && (
+          <span className="ms-1 text-xs text-fg-2">
+            (عبادة {ar(shown.points - shown.ilm)} · <span className="text-ilm">علم {ar(shown.ilm)}</span>)
+          </span>
+        )}
         {active === best && shown.points > 0 && <span className="ms-2 text-xs text-muted">— أفضل أسابيعك هنا</span>}
       </p>
       <div className="flex h-28 items-end gap-[2px] border-b border-line" onMouseLeave={() => setActive(current)}>
@@ -173,13 +179,29 @@ function WeeklyBars({ history }: { history: TaskHistory }) {
             aria-label={`${i === current ? 'هذا الأسبوع' : `أسبوع ${hijriShort(w.week)}`}: ${ar(w.points)} نقطة`}
             className="flex h-full flex-1 items-end"
           >
-            <span
-              className={`w-full rounded-t-[4px] transition-colors ${i === current ? 'bg-accent-fill' : i === active ? 'bg-accent-fill/80' : 'bg-accent-fill/45'}`}
-              style={{ height: w.points ? `max(2px, ${(w.points / max) * 100}%)` : '0' }}
-            />
+            {/* Worship below in gold, «طلب العلم» stacked on top in ink. */}
+            <span className="flex w-full flex-col overflow-hidden rounded-t-[4px]" style={{ height: w.points ? `max(2px, ${(w.points / max) * 100}%)` : '0' }}>
+              <span className={`w-full transition-colors ${i === current || i === active ? 'bg-ilm-fill' : 'bg-ilm-fill/55'}`} style={{ flexGrow: w.ilm }} />
+              <span
+                className={`w-full transition-colors ${i === current ? 'bg-accent-fill' : i === active ? 'bg-accent-fill/80' : 'bg-accent-fill/45'}`}
+                style={{ flexGrow: w.points - w.ilm }}
+              />
+            </span>
           </button>
         ))}
       </div>
+      {weeks.some((w) => w.ilm > 0) && (
+        <p className="mt-1.5 flex gap-4 text-[11px] text-muted">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-accent-fill" aria-hidden="true" />
+            العبادة
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-ilm-fill" aria-hidden="true" />
+            طلب العلم
+          </span>
+        </p>
+      )}
       <div className="mt-1 flex justify-between text-[11px] text-muted">
         <span>{hijriShort(weeks[0].week)}</span>
         <span>هذا الأسبوع</span>
@@ -197,7 +219,7 @@ function Harvest({ history }: { history: TaskHistory }) {
       <p className="font-display text-[15px]">
         {m.label} <span className="text-xs font-normal text-muted">{note}</span>
       </p>
-      <p className="mt-1 font-display text-[20px] font-bold text-accent tabular-nums">{tasksWord(m.ticks)}</p>
+      <p className="mt-1 font-display text-[20px] font-bold text-accent tabular-nums">{worksWord(m.ticks)}</p>
       <p className="text-xs text-muted">
         {ar(m.points)} نقطة · في {ar(m.days)} {m.days >= 3 && m.days <= 10 ? 'أيام' : 'يومًا'}
       </p>
@@ -345,7 +367,49 @@ function PastTasks({ history }: { history: TaskHistory }) {
   );
 }
 
-const MILESTONE_ICON: Record<MilestoneKind, LucideIcon> = { first: Sprout, ticks: Medal, level: Trees, streak: Flame };
+/**
+ * «رحلة العلم» in the record: lessons done, their points and «سلسلة العلم»,
+ * beside the worship above — or a quiet way in for a member not on it.
+ */
+function LearningInRecord({ history }: { history: TaskHistory }) {
+  const l = history.learning;
+  if (!l.enrolled && l.lessons === 0) {
+    return (
+      <Link to="/learn" className="flex items-center gap-3 rounded-sm border border-dashed border-line-strong px-4 py-3 text-sm text-fg-2 transition hover:border-ilm">
+        <GraduationCap className="h-5 w-5 shrink-0 text-ilm" aria-hidden="true" />
+        <span>
+          سجلّك في العبادة يكبر — وللعلم حقل آخر تزرعه مع إخوانك: <span className="font-display text-ilm">«رحلة العلم»</span>
+        </span>
+      </Link>
+    );
+  }
+  const share = history.days.reduce((n, d) => n + d.points, 0);
+  return (
+    <Section icon={GraduationCap} title="رحلة العلم في سجلّك" aside={<Link to="/learn" className="text-ilm hover:underline">درس اليوم</Link>}>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-sm border border-line px-3 py-2.5 text-center">
+          <p className="font-display text-[20px] font-bold text-ilm tabular-nums">{ar(l.lessons)}</p>
+          <p className="text-xs text-muted">دروس أتممتها</p>
+        </div>
+        <div className="rounded-sm border border-line px-3 py-2.5 text-center">
+          <p className="font-display text-[20px] font-bold text-ilm tabular-nums">{ar(l.points)}</p>
+          <p className="text-xs text-muted">نقطة في طلب العلم</p>
+        </div>
+        <div className="rounded-sm border border-line px-3 py-2.5 text-center">
+          <p className="font-display text-[20px] font-bold text-ilm tabular-nums">{ar(l.streak)}</p>
+          <p className="text-xs text-muted">{l.bestStreak > l.streak ? `سلسلة العلم (أطولها ${ar(l.bestStreak)})` : 'سلسلة العلم'}</p>
+        </div>
+      </div>
+      {share > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          طلب العلم {percent.format(l.points / share)} من نقاطك كلها — {lessonsLabel(l.lessons)} على الطريق حتى الآن.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+const MILESTONE_ICON: Record<MilestoneKind, LucideIcon> = { first: Sprout, ticks: Medal, level: Trees, streak: Flame, ilm: GraduationCap };
 
 /** «محطاتك»: the milestones along the way, newest first. */
 function Milestones({ history }: { history: TaskHistory }) {
@@ -418,7 +482,7 @@ export default function MyRecord() {
     <div className="space-y-5">
       <div>
         <div className="grid grid-cols-3 gap-2">
-          <Tile value={ar(ticks)} label="مهمة منذ بدأت" />
+          <Tile value={ar(ticks)} label="عملًا منذ بدأت" />
           <Tile value={ar(points)} label="نقطة" />
           <Tile value={ar(history.days.length)} label="يومًا عملت فيه" />
         </div>
@@ -426,6 +490,7 @@ export default function MyRecord() {
           بدأت في {hijriDate(history.days[0].day)} — وكل ما عملته محفوظ هنا، لا يُمحى.
         </p>
       </div>
+      <LearningInRecord history={history} />
       <Garden history={history} />
       <WeeklyBars history={history} />
       <Harvest history={history} />

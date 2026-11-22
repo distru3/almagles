@@ -22,6 +22,7 @@ import {
   weekStartIso,
   type TaskSchedule,
 } from '../lib/taskSchedule.js';
+import { learningStreak } from '../lib/learning.js';
 import { keepCount, partnersOf, periodsBetween, slotState, taskStreak, type HistoryTask, type MemberLog } from '../lib/taskHistory.js';
 
 export { periodOf };
@@ -326,6 +327,9 @@ const BADGES = [
   { id: 'qawwam', test: (s: Stats) => s.nights >= 7 },
   { id: 'hundred', test: (s: Stats) => s.ticks >= 100 },
   { id: 'mudarik', test: (s: Stats) => s.madeUp >= 10 },
+  // «طلب العلم» — the race isn't in worship alone.
+  { id: 'talib', test: (s: Stats) => s.lessons >= 10 },
+  { id: 'mulazim', test: (s: Stats) => s.ilmBestStreak >= 7 },
 ] as const;
 
 interface Stats {
@@ -337,6 +341,12 @@ interface Stats {
   bestStreak: number;
   nights: number;
   madeUp: number;
+  /** «رحلة العلم»: lessons done, their points in all and this week, and «سلسلة العلم». */
+  lessons: number;
+  ilmTotal: number;
+  ilmWeek: number;
+  ilmStreak: number;
+  ilmBestStreak: number;
 }
 
 /** Days in a row with at least one task, ending today — or yesterday, since today isn't over. */
@@ -362,7 +372,9 @@ const boardQuery = z.object({ date: anyDateSchema });
 
 /**
  * «ساحة الهمّة», for every member: points this week and in all, streaks,
- * badges, who was first today, and what the others have just done.
+ * badges, who was first today, and what the others have just done — in
+ * worship and in «طلب العلم» together, with the share of each, so the
+ * board can be read as one race or as either.
  * Only members who have ticked something are listed (plus yourself).
  */
 router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res, next) => {
@@ -417,6 +429,13 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
     const todayOf = sum([...taskToday, ...learning.today]);
     const nightsOf = sum(nights);
     const madeUpOf = sum([...taskMadeUp, ...learning.madeUp]);
+    const ilmTotalOf = sum(learning.totals);
+    const ilmWeekOf = sum(learning.week);
+    const ilmDaysOf = new Map<string, Set<string>>();
+    for (const d of learning.days) (ilmDaysOf.get(d.userId) ?? ilmDaysOf.set(d.userId, new Set()).get(d.userId)!).add(d.day);
+    const excusedOf = new Map<string, Set<string>>();
+    for (const e of excuses) (excusedOf.get(e.userId) ?? excusedOf.set(e.userId, new Set()).get(e.userId)!).add(e.day);
+    const lessonDays = learning.items.map((i) => i.date);
     const nameOf = new Map(users.map((u) => [u.id, u]));
 
     const members = users
@@ -429,6 +448,12 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
           nights: nightsOf.get(u.id)?.count ?? 0,
           madeUp: madeUpOf.get(u.id)?.count ?? 0,
           ...streaks(daysOf.get(u.id) ?? new Set(), date),
+          lessons: ilmTotalOf.get(u.id)?.count ?? 0,
+          ilmTotal: ilmTotalOf.get(u.id)?.points ?? 0,
+          ilmWeek: ilmWeekOf.get(u.id)?.points ?? 0,
+          ...(({ streak, bestStreak }) => ({ ilmStreak: streak, ilmBestStreak: bestStreak }))(
+            learningStreak(lessonDays, ilmDaysOf.get(u.id) ?? new Set(), excusedOf.get(u.id) ?? new Set(), date, learning.startOf.get(u.id) ?? null),
+          ),
         };
         const active = [...(daysOf.get(u.id) ?? [])].filter((d) => d <= date).sort();
         return {
@@ -448,6 +473,8 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
       weekEnd,
       members,
       first: first ? { ...nameOf.get(first.userId), at: first.createdAt } : null,
+      /** «السبّاق إلى العلم»: the first to finish one of today's lessons. */
+      firstIlm: learning.first ? { ...nameOf.get(learning.first.userId), at: learning.first.createdAt } : null,
       recent: recent.map((r) => ({
         name: nameOf.get(r.userId)?.name ?? '',
         avatarUrl: nameOf.get(r.userId)?.avatarUrl ?? null,
@@ -466,7 +493,7 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
 
 /** The same sums as «ساحة الهمّة» takes from tasks, from the lessons of «رحلة العلم». */
 async function learningOnBoard(date: string, weekStart: string, weekEnd: string) {
-  const [totals, week, today, days, madeUp, recent] = await Promise.all([
+  const [totals, week, today, days, madeUp, recent, first, items, enrollments] = await Promise.all([
     prisma.learningCompletion.groupBy({ by: ['userId'], _sum: { points: true }, _count: { _all: true } }),
     prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: { gte: weekStart, lte: weekEnd } }, _sum: { points: true } }),
     prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: date }, _count: { _all: true } }),
@@ -477,8 +504,12 @@ async function learningOnBoard(date: string, weekStart: string, weekEnd: string)
       take: 15,
       select: { createdAt: true, points: true, madeUp: true, userId: true, item: { select: { title: true } } },
     }),
+    prisma.learningCompletion.findFirst({ where: { day: date, madeUp: false }, orderBy: { createdAt: 'asc' }, select: { userId: true, createdAt: true } }),
+    prisma.learningItem.findMany({ select: { date: true } }),
+    prisma.learningEnrollment.findMany({ select: { userId: true, startDay: true } }),
   ]);
-  return { totals, week, today, days, madeUp, recent };
+  const startOf = new Map(enrollments.map((e) => [e.userId, e.startDay]));
+  return { totals, week, today, days, madeUp, recent, first, items, startOf };
 }
 
 // ---------------------------------------------------------------- history
@@ -510,7 +541,7 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
     const userId = req.user!.id;
     const today = devotionalToday(q);
     const from = shiftDate(weekStartIso(today), -7 * (HISTORY_WEEKS - 1));
-    const [completions, excuses, tasks] = await Promise.all([
+    const [completions, excuses, tasks, lessons, lessonDates, enrollment] = await Promise.all([
       prisma.taskCompletion.findMany({
         where: { userId },
         orderBy: { createdAt: 'asc' },
@@ -518,21 +549,39 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
       }),
       prisma.taskExcuse.findMany({ where: { userId }, orderBy: { day: 'asc' }, select: { day: true, reason: true } }),
       prisma.task.findMany({ orderBy: ORDER, select: HISTORY_TASK_SELECT }),
+      // «رحلة العلم» belongs to the record too: worship and learning, day by day.
+      prisma.learningCompletion.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+        select: { itemId: true, day: true, points: true, madeUp: true, item: { select: { title: true } } },
+      }),
+      prisma.learningItem.findMany({ select: { date: true } }),
+      prisma.learningEnrollment.findUnique({ where: { userId }, select: { active: true, startDay: true } }),
     ]);
 
-    const days = new Map<string, { day: string; points: number; count: number }>();
-    const log = new Map<string, { taskId: string; points: number; madeUp: boolean }[]>();
+    const days = new Map<string, { day: string; points: number; count: number; lessons: number; ilmPoints: number }>();
+    const log = new Map<string, { taskId: string; points: number; madeUp: boolean; learning: boolean }[]>();
+    const dayOf = (day: string) => days.get(day) ?? days.set(day, { day, points: 0, count: 0, lessons: 0, ilmPoints: 0 }).get(day)!;
     for (const c of completions) {
-      const d = days.get(c.day) ?? days.set(c.day, { day: c.day, points: 0, count: 0 }).get(c.day)!;
+      const d = dayOf(c.day);
       d.points += c.points;
       d.count += 1;
-      if (c.day >= from) (log.get(c.day) ?? log.set(c.day, []).get(c.day)!).push({ taskId: c.taskId, points: c.points, madeUp: c.madeUp });
+      if (c.day >= from) (log.get(c.day) ?? log.set(c.day, []).get(c.day)!).push({ taskId: c.taskId, points: c.points, madeUp: c.madeUp, learning: false });
+    }
+    for (const l of lessons) {
+      const d = dayOf(l.day);
+      d.points += l.points;
+      d.count += 1;
+      d.lessons += 1;
+      d.ilmPoints += l.points;
+      if (l.day >= from) (log.get(l.day) ?? log.set(l.day, []).get(l.day)!).push({ taskId: `lesson:${l.itemId}`, points: l.points, madeUp: l.madeUp, learning: true });
     }
     const sortedDays = [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
     const memberLog: MemberLog = {
       done: new Set(completions.map((c) => `${c.taskId}|${c.period}`)),
       excused: new Set(excuses.map((e) => e.day)),
-      firstDay: sortedDays[0]?.day ?? null,
+      // How faithfully a task is kept counts from the first task, not the first lesson.
+      firstDay: completions.reduce<string | null>((m, c) => (!m || c.day < m ? c.day : m), null),
     };
     const partners = partnersOf(tasks);
     const totalOf = new Map<string, number>();
@@ -583,7 +632,22 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
       from,
       days: sortedDays,
       log: [...log.entries()].map(([day, items]) => ({ day, items })),
-      titles: Object.fromEntries(tasks.filter((t) => referenced.has(t.id)).map((t) => [t.id, t.title])),
+      titles: {
+        ...Object.fromEntries(tasks.filter((t) => referenced.has(t.id)).map((t) => [t.id, t.title])),
+        ...Object.fromEntries(lessons.filter((l) => l.day >= from).map((l) => [`lesson:${l.itemId}`, l.item.title])),
+      },
+      learning: {
+        enrolled: enrollment?.active ?? false,
+        lessons: lessons.length,
+        points: lessons.reduce((n, l) => n + l.points, 0),
+        ...learningStreak(
+          lessonDates.map((i) => i.date),
+          new Set(lessons.map((l) => l.day)),
+          new Set(excuses.map((e) => e.day)),
+          today,
+          enrollment?.startDay ?? null,
+        ),
+      },
       excused: excuses,
       tasks: keep,
       past,
@@ -653,6 +717,7 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
       prisma.taskExcuse.findMany({ where: { day: { gte: since } }, select: { userId: true, day: true } }),
       prisma.task.findMany({ where: { active: true }, orderBy: ORDER, select: HISTORY_TASK_SELECT }),
     ]);
+    const lessons = await prisma.learningCompletion.findMany({ where: { day: { gte: seriesFrom < from ? seriesFrom : from, lte: today } }, select: { userId: true, day: true, points: true } });
     // Every kind of task is measured; one whose last day has passed no longer is.
     const tasks = allTasks.filter((t) => !t.endDate || t.endDate >= from);
     const repeating = tasks.filter((t) => t.repeat !== 'once');
@@ -672,10 +737,15 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
 
     const perDay = new Map<string, number>();
     for (const c of completions) if (c.day >= seriesFrom && c.day <= today) perDay.set(c.day, (perDay.get(c.day) ?? 0) + 1);
+    const ilmPerDay = new Map<string, number>();
+    for (const l of lessons) if (l.day >= seriesFrom) ilmPerDay.set(l.day, (ilmPerDay.get(l.day) ?? 0) + 1);
+    // `count` is everything done that day; `ilm` the lessons among it.
     const series = Array.from({ length: COMMUNITY_SERIES_DAYS }, (_, i) => {
       const day = shiftDate(seriesFrom, i);
-      return { day, count: perDay.get(day) ?? 0 };
+      const ilm = ilmPerDay.get(day) ?? 0;
+      return { day, count: (perDay.get(day) ?? 0) + ilm, ilm };
     });
+    const lessonsInWindow = lessons.filter((l) => l.day >= from);
 
     // «همّة الأسبوع» is chosen from the month before this Saturday, so it holds all week.
     const weekEnd = shiftDate(weekStart, 6);
@@ -705,6 +775,10 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
         points: inWindow.reduce((n, c) => n + c.points, 0),
         nights: inWindow.filter((c) => c.task.timeWindow === 'qiyam').length,
         madeUp: inWindow.filter((c) => c.madeUp).length,
+        /** «دروس العلم»: lessons of «رحلة العلم» finished in the window, and by how many brothers. */
+        lessons: lessonsInWindow.length,
+        ilmPoints: lessonsInWindow.reduce((n, l) => n + l.points, 0),
+        learners: new Set(lessonsInWindow.map((l) => l.userId)).size,
       },
       tasks: rates.map((r) => ({ id: r.task.id, title: r.task.title, timeWindow: r.task.timeWindow, repeat: r.task.repeat, rate: r.rate, kept: r.kept, possible: r.possible })),
       series,

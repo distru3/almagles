@@ -87,6 +87,7 @@ export default function Companions() {
                       </span>
                     )}
                     <span>{arNumber.format(m.points)} نقطة</span>
+                    {m.week > 0 && <span className="text-ilm">+{arNumber.format(m.week)} هذا الأسبوع</span>}
                   </p>
                 </div>
               </li>
@@ -96,6 +97,9 @@ export default function Companions() {
       </section>
       <div className="text-center">
         <FadlText text={BUNYAN} />
+        <Link to="/tasks?tab=board&race=ilm" className="mt-2 inline-flex min-h-10 items-center font-display text-sm text-ilm hover:underline">
+          سباق طلب العلم في «ساحة الهمّة»
+        </Link>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { HandHeart, Sprout, Target, Users } from 'lucide-react';
+import { GraduationCap, HandHeart, Sprout, Target, Users } from 'lucide-react';
+import { lessonsLabel, worksLabel } from '../../lib/learning';
 import { api } from '../../lib/api';
 import type { TaskCommunity } from '../../lib/types';
 import { hijriShort, todayISO } from '../../lib/dates';
@@ -56,7 +57,8 @@ function Activity({ series }: { series: TaskCommunity['series'] }) {
   return (
     <div>
       <p className="mb-1.5 text-xs text-muted" aria-live="polite">
-        {active === last ? 'اليوم' : hijriShort(shown.day)}: <span className="font-display text-fg-2 tabular-nums">{ar(shown.count)}</span> مهمة
+        {active === last ? 'اليوم' : hijriShort(shown.day)}: <span className="font-display text-fg-2 tabular-nums">{worksLabel(shown.count)}</span>
+        {shown.ilm > 0 && <span className="text-ilm"> (منها {lessonsLabel(shown.ilm)})</span>}
       </p>
       <div className="flex h-16 items-end gap-[2px] border-b border-line" onMouseLeave={() => setActive(last)}>
         {series.map((s, i) => (
@@ -66,13 +68,14 @@ function Activity({ series }: { series: TaskCommunity['series'] }) {
             onClick={() => setActive(i)}
             onMouseEnter={() => setActive(i)}
             onFocus={() => setActive(i)}
-            aria-label={`${hijriShort(s.day)}: ${ar(s.count)} مهمة`}
+            aria-label={`${hijriShort(s.day)}: ${worksLabel(s.count)}${s.ilm ? `، منها ${lessonsLabel(s.ilm)}` : ''}`}
             className="flex h-full flex-1 items-end"
           >
-            <span
-              className={`w-full rounded-t-[2px] ${i === active ? 'bg-accent-fill' : 'bg-accent-fill/45'}`}
-              style={{ height: s.count ? `max(2px, ${(s.count / max) * 100}%)` : '0' }}
-            />
+            {/* Worship in gold below, lessons in ink on top. */}
+            <span className="flex w-full flex-col overflow-hidden rounded-t-[2px]" style={{ height: s.count ? `max(2px, ${(s.count / max) * 100}%)` : '0' }}>
+              <span className={`w-full ${i === active ? 'bg-ilm-fill' : 'bg-ilm-fill/55'}`} style={{ flexGrow: s.ilm }} />
+              <span className={`w-full ${i === active ? 'bg-accent-fill' : 'bg-accent-fill/45'}`} style={{ flexGrow: s.count - s.ilm }} />
+            </span>
           </button>
         ))}
       </div>
@@ -105,7 +108,7 @@ export default function CommunityPulse() {
     };
   }, []);
 
-  if (!data || data.members === 0) return null;
+  if (!data || (data.members === 0 && data.totals.lessons === 0)) return null;
   const { totals, tasks, focus } = data;
   // With few tasks, one list; otherwise the three kept best and the three that need us most.
   const split = tasks.length >= 4;
@@ -130,6 +133,15 @@ export default function CommunityPulse() {
           {totals.nights > 0 && <>، منها {ar(totals.nights)} من قيام الليل</>}
           {totals.madeUp > 0 && <>، وتداركنا {ar(totals.madeUp)} ممّا فات</>} — شارك فيها {brothersWord(data.members)}.
         </p>
+        {totals.lessons > 0 && (
+          <p className="mt-1 flex items-start gap-1.5 border-t border-accent/20 pt-1.5 text-sm leading-7">
+            <GraduationCap className="mt-1.5 h-4 w-4 shrink-0 text-ilm" aria-hidden="true" />
+            <span>
+              وفي طلب العلم أتممنا <span className="font-display text-[18px] font-bold text-ilm">{lessonsLabel(totals.lessons)}</span> من «رحلة العلم» — سار فيها{' '}
+              {brothersWord(totals.learners)}.
+            </span>
+          </p>
+        )}
       </div>
 
       {focus && (

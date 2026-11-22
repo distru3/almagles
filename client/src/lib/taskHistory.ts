@@ -55,14 +55,17 @@ export function gardenWeeks(h: TaskHistory): GardenDay[][] {
   return weeks;
 }
 
-/** Points in each of the last `n` weeks, oldest first; the last is this week so far. */
-export function weeklyPoints(h: TaskHistory, n = 12): { week: string; points: number }[] {
+/** Points in each of the last `n` weeks, oldest first; the last is this week so far. `ilm` is the «طلب العلم» share. */
+export function weeklyPoints(h: TaskHistory, n = 12): { week: string; points: number; ilm: number }[] {
   const current = saturdayOf(h.today);
-  const weeks = Array.from({ length: n }, (_, i) => ({ week: shiftIso(current, -7 * (n - 1 - i)), points: 0 }));
+  const weeks = Array.from({ length: n }, (_, i) => ({ week: shiftIso(current, -7 * (n - 1 - i)), points: 0, ilm: 0 }));
   const index = new Map(weeks.map((w, i) => [w.week, i]));
   for (const d of h.days) {
     const i = index.get(saturdayOf(d.day));
-    if (i !== undefined) weeks[i].points += d.points;
+    if (i !== undefined) {
+      weeks[i].points += d.points;
+      weeks[i].ilm += d.ilmPoints;
+    }
   }
   return weeks;
 }
@@ -101,7 +104,7 @@ export function monthHarvest(h: TaskHistory): { current: MonthHarvest; previous:
   return { current: sum(currentKey, hijriMonthLabel(h.today)), previous: sum(previousKey, hijriMonthLabel(d)) };
 }
 
-export type MilestoneKind = 'first' | 'ticks' | 'level' | 'streak';
+export type MilestoneKind = 'first' | 'ticks' | 'level' | 'streak' | 'ilm';
 
 export interface Milestone {
   kind: MilestoneKind;
@@ -111,6 +114,7 @@ export interface Milestone {
 
 const arNumber = new Intl.NumberFormat('ar');
 const TICK_MILESTONES = [50, 100, 250, 500, 1000, 2000, 5000];
+const LESSON_MILESTONES = [10, 30, 50, 100, 200, 365];
 
 function daysWord(n: number): string {
   if (n === 2) return 'يومان';
@@ -119,23 +123,29 @@ function daysWord(n: number): string {
 }
 
 /**
- * «محطاتك»: the first task, round numbers of tasks, each new level of the
+ * «محطاتك»: the first deed, round numbers of deeds, the first lesson of
+ * «رحلة العلم» and round numbers of lessons, each new level of the
  * garden, and the longest run of days (excused days keep a run going, as on
  * «ساحة الهمّة»). Newest first.
  */
 export function milestones(h: TaskHistory): Milestone[] {
   const out: Milestone[] = [];
   if (h.days.length === 0) return out;
-  out.push({ kind: 'first', day: h.days[0].day, title: 'أول مهمة أنجزتها — بداية الطريق' });
+  out.push({ kind: 'first', day: h.days[0].day, title: 'أول عمل أنجزته — بداية الطريق' });
 
   let ticks = 0;
+  let lessons = 0;
   let points = 0;
   let level = 0;
   for (const d of h.days) {
     const before = ticks;
+    const lessonsBefore = lessons;
     ticks += d.count;
+    lessons += d.lessons;
     points += d.points;
-    for (const m of TICK_MILESTONES) if (before < m && ticks >= m) out.push({ kind: 'ticks', day: d.day, title: `المهمة رقم ${arNumber.format(m)}` });
+    for (const m of TICK_MILESTONES) if (before < m && ticks >= m) out.push({ kind: 'ticks', day: d.day, title: `العمل رقم ${arNumber.format(m)}` });
+    if (lessonsBefore === 0 && lessons > 0) out.push({ kind: 'ilm', day: d.day, title: 'أول درس في «رحلة العلم» — بداية طريق العلم' });
+    for (const m of LESSON_MILESTONES) if (lessonsBefore < m && lessons >= m) out.push({ kind: 'ilm', day: d.day, title: `الدرس رقم ${arNumber.format(m)} في «رحلة العلم»` });
     while (level + 1 < LEVELS.length && points >= LEVELS[level + 1].min) {
       level += 1;
       out.push({ kind: 'level', day: d.day, title: `صار بستانك «${LEVELS[level].name}»` });

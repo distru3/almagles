@@ -77,6 +77,14 @@ export function lessonsLabel(n: number): string {
   return `${arNumber.format(n)} درسًا`;
 }
 
+/** Tasks and lessons together: «عمل واحد / عملان / ٣ أعمال / ١١ عملًا». */
+export function worksLabel(n: number): string {
+  if (n === 1) return 'عمل واحد';
+  if (n === 2) return 'عملان';
+  if (n >= 3 && n <= 10) return `${arNumber.format(n)} أعمال`;
+  return `${arNumber.format(n)} عملًا`;
+}
+
 /** «دقيقة / دقيقتان / ٥ دقائق / ٢٠ دقيقة». */
 export function minutesLabel(n: number): string {
   if (n === 1) return 'دقيقة';
