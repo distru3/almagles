@@ -267,7 +267,7 @@ export interface TaskProgress {
   members: { id: string; name: string; avatarUrl: string | null; done: string[] }[];
 }
 
-export type BadgeId = 'steady' | 'firm' | 'qawwam' | 'hundred' | 'mudarik';
+export type BadgeId = 'steady' | 'firm' | 'qawwam' | 'hundred' | 'mudarik' | 'talib' | 'mulazim';
 
 export interface BoardMember {
   id: string;
@@ -281,6 +281,12 @@ export interface BoardMember {
   bestStreak: number;
   nights: number;
   madeUp: number;
+  /** «طلب العلم»: lessons done, their points (in all, this week) and «سلسلة العلم». `week`/`total` include them. */
+  lessons: number;
+  ilmTotal: number;
+  ilmWeek: number;
+  ilmStreak: number;
+  ilmBestStreak: number;
   /** The last day they worked or were excused. */
   lastDay: string | null;
   excusedToday: boolean;
@@ -296,10 +302,12 @@ export interface TaskHistory {
   today: string;
   /** First day of the day-by-day log (26 weeks back, a Saturday). */
   from: string;
-  /** Every day with work in it, oldest first. */
-  days: { day: string; points: number; count: number }[];
-  /** What was done on each day since `from`. */
-  log: { day: string; items: { taskId: string; points: number; madeUp: boolean }[] }[];
+  /** Every day with work in it, oldest first; `lessons`/`ilmPoints` are the «رحلة العلم» share of it. */
+  days: { day: string; points: number; count: number; lessons: number; ilmPoints: number }[];
+  /** What was done on each day since `from`; a lesson's id is "lesson:<id>". */
+  log: { day: string; items: { taskId: string; points: number; madeUp: boolean; learning: boolean }[] }[];
+  /** «رحلة العلم» in the record. */
+  learning: { enrolled: boolean; lessons: number; points: number; streak: number; bestStreak: number };
   titles: Record<string, string>;
   excused: { day: string; reason: 'sick' | 'travel' | 'other' }[];
   /** Current tasks of every kind; a one-off task has an empty strip. */
@@ -330,10 +338,11 @@ export interface TaskCommunity {
   today: string;
   from: string;
   members: number;
-  totals: { ticks: number; points: number; nights: number; madeUp: number };
+  totals: { ticks: number; points: number; nights: number; madeUp: number; lessons: number; ilmPoints: number; learners: number };
   /** Most faithfully kept first. */
   tasks: { id: string; title: string; timeWindow: TaskTime; repeat: TaskRepeat; rate: number; kept: number; possible: number }[];
-  series: { day: string; count: number }[];
+  /** `count` is everything done that day, `ilm` the lessons among it. */
+  series: { day: string; count: number; ilm: number }[];
   /** «همّة الأسبوع»: last month's least-kept task, revived together this week. */
   focus: { id: string; title: string; timeWindow: TaskTime; before: number; week: { kept: number; possible: number } } | null;
 }
@@ -344,6 +353,8 @@ export interface TaskBoard {
   weekEnd: string;
   members: BoardMember[];
   first: { id: string; name: string; avatarUrl: string | null; at: string } | null;
+  /** «السبّاق إلى العلم»: the first to finish one of today's lessons. */
+  firstIlm: { id: string; name: string; avatarUrl: string | null; at: string } | null;
   /** `learning`: a lesson of «رحلة العلم» rather than a task. */
   recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; madeUp: boolean; learning?: boolean; at: string }[];
 }
@@ -429,6 +440,8 @@ export interface LearningCompanions {
     due: number;
     keptDue: number;
     points: number;
+    /** Learning points this week. */
+    week: number;
     todayDone: number;
     streak: number;
     bestStreak: number;

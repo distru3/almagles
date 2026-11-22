@@ -76,7 +76,7 @@ describe('«سجلّي» — a member’s own history', () => {
 
     const res = await c.get(`/api/tasks/history?${Q}`);
     expect(res.status).toBe(200);
-    expect(res.body.days[0]).toEqual({ day: '2026-03-02', points: 10, count: 1 });
+    expect(res.body.days[0]).toEqual({ day: '2026-03-02', points: 10, count: 1, lessons: 0, ilmPoints: 0 });
     expect(res.body.days).toHaveLength(8);
     // The day-by-day log covers the last 26 weeks; March is older than that.
     expect(res.body.log.find((d: { day: string }) => d.day === '2026-03-02')).toBeUndefined();
@@ -131,7 +131,7 @@ describe('«حال المجلس» — the circle together', () => {
     expect(res.body.tasks[0].rate).toBe(1);
     expect(res.body.tasks[1]).toMatchObject({ kept: 1, possible: 60 });
     expect(res.body.series).toHaveLength(56);
-    expect(res.body.series.at(-2)).toEqual({ day: shiftDate(DAY, -1), count: 2 });
+    expect(res.body.series.at(-2)).toEqual({ day: shiftDate(DAY, -1), count: 2, ilm: 0 });
     expect(JSON.stringify(res.body)).not.toMatch(/أبو بكر|عمر|a@test|b@test/);
   });
 

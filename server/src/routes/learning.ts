@@ -6,7 +6,7 @@ import { requireAuth, requireScheduleManager } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { linkUrlSchema } from '../lib/linkUrl.js';
-import { parseDate, shiftDate } from '../lib/taskSchedule.js';
+import { parseDate, shiftDate, weekStartIso } from '../lib/taskSchedule.js';
 import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak } from '../lib/learning.js';
 import { MAX_LEARNING_FILE_BYTES, isLearningFileId, isPdf, learningFileStore } from '../lib/learningFiles.js';
 import { env } from '../env.js';
@@ -253,6 +253,8 @@ router.get('/companions', requireAuth, validate(z.object({ date: anyDateSchema }
       prisma.taskExcuse.findMany({ select: { userId: true, day: true } }),
     ]);
     const lessonDays = allItems.map((i) => i.date);
+    const weekStart = weekStartIso(date);
+    const weekEnd = shiftDate(weekStart, 6);
     const todayIds = new Set(allItems.filter((i) => i.date === date).map((i) => i.id));
     const byUser = new Map<string, typeof completions>();
     for (const c of completions) (byUser.get(c.userId) ?? byUser.set(c.userId, []).get(c.userId)!).push(c);
@@ -271,6 +273,8 @@ router.get('/companions', requireAuth, validate(z.object({ date: anyDateSchema }
           due: due.length,
           keptDue: due.filter((i) => ids.has(i.id)).length,
           points: mine.reduce((n, c) => n + c.points, 0),
+          /** Points in «طلب العلم» this Saturday → Friday week, as on «ساحة الهمّة». */
+          week: mine.filter((c) => c.day >= weekStart && c.day <= weekEnd).reduce((n, c) => n + c.points, 0),
           todayDone: [...todayIds].filter((id) => ids.has(id)).length,
           ...learningStreak(lessonDays, new Set(mine.map((c) => c.day)), excusedOf.get(user.id) ?? new Set(), date, startDay),
         };

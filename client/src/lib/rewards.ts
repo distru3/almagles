@@ -1,6 +1,8 @@
-import { Flame, Medal, MoonStar, Sprout, Leaf, TreeDeciduous, TreePalm, Trees, Mountain, History, type LucideIcon } from 'lucide-react';
+import { Flame, Medal, MoonStar, Sprout, Leaf, TreeDeciduous, TreePalm, Trees, Mountain, History, GraduationCap, BookOpenCheck, type LucideIcon } from 'lucide-react';
 import type { BadgeId } from './types';
-import { DAWAM, KHILFA, type Text } from './fadail';
+import { DAWAM, FADAIL, KHILFA, type Text } from './fadail';
+
+const ILM = FADAIL.find((f) => f.id === 'ilm')?.texts[0];
 
 /**
  * The garden every member grows. Points are only a nudge — the reward itself is
@@ -39,6 +41,8 @@ export const BADGES: Record<BadgeId, { name: string; hint: string; icon: LucideI
   steady: { name: 'المداوم', hint: 'سبعة أيام متتالية', icon: Flame, text: DAWAM },
   firm: { name: 'الثابت', hint: 'ثلاثون يومًا متتالية', icon: Medal, text: DAWAM },
   qawwam: { name: 'قوّام الليل', hint: 'سبع ليالٍ من القيام', icon: MoonStar },
-  hundred: { name: 'مئة عمل', hint: 'مئة مهمة منجزة', icon: Medal },
-  mudarik: { name: 'المتدارك', hint: 'تدارك عشر مهام فاتته', icon: History, text: KHILFA },
+  hundred: { name: 'مئة عمل', hint: 'مئة عمل منجز، مهامًا ودروسًا', icon: Medal },
+  mudarik: { name: 'المتدارك', hint: 'تدارك عشرة أعمال فاتته', icon: History, text: KHILFA },
+  talib: { name: 'طالب علم', hint: 'عشرة دروس في «رحلة العلم»', icon: GraduationCap, text: ILM },
+  mulazim: { name: 'ملازم العلم', hint: 'سبعة أيام دروس متتالية', icon: BookOpenCheck, text: ILM },
 };
