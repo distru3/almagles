@@ -1,0 +1,313 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { client, createUser, loginAs, prisma, resetDb } from './helpers.js';
+import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak } from '../src/lib/learning.js';
+import { shiftDate } from '../src/lib/taskSchedule.js';
+import { MAX_LEARNING_FILE_BYTES, learningFileStore } from '../src/lib/learningFiles.js';
+
+beforeEach(resetDb);
+
+/** The member's "today" — never a Friday, which holds no lessons (tomorrow is still near enough). */
+const now = new Date().toISOString().slice(0, 10);
+const today = isRestDay(now) ? shiftDate(now, 1) : now;
+/** The lesson day `n` days back, stepping past a Friday. */
+const back = (n: number) => {
+  const d = shiftDate(today, -n);
+  return isRestDay(d) ? shiftDate(d, -1) : d;
+};
+
+async function lesson(date: string, extra: Record<string, unknown> = {}) {
+  return prisma.learningItem.create({ data: { date, kind: 'reading', title: `درس ${date}`, points: 20, ...extra } });
+}
+
+async function joined(email = 'a@test.local', name?: string) {
+  await createUser({ email, name });
+  const c = await loginAs(email);
+  expect((await c.put('/api/learning/enrollment', { date: today, active: true })).status).toBe(200);
+  return c;
+}
+
+describe('the rules of «رحلة العلم»', () => {
+  it('rests on Friday', () => {
+    expect(isRestDay('2026-11-20')).toBe(true);
+    expect(isRestDay('2026-11-21')).toBe(false);
+  });
+
+  it('gives full points on the day and the next, half within the week, none after or before', () => {
+    expect(learningPoints(20, '2026-11-22', '2026-11-22')).toBe(20);
+    expect(learningPoints(20, '2026-11-22', '2026-11-23')).toBe(20);
+    expect(learningPoints(15, '2026-11-22', '2026-11-25')).toBe(8);
+    expect(learningPoints(20, '2026-11-22', shiftDate('2026-11-22', LEARN_MAKEUP_DAYS + 1))).toBeNull();
+    expect(learningPoints(20, '2026-11-23', '2026-11-22')).toBeNull();
+  });
+
+  it('keeps the streak across Fridays, excused days, days before joining and an unfinished today', () => {
+    // Thu 19, (Fri 20), Sat 21, Sun 22, Mon 23 = today.
+    const lessons = ['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-21', '2026-11-22', '2026-11-23'];
+    const done = new Set(['2026-11-19', '2026-11-22']);
+    const excused = new Set(['2026-11-21']);
+    expect(learningStreak(lessons, done, excused, '2026-11-23', '2026-11-19')).toEqual({ streak: 2, bestStreak: 2 });
+    // Without the excuse, Saturday breaks it.
+    expect(learningStreak(lessons, done, new Set(), '2026-11-23', '2026-11-19')).toEqual({ streak: 1, bestStreak: 1 });
+    // Without a start day, the days before count as missed.
+    expect(learningStreak(lessons, new Set(['2026-11-22']), new Set(), '2026-11-23', null).streak).toBe(1);
+  });
+});
+
+describe('joining the journey', () => {
+  it('needs a signed-in member', async () => {
+    expect((await (await client()).get(`/api/learning?date=${today}`)).status).toBe(401);
+  });
+
+  it('asks nothing of a member who hasn’t joined, and lets them decline in peace', async () => {
+    await createUser({ email: 'a@test.local' });
+    const c = await loginAs('a@test.local');
+    const item = await lesson(today);
+    const before = await c.get(`/api/learning?date=${today}`);
+    expect(before.status).toBe(200);
+    expect(before.body.enrollment).toBeNull();
+    expect(before.body.items.map((i: { id: string }) => i.id)).toContain(item.id);
+
+    expect((await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true })).status).toBe(403);
+    const declined = await c.put('/api/learning/enrollment', { date: today, active: false });
+    expect(declined.body.enrollment).toEqual({ active: false, startDay: null });
+    expect((await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true })).status).toBe(403);
+  });
+
+  it('counts from the day a member joins, and keeps that day if they press «ابدأ» again', async () => {
+    const c = await joined();
+    await c.put('/api/learning/enrollment', { date: today, active: true });
+    expect((await prisma.learningEnrollment.findFirst())!.startDay).toBe(today);
+  });
+
+  it('keeps what a member did when they leave', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    await c.put('/api/learning/enrollment', { date: today, active: false });
+    const { body } = await c.get(`/api/learning?date=${today}`);
+    expect(body.enrollment.active).toBe(false);
+    expect(body.stats.done).toBe(1);
+  });
+});
+
+describe('finishing lessons', () => {
+  it('earns the full points for today’s lesson and tells when the whole day is done', async () => {
+    const c = await joined();
+    const [a, b] = [await lesson(today), await lesson(today, { title: 'محاضرة' })];
+    const first = await c.put(`/api/learning/items/${a.id}/done`, { date: today, done: true });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ points: 20, madeUp: false, dayDone: false });
+    const second = await c.put(`/api/learning/items/${b.id}/done`, { date: today, done: true });
+    expect(second.body.dayDone).toBe(true);
+
+    const { body } = await c.get(`/api/learning?date=${today}`);
+    const mine = body.items.find((i: { id: string }) => i.id === a.id);
+    expect(mine).toMatchObject({ done: true, earned: 20, doneCount: 1, worth: null });
+    expect(body.stats).toMatchObject({ done: 2, total: 2, points: 40, streak: 1 });
+  });
+
+  it('catches up a missed lesson within the week for half its points, and no further', async () => {
+    const c = await joined();
+    const missed = await lesson(back(3));
+    const old = await lesson(back(LEARN_MAKEUP_DAYS + 2));
+    const res = await c.put(`/api/learning/items/${missed.id}/done`, { date: today, done: true });
+    expect(res.body).toMatchObject({ points: 10, madeUp: true });
+    expect((await prisma.learningCompletion.findFirst())!.day).toBe(missed.date);
+    expect((await c.put(`/api/learning/items/${old.id}/done`, { date: today, done: true })).status).toBe(400);
+  });
+
+  it('won’t tick a lesson whose day hasn’t come', async () => {
+    const c = await joined();
+    const later = await lesson(shiftDate(today, isRestDay(shiftDate(today, 2)) ? 3 : 2));
+    const res = await c.put(`/api/learning/items/${later.id}/done`, { date: today, done: true });
+    expect(res.status).toBe(400);
+  });
+
+  it('keeps «فائدتي» for the member alone', async () => {
+    const a = await joined('a@test.local');
+    const b = await joined('b@test.local');
+    const item = await lesson(today);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true, note: 'الإخلاص أول العمل' });
+    await b.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const mine = (await a.get(`/api/learning?date=${today}`)).body.items[0];
+    const theirs = (await b.get(`/api/learning?date=${today}`)).body.items[0];
+    expect(mine.note).toBe('الإخلاص أول العمل');
+    expect(theirs.note).toBeNull();
+    expect(theirs.doneCount).toBe(2);
+    const companions = await b.get(`/api/learning/companions?date=${today}`);
+    expect(JSON.stringify(companions.body)).not.toContain('الإخلاص');
+
+    expect((await a.put(`/api/learning/items/${item.id}/note`, { note: '' })).body.note).toBeNull();
+  });
+
+  it('unticking takes the lesson and its points back', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: false });
+    expect(await prisma.learningCompletion.count()).toBe(0);
+  });
+});
+
+describe('«رفقاء الرحلة» and «ساحة الهمّة»', () => {
+  it('lists the members on the journey with their progress, not those who declined', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    await joined('b@test.local', 'بلال');
+    await createUser({ email: 'c@test.local', name: 'خالد' });
+    await (await loginAs('c@test.local')).put('/api/learning/enrollment', { date: today, active: false });
+    const item = await lesson(today);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+
+    const { body } = await a.get(`/api/learning/companions?date=${today}`);
+    expect(body.todayCount).toBe(1);
+    expect(body.members.map((m: { name: string }) => m.name)).toEqual(['أحمد', 'بلال']);
+    expect(body.members[0]).toMatchObject({ done: 1, todayDone: 1, points: 20, streak: 1 });
+  });
+
+  it('counts lesson points on «ساحة الهمّة» beside the tasks', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const { body } = await c.get(`/api/tasks/board?date=${today}`);
+    expect(body.members[0]).toMatchObject({ total: 20, week: 20, today: 1, ticks: 1, streak: 1 });
+    expect(body.recent[0]).toMatchObject({ title: item.title, points: 20, learning: true });
+  });
+});
+
+describe('writing the calendar', () => {
+  async function manager() {
+    await createUser({ email: 'm@test.local', canManageSchedule: true });
+    return loginAs('m@test.local');
+  }
+
+  it('leaves Friday for rest', async () => {
+    const m = await manager();
+    const res = await m.post('/api/learning/items', { date: '2026-11-20', kind: 'video', title: 'محاضرة' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('الجمعة');
+  });
+
+  it('lays out a book over many days, each after its day’s other lessons', async () => {
+    const m = await manager();
+    await m.post('/api/learning/items', { date: '2026-11-21', kind: 'video', title: 'محاضرة' });
+    const plan = ['2026-11-21', '2026-11-22', '2026-11-23'].map((date, i) => ({
+      date,
+      kind: 'reading',
+      title: 'رياض الصالحين',
+      portion: `ص ${i * 10 + 1}–${i * 10 + 10}`,
+    }));
+    const res = await m.post('/api/learning/items/bulk', { items: plan });
+    expect(res.status).toBe(201);
+    expect(res.body.items.map((i: { order: number }) => i.order)).toEqual([1, 0, 0]);
+    const withFriday = await m.post('/api/learning/items/bulk', { items: [{ ...plan[0], date: '2026-11-20' }] });
+    expect(withFriday.status).toBe(400);
+    expect(await prisma.learningItem.count()).toBe(4);
+  });
+
+  it('moves the members’ ticks with a lesson moved to another day, and deletes them with it', async () => {
+    const m = await manager();
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const moved = await m.put(`/api/learning/items/${item.id}`, { date: '2026-11-21' });
+    expect(moved.body.item).toMatchObject({ date: '2026-11-21', doneCount: 1 });
+    expect((await prisma.learningCompletion.findFirst())!.day).toBe('2026-11-21');
+
+    const listed = await m.get('/api/learning/manage?from=2026-11-01&to=2026-11-30');
+    expect(listed.body).toMatchObject({ members: 1, items: [{ id: item.id, doneCount: 1 }] });
+
+    expect((await m.del(`/api/learning/items/${item.id}`)).status).toBe(200);
+    expect(await prisma.learningCompletion.count()).toBe(0);
+  });
+});
+
+describe('PDFs attached to lessons', () => {
+  const realStore = { ...learningFileStore };
+  let removed: string[] = [];
+  let n = 0;
+
+  beforeEach(() => {
+    removed = [];
+    learningFileStore.upload = async () => {
+      n += 1;
+      return { publicId: `learning/book${n}`, url: `https://res.cloudinary.com/demo/image/upload/learning/book${n}.pdf`, pages: 40 };
+    };
+    learningFileStore.remove = async (publicId) => {
+      removed.push(publicId);
+    };
+  });
+  afterEach(() => {
+    Object.assign(learningFileStore, realStore);
+  });
+
+  async function manager() {
+    await createUser({ email: 'm@test.local', canManageSchedule: true });
+    return loginAs('m@test.local');
+  }
+  const upload = (c: Awaited<ReturnType<typeof loginAs>>, body: Buffer, name = 'رياض الصالحين.pdf') =>
+    c.agent.post('/api/learning/files').set('X-CSRF-Token', c.csrf).attach('file', body, { filename: name, contentType: 'application/pdf' });
+  const PDF = Buffer.from('%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n%%EOF');
+
+  it('takes only real PDFs, and only from managers', async () => {
+    await createUser({ email: 'v@test.local' });
+    expect((await upload(await loginAs('v@test.local'), PDF)).status).toBe(403);
+    const m = await manager();
+    const fake = await upload(m, Buffer.from('<html>not a book</html>'), 'book.pdf');
+    expect(fake.status).toBe(400);
+    const res = await upload(m, PDF);
+    expect(res.status).toBe(201);
+    expect(res.body.file).toMatchObject({ publicId: 'learning/book1', pages: 40, bytes: PDF.length });
+  });
+
+  it('refuses a file over the size limit', async () => {
+    const m = await manager();
+    const big = Buffer.concat([PDF, Buffer.alloc(MAX_LEARNING_FILE_BYTES)]);
+    const res = await upload(m, big);
+    expect(res.status).toBe(413);
+    expect(res.body.message).toContain('ميغابايت');
+  });
+
+  it('won’t attach a file from anywhere else', async () => {
+    const m = await manager();
+    const res = await m.post('/api/learning/items', {
+      date: '2026-11-21',
+      kind: 'reading',
+      title: 'كتاب',
+      filePublicId: 'learning/x',
+      fileUrl: 'https://evil.example/book.pdf',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('shows the file to members, and deletes it with the last lesson that uses it', async () => {
+    const m = await manager();
+    const { file } = (await upload(m, PDF)).body;
+    const fields = { filePublicId: file.publicId, fileUrl: file.url, fileName: file.name, fileBytes: file.bytes, filePages: file.pages };
+    const plan = [today, shiftDate(today, isRestDay(shiftDate(today, 1)) ? 2 : 1)].map((date, i) => ({ date, kind: 'reading', title: 'رياض الصالحين', startPage: i * 10 + 1, ...fields }));
+    const { items } = (await m.post('/api/learning/items/bulk', { items: plan })).body;
+
+    const c = await joined();
+    const seen = (await c.get(`/api/learning?date=${today}`)).body.items.find((i: { id: string }) => i.id === items[0].id);
+    expect(seen).toMatchObject({ fileUrl: file.url, fileName: 'رياض الصالحين.pdf', filePages: 40, startPage: 1 });
+
+    // Editing other fields keeps the file.
+    expect((await m.put(`/api/learning/items/${items[0].id}`, { title: 'رياض الصالحين — المقدمة' })).body.item.fileUrl).toBe(file.url);
+    await m.del(`/api/learning/items/${items[0].id}`);
+    expect(removed).toEqual([]);
+    // Taking the file off the last lesson removes it from storage.
+    const off = await m.put(`/api/learning/items/${items[1].id}`, { filePublicId: null });
+    expect(off.body.item).toMatchObject({ fileUrl: null, startPage: null });
+    expect(removed).toEqual([file.publicId]);
+  });
+
+  it('throws away an upload no lesson took, but never one in use', async () => {
+    const m = await manager();
+    const a = (await upload(m, PDF)).body.file;
+    const b = (await upload(m, PDF)).body.file;
+    await m.post('/api/learning/items', { date: '2026-11-21', kind: 'reading', title: 'كتاب', filePublicId: b.publicId, fileUrl: b.url });
+    await m.del(`/api/learning/files/${a.publicId}`);
+    await m.del(`/api/learning/files/${b.publicId}`);
+    expect(removed).toEqual([a.publicId]);
+    expect((await m.del('/api/learning/files/posts/abc')).status).toBe(400);
+  });
+});

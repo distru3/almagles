@@ -22,6 +22,7 @@ import notificationRoutes from './routes/notifications.js';
 import pushRoutes from './routes/push.js';
 import adhkarRoutes from './routes/adhkar.js';
 import quranRoutes from './routes/quran.js';
+import learningRoutes from './routes/learning.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 import { LOCAL_UPLOADS_DIR } from './lib/postImages.js';
 
@@ -43,8 +44,9 @@ app.use(
             // Link-preview images come from whatever site a post links to.
             imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
             mediaSrc: ["'self'", 'blob:', 'https://res.cloudinary.com'],
-            // Videos upload straight from the browser to Cloudinary.
-            connectSrc: ["'self'", 'https://api.cloudinary.com'],
+            // Videos upload straight from the browser to Cloudinary; the «رحلة العلم»
+            // reader (pdf.js) downloads a lesson's PDF from Cloudinary to draw its pages.
+            connectSrc: ["'self'", 'https://api.cloudinary.com', 'https://res.cloudinary.com'],
             frameSrc: ['https://www.youtube-nocookie.com'],
             // The video compressor runs a tiny timer worker from a blob: URL.
             workerSrc: ["'self'", 'blob:'],
@@ -91,6 +93,8 @@ if (isProd) {
   app.use('/api/push', limiter(15, 30));
   // «علاماتي»: a member moves their marks often while reading, but not hundreds of times.
   app.use('/api/quran', limiter(15, 300));
+  // «رحلة العلم»: ticking lessons and editing the calendar (a «خطة كتاب» is one request).
+  app.use('/api/learning', limiter(15, 300));
   app.use('/api/posts/:postId/reactions', limiter(10, 120));
   app.use('/api/posts', limiter(60, 120));
 }
@@ -111,6 +115,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/adhkar', adhkarRoutes);
 app.use('/api/quran', quranRoutes);
+app.use('/api/learning', learningRoutes);
 
 app.use('/api', notFoundApi);
 

@@ -19,6 +19,7 @@ import NotificationsPage from './pages/NotificationsPage';
 import TasksPage from './pages/TasksPage';
 import AdhkarPage from './pages/AdhkarPage';
 import QuranPage from './pages/QuranPage';
+import LearnPage from './pages/LearnPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -92,6 +93,14 @@ export default function App() {
             element={
               <RequireLogin>
                 <TasksPage />
+              </RequireLogin>
+            }
+          />
+          <Route
+            path="/learn"
+            element={
+              <RequireLogin>
+                <LearnPage />
               </RequireLogin>
             }
           />

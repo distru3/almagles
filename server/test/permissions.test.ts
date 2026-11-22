@@ -85,6 +85,22 @@ describe('schedule editing', () => {
     expect((await (await loginAs('admin@test.local')).post('/api/schedule', session)).status).toBe(201);
   });
 
+  it('«رحلة العلم»: only schedule managers and admins write the calendar', async () => {
+    const lesson = { date: '2026-10-17', kind: 'reading', title: 'الأربعون النووية' };
+    const cat = await createCategory();
+    await createUser({ email: 'v@test.local' });
+    await createUser({ email: 'w@test.local', role: 'writer', categoryIds: [cat.id] });
+    await createUser({ email: 'ws@test.local', role: 'writer', categoryIds: [cat.id], canManageSchedule: true });
+    await createUser({ email: 'admin@test.local', role: 'admin' });
+
+    expect((await (await client()).post('/api/learning/items', lesson)).status).toBe(401);
+    expect((await (await loginAs('v@test.local')).post('/api/learning/items', lesson)).status).toBe(403);
+    expect((await (await loginAs('w@test.local')).post('/api/learning/items', lesson)).status).toBe(403);
+    expect((await (await loginAs('v@test.local')).get('/api/learning/manage?from=2026-10-01&to=2026-10-31')).status).toBe(403);
+    expect((await (await loginAs('ws@test.local')).post('/api/learning/items', lesson)).status).toBe(201);
+    expect((await (await loginAs('admin@test.local')).post('/api/learning/items', lesson)).status).toBe(201);
+  });
+
   it('anyone can read the schedule', async () => {
     await prisma.scheduleItem.create({ data: { date: '2026-10-17', weekdayKey: 'sat', timeLabel: 'فجر', title: 'درس' } });
     const res = await (await client()).get('/api/schedule');

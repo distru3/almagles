@@ -11,6 +11,7 @@ import {
   Sparkles,
   Plus,
   Calendar,
+  GraduationCap,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
@@ -23,13 +24,16 @@ import { confirmDiscard } from '../../lib/unsaved';
 import AdminCommentsTab from './AdminCommentsTab';
 import AdminUsersTab from './AdminUsersTab';
 import PostFormModal from './PostFormModal';
+import LearningManager from '../../components/learning/LearningManager';
+import { monthOf, monthRange } from '../../lib/learning';
 
-type Tab = 'posts' | 'categories' | 'schedule' | 'comments' | 'users';
+type Tab = 'posts' | 'categories' | 'schedule' | 'learning' | 'comments' | 'users';
 
 const ALL_TABS: { key: Tab; label: string; icon: typeof Newspaper; superOnly?: boolean; subtitle: string }[] = [
   { key: 'posts', label: 'المنشورات', icon: Newspaper, subtitle: 'إدارة وتعديل المقالات' },
   { key: 'categories', label: 'الأقسام', icon: FolderOpen, superOnly: true, subtitle: 'تصنيفات المحتوى' },
   { key: 'schedule', label: 'الجدول الأسبوعي', icon: CalendarDays, subtitle: 'أنشطة المقرر اليومية' },
+  { key: 'learning', label: 'رحلة العلم', icon: GraduationCap, subtitle: 'دروس هذا الشهر' },
   { key: 'comments', label: 'التعليقات', icon: MessagesSquare, subtitle: 'مشاركات وتفاعل الزوار' },
   { key: 'users', label: 'المستخدمون', icon: Users, superOnly: true, subtitle: 'الصلاحيات والكتّاب' },
 ];
@@ -53,12 +57,14 @@ export default function AdminDashboard() {
     posts: number;
     categories: number;
     schedule: number;
+    learning: number;
     comments: number;
     users: number;
   }>({
     posts: 0,
     categories: 0,
     schedule: 0,
+    learning: 0,
     comments: 0,
     users: 0,
   });
@@ -68,7 +74,7 @@ export default function AdminDashboard() {
 
   const tabs = ALL_TABS.filter((t) => {
     if (t.superOnly) return isSuper;
-    if (t.key === 'schedule') return isSuper || canSchedule;
+    if (t.key === 'schedule' || t.key === 'learning') return isSuper || canSchedule;
     if (t.key === 'posts' || t.key === 'comments') return isSuper || hasCategories;
     return true;
   });
@@ -86,12 +92,14 @@ export default function AdminDashboard() {
   // Load stats and categories
   const loadOverview = async () => {
     try {
-      const [catRes, postRes, schedRes, commRes, usersRes] = await Promise.allSettled([
+      const month = monthRange(monthOf(todayISO()));
+      const [catRes, postRes, schedRes, commRes, usersRes, learnRes] = await Promise.allSettled([
         api<{ categories: Category[] }>('/categories'),
         api<{ items: any[]; total: number }>('/posts?limit=1'),
         api<{ items: any[] }>('/schedule'),
         api<{ total: number }>('/comments?limit=1'),
         isSuper ? api<{ users: any[] }>('/users') : Promise.resolve({ users: [] }),
+        isSuper || canSchedule ? api<{ items: unknown[] }>(`/learning/manage?from=${month.from}&to=${month.to}`) : Promise.resolve({ items: [] }),
       ]);
 
       if (catRes.status === 'fulfilled') {
@@ -102,6 +110,7 @@ export default function AdminDashboard() {
         categories: catRes.status === 'fulfilled' ? catRes.value.categories.length : 0,
         posts: postRes.status === 'fulfilled' ? (postRes.value.total ?? postRes.value.items.length) : 0,
         schedule: schedRes.status === 'fulfilled' ? schedRes.value.items.length : 0,
+        learning: learnRes.status === 'fulfilled' ? learnRes.value.items.length : 0,
         comments: commRes.status === 'fulfilled' ? commRes.value.total : 0,
         users: usersRes.status === 'fulfilled' ? (usersRes.value as any).users?.length ?? 0 : 0,
       });
@@ -174,7 +183,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Unified Tab Navigation & KPIs Bar */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tabs.map(({ key, label, icon: Icon, subtitle }) => {
           const isActive = tab === key;
           const count =
@@ -184,6 +193,8 @@ export default function AdminDashboard() {
               ? stats.categories
               : key === 'schedule'
               ? stats.schedule
+              : key === 'learning'
+              ? stats.learning
               : key === 'comments'
               ? stats.comments
               : stats.users;
@@ -254,6 +265,7 @@ export default function AdminDashboard() {
         {tab === 'posts' && <AdminPostsTab categories={categories} />}
         {tab === 'categories' && <AdminCategoriesTab />}
         {tab === 'schedule' && <ScheduleBuilder />}
+        {tab === 'learning' && <LearningManager />}
         {tab === 'comments' && <AdminCommentsTab />}
         {tab === 'users' && <AdminUsersTab categories={categories} />}
       </div>

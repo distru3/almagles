@@ -20,6 +20,8 @@ export const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? null,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY ?? null,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET ?? null,
+  /** Largest PDF a «رحلة العلم» lesson may carry, in MB. Cloudinary's free plan stops at 10. */
+  LEARNING_FILE_MAX_MB: Number(process.env.LEARNING_FILE_MAX_MB) > 0 ? Number(process.env.LEARNING_FILE_MAX_MB) : 10,
   BREVO_API_KEY: process.env.BREVO_API_KEY ?? null,
   // A sender address verified in Brevo (Senders & IP → Senders).
   EMAIL_FROM: process.env.EMAIL_FROM ?? null,

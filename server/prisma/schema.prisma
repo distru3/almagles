@@ -39,6 +39,9 @@ model User {
   taskExcuses       TaskExcuse[]
   adhkarReminder    AdhkarReminder?
   quranBookmarks    QuranBookmark[]
+  learningItems     LearningItem[]
+  learning          LearningEnrollment?
+  learningDone      LearningCompletion[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -453,4 +456,95 @@ model QuranBookmark {
   updatedAt DateTime      @updatedAt
 
   @@unique([userId, slot])
+}
+
+/// «رحلة العلم»: what a day's lesson asks of the member.
+enum LearningKind {
+  /// Read a portion of a book.
+  reading
+  /// Watch a lecture (usually on YouTube).
+  video
+  /// Listen to a recording.
+  audio
+  /// Read an article or page on the web.
+  article
+  /// Put something into practice, memorise a text…
+  practice
+}
+
+/// One lesson on the shared calendar of «رحلة العلم». A day may hold several;
+/// Fridays hold none (the server refuses them): they're «يوم الاستجمام».
+model LearningItem {
+  id          String               @id @default(cuid())
+  /// The calendar day ("2026-11-22"); everyone studies it on the same day.
+  date        String
+  kind        LearningKind         @default(reading)
+  title       String
+  /// The book, the shaykh or the series («الأربعون النووية»).
+  source      String?
+  /// How much: «من ص ١٢ إلى ص ٢٠», «الحديث الثالث».
+  portion     String?
+  description String?
+  linkUrl     String?
+  /// A PDF the manager uploaded (Cloudinary, or server/uploads locally), read inside the site.
+  /// Several lessons of one «خطة كتاب» share the same file; it's deleted with the last of them.
+  fileUrl      String?
+  filePublicId String?
+  /// The name it was uploaded under («رياض الصالحين.pdf»), its size and pages.
+  fileName     String?
+  fileBytes    Int?
+  filePages    Int?
+  /// The page of the file the lesson starts on.
+  startPage    Int?
+  /// About how long it takes, so the member can plan their day.
+  minutes     Int?
+  /// Points it earns on «ساحة الهمّة», like a task.
+  points      Int                  @default(15)
+  order       Int                  @default(0)
+  createdBy   User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  completions LearningCompletion[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([date])
+  @@index([filePublicId])
+}
+
+/// A member's choice about «رحلة العلم». No row: they haven't decided yet.
+/// active = false: they said «ليس الآن» or left — the invitation isn't pressed
+/// on them again, and they can join whenever they like. Their history stays.
+model LearningEnrollment {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  active    Boolean  @default(true)
+  /// The member's own day they (last) joined; earlier lessons never count as missed.
+  startDay  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
+
+/// A member finished one lesson. `day` is the lesson's date, also when made up later.
+model LearningCompletion {
+  id        String       @id @default(cuid())
+  item      LearningItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  day       String
+  /// Points earned, kept as they were when done.
+  points    Int
+  /// Done on a later day («تدارك»).
+  madeUp    Boolean      @default(false)
+  /// «فائدتي»: what the member took from it, in their own words; only they see it.
+  note      String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([itemId, userId])
+  @@index([day])
+  @@index([userId, day])
 }

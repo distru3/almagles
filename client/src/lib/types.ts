@@ -344,5 +344,93 @@ export interface TaskBoard {
   weekEnd: string;
   members: BoardMember[];
   first: { id: string; name: string; avatarUrl: string | null; at: string } | null;
-  recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; madeUp: boolean; at: string }[];
+  /** `learning`: a lesson of «رحلة العلم» rather than a task. */
+  recent: { userId: string; name: string; avatarUrl: string | null; title: string; points: number; madeUp: boolean; learning?: boolean; at: string }[];
+}
+
+/** «رحلة العلم»: what a day's lesson asks of the member. */
+export type LearningKind = 'reading' | 'video' | 'audio' | 'article' | 'practice';
+
+/** A lesson on the shared calendar, as the managers write it. */
+export interface LearningItem {
+  id: string;
+  date: string;
+  kind: LearningKind;
+  title: string;
+  /** The book, the shaykh or the series. */
+  source: string | null;
+  /** How much: «من ص ١٢ إلى ص ٢٠». */
+  portion: string | null;
+  description: string | null;
+  linkUrl: string | null;
+  /** A PDF the manager attached, read inside the site («اقرأ هنا»). */
+  fileUrl: string | null;
+  filePublicId: string | null;
+  fileName: string | null;
+  fileBytes: number | null;
+  filePages: number | null;
+  /** The page of the file the lesson starts on. */
+  startPage: number | null;
+  minutes: number | null;
+  points: number;
+  order: number;
+  /** How many members finished it. */
+  doneCount: number;
+}
+
+/** A lesson as one member sees it. */
+export interface MyLearningItem extends LearningItem {
+  done: boolean;
+  madeUp: boolean;
+  /** Points earned for it. */
+  earned: number;
+  /** «فائدتي» — theirs alone. */
+  note: string | null;
+  /** What finishing it now would earn; null when it can't be ticked today. */
+  worth: number | null;
+}
+
+/** null: not decided yet. active false: declined or left. */
+export type LearningEnrollment = { active: boolean; startDay: string | null } | null;
+
+export interface LearningJourney {
+  today: string;
+  restDay: boolean;
+  enrollment: LearningEnrollment;
+  /** Members on the journey now. */
+  members: number;
+  items: MyLearningItem[];
+  stats: {
+    done: number;
+    total: number;
+    /** Lessons whose day has come since the member joined, and how many of them they did. */
+    due: number;
+    keptDue: number;
+    points: number;
+    madeUp: number;
+    notes: number;
+    streak: number;
+    bestStreak: number;
+    lastDay: string | null;
+  };
+}
+
+/** «رفقاء الرحلة». */
+export interface LearningCompanions {
+  date: string;
+  total: number;
+  todayCount: number;
+  members: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    startDay: string | null;
+    done: number;
+    due: number;
+    keptDue: number;
+    points: number;
+    todayDone: number;
+    streak: number;
+    bestStreak: number;
+  }[];
 }

@@ -344,7 +344,7 @@ export default function TaskBoard() {
                   </Link>
                   <span className="text-fg-2">
                     {' '}
-                    · {r.madeUp ? `تدارك «${r.title}»` : r.title}
+                    · {r.learning ? (r.madeUp ? `تدارك درس «${r.title}»` : `درس «${r.title}»`) : r.madeUp ? `تدارك «${r.title}»` : r.title}
                   </span>
                   <span className="ms-1 text-xs text-accent">+{arNumber.format(r.points)}</span>
                 </p>
