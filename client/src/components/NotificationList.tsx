@@ -1,4 +1,4 @@
-import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing, HeartHandshake, Sun, Moon, Bed } from 'lucide-react';
+import { Heart, MessageSquare, Reply, FileText, CalendarDays, BellRing, HeartHandshake, Sun, Moon, Bed, GraduationCap, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NotificationItem, NotificationType } from '../lib/types';
 import { notificationExcerpt, notificationText } from '../lib/notifications';
@@ -17,6 +17,8 @@ const ICONS: Record<NotificationType, LucideIcon> = {
   adhkar_morning: Sun,
   adhkar_evening: Moon,
   adhkar_sleep: Bed,
+  learning_reminder: GraduationCap,
+  learning_note_reply: MessagesSquare,
 };
 
 export default function NotificationList({

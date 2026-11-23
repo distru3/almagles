@@ -3,6 +3,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth, requireScheduleManager } from '../middleware/auth.js';
+import { pushToUsers } from '../lib/push.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { linkUrlSchema } from '../lib/linkUrl.js';
@@ -59,8 +60,10 @@ const ITEM_SELECT = {
   order: true,
 } as const;
 const ORDER = [{ date: 'asc' as const }, { order: 'asc' as const }, { createdAt: 'asc' as const }];
-/** A «فائدة» as the member sees it, oldest first. */
-const NOTE_SELECT = { id: true, text: true, createdAt: true } as const;
+/** A «فائدة» as its writer sees it, oldest first. */
+const NOTE_SELECT = { id: true, text: true, shared: true, createdAt: true, _count: { select: { replies: true } } } as const;
+type NoteRow = { id: string; text: string; shared: boolean; createdAt: Date; _count: { replies: number } };
+const noteOut = ({ _count, ...n }: NoteRow) => ({ ...n, replyCount: _count.replies });
 const NOTE_ORDER = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
 
 const daysBetween = (a: string, b: string) => Math.round((parseDate(b)!.getTime() - parseDate(a)!.getTime()) / DAY_MS);
@@ -103,6 +106,14 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
       ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) }, progress: 100 }, _count: { _all: true } })
       : [];
     const countOf = new Map(counts.map((c) => [c.itemId, c._count._all]));
+    const shared = items.length
+      ? await prisma.learningNote.findMany({
+          where: { shared: true, completion: { itemId: { in: items.map((i) => i.id) }, userId: { not: userId } } },
+          select: { completion: { select: { itemId: true } } },
+        })
+      : [];
+    const sharedOf = new Map<string, number>();
+    for (const n of shared) sharedOf.set(n.completion.itemId, (sharedOf.get(n.completion.itemId) ?? 0) + 1);
     // What the member recorded of each lesson, finished or in part; `finished` only the former.
     const doneOf = new Map(mine.map((c) => [c.itemId, c]));
     const finished = mine.filter((c) => c.progress >= 100);
@@ -138,7 +149,9 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
           page: c?.page ?? null,
           madeUp: c?.madeUp ?? false,
           earned: c?.points ?? 0,
-          notes: c?.notes ?? [],
+          notes: (c?.notes ?? []).map(noteOut),
+          /** «فوائد إخوانك»: notes the brothers shared on this lesson. */
+          sharedCount: sharedOf.get(i.id) ?? 0,
           doneCount: countOf.get(i.id) ?? 0,
           /** What finishing it now would bring it to in all; null when it can't be ticked today. */
           worth: done ? null : c ? (rest === null ? null : Math.min(i.points, c.points + rest)) : learningPoints(i.points, i.date, today),
@@ -202,7 +215,11 @@ const doneNote = z
   .nullish()
   .transform((v) => v || null);
 const doneSchema = z.object({ date: todaySchema, done: z.boolean(), note: doneNote.optional() });
-const noteSchema = z.object({ text: noteText });
+/** «شاركها مع إخوانك» is the member's choice; without it a note stays private. */
+const noteSchema = z.object({ text: noteText, shared: z.boolean().optional() });
+const notePatchSchema = z
+  .object({ text: noteText.optional(), shared: z.boolean().optional() })
+  .refine((v) => v.text !== undefined || v.shared !== undefined, { message: 'لا تغيير' });
 const pageSchema = z.number().int().min(1, 'رقم الصفحة غير صالح').max(100000, 'رقم الصفحة غير صالح');
 const progressSchema = z.object({
   date: todaySchema,
@@ -335,7 +352,7 @@ router.put('/items/:id/progress', requireAuth, validate(progressSchema), async (
  * the lesson finished or begun («أنجزت بعضه») — so a note always belongs to
  * learning the member actually did.
  */
-async function addNote(itemId: string, userId: string, text: string) {
+async function addNote(itemId: string, userId: string, text: string, shared = false) {
   const completion = await prisma.learningCompletion.findUnique({
     where: { itemId_userId: { itemId, userId } },
     select: { id: true, _count: { select: { notes: true } } },
@@ -344,32 +361,36 @@ async function addNote(itemId: string, userId: string, text: string) {
   if (completion._count.notes >= MAX_NOTES_PER_LESSON) {
     throw new HttpError(400, `بلغت ${MAX_NOTES_PER_LESSON} فائدة في هذا الدرس — اجمع بعضها في فائدة واحدة`);
   }
-  return prisma.learningNote.create({ data: { completionId: completion.id, text }, select: NOTE_SELECT });
+  return noteOut(await prisma.learningNote.create({ data: { completionId: completion.id, text, shared }, select: NOTE_SELECT }));
 }
 
 /** Only the member's own note on this lesson. */
-const ownNote = (params: Record<string, string>, userId: string) => ({
+const ownNoteWhere = (params: Record<string, string>, userId: string) => ({
   id: params.noteId,
   completion: { itemId: params.id, userId },
 });
 
-/** «أضف فائدة»: one more note on a lesson the member finished or began. Only they see it. */
+/**
+ * «أضف فائدة»: one more note on a lesson the member finished or began —
+ * private, or shared with the brothers in «فوائد الإخوة».
+ */
 router.post('/items/:id/notes', requireAuth, validate(noteSchema), async (req, res, next) => {
   try {
-    const { text } = req.body as z.infer<typeof noteSchema>;
-    return res.status(201).json({ note: await addNote(req.params.id, req.user!.id, text) });
+    const { text, shared } = req.body as z.infer<typeof noteSchema>;
+    return res.status(201).json({ note: await addNote(req.params.id, req.user!.id, text, shared) });
   } catch (err) {
     next(err);
   }
 });
 
-router.put('/items/:id/notes/:noteId', requireAuth, validate(noteSchema), async (req, res, next) => {
+/** Edit a note, or share / stop sharing it. Unshared, its discussion is kept but hidden. */
+router.put('/items/:id/notes/:noteId', requireAuth, validate(notePatchSchema), async (req, res, next) => {
   try {
-    const { text } = req.body as z.infer<typeof noteSchema>;
-    const { count } = await prisma.learningNote.updateMany({ where: ownNote(req.params, req.user!.id), data: { text } });
+    const data = req.body as z.infer<typeof notePatchSchema>;
+    const { count } = await prisma.learningNote.updateMany({ where: ownNoteWhere(req.params, req.user!.id), data });
     if (count === 0) throw new HttpError(404, 'الفائدة غير موجودة');
-    const note = await prisma.learningNote.findUnique({ where: { id: req.params.noteId }, select: NOTE_SELECT });
-    return res.json({ note });
+    const note = await prisma.learningNote.findUniqueOrThrow({ where: { id: req.params.noteId }, select: NOTE_SELECT });
+    return res.json({ note: noteOut(note) });
   } catch (err) {
     next(err);
   }
@@ -377,7 +398,7 @@ router.put('/items/:id/notes/:noteId', requireAuth, validate(noteSchema), async 
 
 router.delete('/items/:id/notes/:noteId', requireAuth, async (req, res, next) => {
   try {
-    const { count } = await prisma.learningNote.deleteMany({ where: ownNote(req.params, req.user!.id) });
+    const { count } = await prisma.learningNote.deleteMany({ where: ownNoteWhere(req.params, req.user!.id) });
     if (count === 0) throw new HttpError(404, 'الفائدة غير موجودة');
     return res.json({ ok: true });
   } catch (err) {
@@ -388,7 +409,7 @@ router.delete('/items/:id/notes/:noteId', requireAuth, async (req, res, next) =>
 /**
  * «رفقاء الرحلة», for every member: the brothers on the journey, how much of it
  * they've walked, their streak, and whether they've finished today's lessons.
- * Notes are never shared.
+ * Notes aren't here; shared ones are in «فوائد الإخوة» (routes/learningNotes.ts).
  */
 router.get('/companions', requireAuth, validate(z.object({ date: anyDateSchema }), 'query'), async (req, res, next) => {
   try {
@@ -592,6 +613,104 @@ router.delete('/items/:id', ...manage, async (req, res, next) => {
     if (count === 0) throw new HttpError(404, 'الدرس غير موجود');
     if (item?.filePublicId) await removeIfUnused(item.filePublicId);
     return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------- «تذكير الإخوة»
+
+/** A member is reminded at most once in this window, whoever reminds them. */
+export const REMIND_WINDOW_MS = 20 * 60 * 60 * 1000;
+
+type LearnerState = 'done' | 'partial' | 'not_started' | 'no_lesson';
+
+/**
+ * The members on the journey and where each stands today — finished, part
+ * way, not started — with the lessons they can still catch up and whether
+ * they were reminded already. For the supervisors only.
+ */
+async function learnersOn(date: string) {
+  const since = new Date(Date.now() - REMIND_WINDOW_MS);
+  const [enrolled, items, reminded, lastActive] = await Promise.all([
+    prisma.learningEnrollment.findMany({ where: { active: true }, select: { startDay: true, user: { select: { id: true, name: true, avatarUrl: true } } } }),
+    prisma.learningItem.findMany({ where: { date: { gte: shiftDate(date, -LEARN_MAKEUP_DAYS), lte: date } }, select: { id: true, date: true } }),
+    prisma.notification.findMany({ where: { type: 'learning_reminder', createdAt: { gte: since } }, select: { userId: true, createdAt: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], _max: { updatedAt: true } }),
+  ]);
+  const completions = items.length
+    ? await prisma.learningCompletion.findMany({ where: { itemId: { in: items.map((i) => i.id) } }, select: { userId: true, itemId: true, progress: true } })
+    : [];
+  const activeOf = new Map(lastActive.map((l) => [l.userId, l._max.updatedAt]));
+  const remindedOf = new Map<string, Date>();
+  for (const r of reminded) {
+    const seen = remindedOf.get(r.userId);
+    if (!seen || seen < r.createdAt) remindedOf.set(r.userId, r.createdAt);
+  }
+  const todayIds = items.filter((i) => i.date === date).map((i) => i.id);
+  return enrolled
+    .map(({ startDay, user }) => {
+      const mine = new Map(completions.filter((c) => c.userId === user.id).map((c) => [c.itemId, c.progress]));
+      const finished = todayIds.filter((id) => (mine.get(id) ?? 0) >= 100).length;
+      const state: LearnerState = !todayIds.length
+        ? 'no_lesson'
+        : finished >= todayIds.length
+          ? 'done'
+          : todayIds.some((id) => mine.has(id))
+            ? 'partial'
+            : 'not_started';
+      const behind = items.filter((i) => i.date < date && (!startDay || i.date >= startDay) && (mine.get(i.id) ?? 0) < 100).length;
+      return { ...user, state, behind, lastActiveAt: activeOf.get(user.id) ?? null, remindedAt: remindedOf.get(user.id) ?? null };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+}
+
+router.get('/manage/learners', ...manage, validate(z.object({ date: anyDateSchema }), 'query'), async (req, res, next) => {
+  try {
+    const { date } = req.query as { date: string };
+    const [todayCount, learners] = await Promise.all([prisma.learningItem.count({ where: { date } }), learnersOn(date)]);
+    return res.json({ date, todayCount, learners });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const remindSchema = z.object({
+  date: todaySchema,
+  /** The members to remind; without it, everyone who hasn't finished today's lesson. */
+  userIds: z.array(z.string().min(1).max(64)).min(1).max(500).optional(),
+  message: optionalText(300, 'الرسالة طويلة — اجعلها كلمة قصيرة'),
+});
+
+/**
+ * «ذكّره» / «ذكّر من لم يُتمّ درس اليوم»: a gentle in-app and phone reminder
+ * from a supervisor, with a word of their own if they like. Only members on
+ * the journey, never the supervisor themself, and nobody twice within a day —
+ * those are counted as skipped rather than refused.
+ */
+router.post('/manage/remind', ...manage, validate(remindSchema), async (req, res, next) => {
+  try {
+    const { date, userIds, message } = req.body as z.infer<typeof remindSchema>;
+    if (isRestDay(date)) throw new HttpError(400, 'اليوم يوم استجمام — لا درس فيه يُذكَّر به');
+    const actor = req.user!;
+    const learners = await learnersOn(date);
+    if (!userIds && learners.every((l) => l.state === 'no_lesson')) throw new HttpError(400, 'لا درس في التقويم اليوم');
+    const asked = userIds ? learners.filter((l) => userIds.includes(l.id)) : learners.filter((l) => l.state === 'not_started' || l.state === 'partial');
+    const targets = asked.filter((l) => l.id !== actor.id && !l.remindedAt);
+    if (targets.length) {
+      const rows = await prisma.notification.createManyAndReturn({
+        data: targets.map((l) => ({ type: 'learning_reminder' as const, userId: l.id, actorId: actor.id, message })),
+        select: { id: true, userId: true },
+      });
+      const body = `${actor.name} يذكّرك بدرس اليوم في «رحلة العلم»`;
+      pushToUsers(
+        rows.map((n) => ({
+          userId: n.userId,
+          payload: { title: 'رجال الأمة', body: message ? `${body}\n${message}` : body, url: `/learn?n=${n.id}`, tag: `learning-reminder:${date}` },
+        })),
+      );
+    }
+    return res.status(201).json({ sent: targets.length, skipped: asked.length - targets.length });
   } catch (err) {
     next(err);
   }

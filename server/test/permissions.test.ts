@@ -101,6 +101,16 @@ describe('schedule editing', () => {
     expect((await (await loginAs('admin@test.local')).post('/api/learning/items', lesson)).status).toBe(201);
   });
 
+  it('«تذكير الإخوة»: only schedule managers and admins remind learners', async () => {
+    const date = new Date().toISOString().slice(0, 10);
+    await createUser({ email: 'v@test.local' });
+    await createUser({ email: 'ws@test.local', canManageSchedule: true });
+    const v = await loginAs('v@test.local');
+    expect((await v.get(`/api/learning/manage/learners?date=${date}`)).status).toBe(403);
+    expect((await v.post('/api/learning/manage/remind', { date, userIds: ['x'] })).status).toBe(403);
+    expect((await (await loginAs('ws@test.local')).get(`/api/learning/manage/learners?date=${date}`)).status).toBe(200);
+  });
+
   it('anyone can read the schedule', async () => {
     await prisma.scheduleItem.create({ data: { date: '2026-10-17', weekdayKey: 'sat', timeLabel: 'فجر', title: 'درس' } });
     const res = await (await client()).get('/api/schedule');

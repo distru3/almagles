@@ -42,6 +42,7 @@ model User {
   learningItems     LearningItem[]
   learning          LearningEnrollment?
   learningDone      LearningCompletion[]
+  learningReplies   LearningNoteReply[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -258,6 +259,10 @@ enum NotificationType {
   adhkar_morning
   adhkar_evening
   adhkar_sleep
+  /// A supervisor of «رحلة العلم» reminded a member of today's lesson (message: their word, if any).
+  learning_reminder
+  /// Someone replied on a shared «فائدة» the member wrote or took part in.
+  learning_note_reply
 }
 
 /// One row per recipient. Deleting the post, comment, session or recipient removes it.
@@ -278,6 +283,11 @@ model Notification {
   scheduleItemId String?
   /// Days whose sessions changed ("YYYY-MM-DD", ascending), for schedule_change.
   scheduleDates  String[]         @default([])
+  /// learning_note_reply: the «فائدة» discussed.
+  learningNote   LearningNote?    @relation(fields: [learningNoteId], references: [id], onDelete: Cascade)
+  learningNoteId String?
+  /// learning_reminder: what the supervisor wrote, if anything.
+  message        String?
   readAt         DateTime?
   createdAt      DateTime         @default(now())
 
@@ -565,12 +575,32 @@ model LearningCompletion {
 /// One «فائدة» a member wrote on a lesson they finished or began. Goes with
 /// the record of the lesson (unticking it, or deleting the lesson, removes it).
 model LearningNote {
-  id           String             @id @default(cuid())
-  completion   LearningCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
-  completionId String
-  text         String
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id            String              @id @default(cuid())
+  completion    LearningCompletion  @relation(fields: [completionId], references: [id], onDelete: Cascade)
+  completionId  String
+  text          String
+  /// «شاركها مع إخوانك»: shown in «فوائد الإخوة», open to replies. Off for every
+  /// note written before sharing existed — those were written as private.
+  shared        Boolean             @default(false)
+  replies       LearningNoteReply[]
+  notifications Notification[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   @@index([completionId, createdAt])
+  @@index([shared, createdAt])
+}
+
+/// A brother's reply on a shared «فائدة» — the discussion under it.
+model LearningNoteReply {
+  id        String       @id @default(cuid())
+  note      LearningNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId    String
+  author    User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+  text      String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([noteId, createdAt])
 }

@@ -9,6 +9,7 @@ import { LinkPreviewCard } from '../PostMedia';
 import { formatBytes } from '../../lib/video';
 import PdfReader from './PdfReader';
 import LessonNotes, { type NoteActions } from './LessonNotes';
+import { LessonSharedNotes } from './SharedNotes';
 
 /** «أتمّه ٣ من إخوانك» with Arabic number agreement. */
 function othersLabel(n: number): string {
@@ -302,6 +303,7 @@ export default function LessonCard({
       )}
       {/* «فوائدي» once the member has finished or begun the lesson — part of one can teach too. */}
       {(item.done || item.progress > 0) && <LessonNotes item={item} actions={notes} />}
+      <LessonSharedNotes itemId={item.id} count={item.sharedCount} />
     </article>
   );
 }

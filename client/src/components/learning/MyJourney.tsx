@@ -271,14 +271,14 @@ export default function MyJourney() {
     };
     const base = `/learning/items/${item.id}/notes`;
     return {
-      onAdd: (text: string) =>
+      onAdd: (text: string, shared: boolean) =>
         attempt(async () => {
-          const { note } = await api<{ note: LearningNote }>(base, { method: 'POST', body: { text } });
+          const { note } = await api<{ note: LearningNote }>(base, { method: 'POST', body: { text, shared } });
           patchNotes(item.id, (ns) => [...ns, note]);
         }, 'تعذّر حفظ الفائدة'),
-      onEdit: (noteId: string, text: string) =>
+      onEdit: (noteId: string, change: { text?: string; shared?: boolean }) =>
         attempt(async () => {
-          const { note } = await api<{ note: LearningNote }>(`${base}/${noteId}`, { method: 'PUT', body: { text } });
+          const { note } = await api<{ note: LearningNote }>(`${base}/${noteId}`, { method: 'PUT', body: change });
           patchNotes(item.id, (ns) => ns.map((n) => (n.id === noteId ? note : n)));
         }, 'تعذّر حفظ الفائدة'),
       onDelete: (noteId: string) =>

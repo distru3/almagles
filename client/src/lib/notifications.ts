@@ -33,6 +33,14 @@ export function notificationText(n: NotificationItem): string {
   if (n.type === 'adhkar_sleep') {
     return 'حان وقت أذكار النوم والاضطجاع';
   }
+  if (n.type === 'learning_reminder') {
+    return `${n.actor?.name ?? 'أحد المشرفين'} يذكّرك بدرس اليوم في «رحلة العلم»`;
+  }
+  if (n.type === 'learning_note_reply') {
+    const who = n.actor?.name ?? SOMEONE;
+    const lesson = `«${n.learningNote?.lessonTitle ?? ''}»`;
+    return n.learningNote?.mine ? `${who} ردّ على فائدتك في ${lesson}` : `${who} ردّ في نقاش فائدة على ${lesson}`;
+  }
 
   const who = n.actor?.name ?? SOMEONE;
   const title = `«${n.post?.title ?? ''}»`;
@@ -60,6 +68,7 @@ export function notificationExcerpt(n: NotificationItem): string | null {
   if (n.type === 'adhkar_morning') return 'أصبحنا وأصبح الملك لله — أذكار الصباح';
   if (n.type === 'adhkar_evening') return 'أمسينا وأمسى الملك لله — أذكار المساء';
   if (n.type === 'adhkar_sleep') return 'باسمك ربي وضعت جنبي وبك أرفعه — أذكار النوم';
+  if (n.type === 'learning_reminder' || n.type === 'learning_note_reply') return n.message;
   return n.excerpt;
 }
 
@@ -69,6 +78,8 @@ export function notificationLink(n: NotificationItem): string {
   if (n.type === 'adhkar_morning') return '/adhkar?type=morning';
   if (n.type === 'adhkar_evening') return '/adhkar?type=evening';
   if (n.type === 'adhkar_sleep') return '/adhkar?type=sleep';
+  if (n.type === 'learning_reminder') return '/learn';
+  if (n.type === 'learning_note_reply') return n.learningNote ? `/learn?tab=fawaid&note=${n.learningNote.id}` : '/learn?tab=fawaid';
   const scheduleDate = n.scheduleItem?.date ?? n.scheduleDates[0];
   if (!n.post) return scheduleDate ? `/?date=${scheduleDate}#schedule` : '/#schedule';
   return n.commentId ? `/post/${n.post.id}#comment-${n.commentId}` : `/post/${n.post.id}`;
