@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Archive, CalendarDays, Flame, GraduationCap, Medal, Sprout, Trees, TrendingUp, Wheat, type LucideIcon } from 'lucide-react';
-import { lessonsLabel, worksLabel as worksWord } from '../../lib/learning';
+import { lessonsLabel, partLabel, worksLabel as worksWord } from '../../lib/learning';
 import { api, ApiError } from '../../lib/api';
 import type { HistoryTaskSummary, SlotState, TaskHistory } from '../../lib/types';
 import { gregorianShort, hijriDate, hijriShort, todayISO } from '../../lib/dates';
@@ -128,6 +128,7 @@ function Garden({ history }: { history: TaskHistory }) {
                 <span className="min-w-0 flex-1">
                   {history.titles[it.taskId] ?? (it.learning ? 'درس' : 'مهمة')}
                   {it.madeUp && <span className="ms-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-accent">تدارك</span>}
+                  {it.progress !== undefined && <span className="ms-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-fg-2">{partLabel(it.progress)}</span>}
                 </span>
                 <span className={`text-xs tabular-nums ${it.learning ? 'text-ilm' : 'text-accent'}`}>+{ar(it.points)}</span>
               </li>

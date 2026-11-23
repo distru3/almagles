@@ -43,6 +43,7 @@ interface Draft {
   linkUrl: string;
   file: FileInfo | null;
   startPage: string;
+  endPage: string;
   description: string;
   minutes: string;
   points: number;
@@ -56,11 +57,12 @@ const draftOf = (i: LearningItem): Draft => ({
   linkUrl: i.linkUrl ?? '',
   file: fileOf(i),
   startPage: i.startPage ? String(i.startPage) : '',
+  endPage: i.endPage ? String(i.endPage) : '',
   description: i.description ?? '',
   minutes: i.minutes ? String(i.minutes) : '',
   points: i.points,
 });
-const emptyDraft = (date: string): Draft => ({ date, kind: 'reading', title: '', source: '', portion: '', linkUrl: '', file: null, startPage: '', description: '', minutes: '', points: 15 });
+const emptyDraft = (date: string): Draft => ({ date, kind: 'reading', title: '', source: '', portion: '', linkUrl: '', file: null, startPage: '', endPage: '', description: '', minutes: '', points: 15 });
 const payloadOf = (d: Draft) => ({
   date: d.date,
   kind: d.kind,
@@ -70,6 +72,7 @@ const payloadOf = (d: Draft) => ({
   linkUrl: d.linkUrl.trim() || null,
   ...filePayload(d.file),
   startPage: d.file ? pageNumber(d.startPage) : null,
+  endPage: d.file ? pageNumber(d.endPage) : null,
   description: d.description.trim() || null,
   minutes: Number(d.minutes) > 0 ? Math.round(Number(d.minutes)) : null,
   points: d.points,
@@ -267,14 +270,26 @@ function ItemForm({ initial, dirtyKey, onSubmit, onCancel }: { initial: Draft; d
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <PdfField value={draft.file} onChange={(file) => set({ file })} />
         {draft.file && (
-          <div>
-            <label className="label" htmlFor={id('page')}>
-              يبدأ من صفحة
-            </label>
-            <input id={id('page')} type="number" min={1} inputMode="numeric" className="input sm:w-28" value={draft.startPage} onChange={(e) => set({ startPage: e.target.value })} placeholder="١" />
+          <div className="flex gap-3">
+            <div>
+              <label className="label" htmlFor={id('page')}>
+                من صفحة
+              </label>
+              <input id={id('page')} type="number" min={1} inputMode="numeric" className="input w-28" value={draft.startPage} onChange={(e) => set({ startPage: e.target.value })} placeholder="١" />
+            </div>
+            <div>
+              <label className="label" htmlFor={id('end-page')}>
+                إلى صفحة
+              </label>
+              <input id={id('end-page')} type="number" min={1} inputMode="numeric" className="input w-28" value={draft.endPage} onChange={(e) => set({ endPage: e.target.value })} placeholder="٢٠" />
+            </div>
           </div>
         )}
       </div>
+      {draft.file && (
+        // Without the last page, reading part of the lesson can't be measured and the member picks «ربعه / نصفه / أكثره».
+        <p className="-mt-1 text-xs text-muted">بصفحتي البداية والنهاية يُحسب ما قرأه الأخ إن لم يُتمّ الدرس، فينال نصيبه من النقاط.</p>
+      )}
       <div>
         <label className="label" htmlFor={id('desc')}>
           توجيه للإخوة (اختياري)
@@ -354,14 +369,14 @@ function BookPlan({ onDone, onCancel }: { onDone: (count: number) => void; onCan
     const b = Math.floor(Number(to));
     const step = Math.floor(Number(per));
     if (!title.trim() || !(a >= 1) || !(b >= a) || !(step >= 1) || !start) return [];
-    const out: { date: string; portion: string; startPage: number | null }[] = [];
+    const out: { date: string; portion: string; startPage: number | null; endPage: number | null }[] = [];
     const first = pageNumber(fileStart) ?? a;
     let day = start;
     for (let n = a; n <= b && out.length <= MAX_BULK; n += step) {
       while (isRestDay(day) || skip.includes(new Date(`${day}T12:00:00`).getDay())) day = shiftIso(day, 1);
       const end = Math.min(b, n + step - 1);
       const [x, y] = [arNumber.format(n), arNumber.format(end)];
-      out.push({ date: day, portion: n === end ? UNITS[unit].one(x) : UNITS[unit].many(x, y), startPage: file && unit === 'page' ? first + (n - a) : null });
+      out.push({ date: day, portion: n === end ? UNITS[unit].one(x) : UNITS[unit].many(x, y), startPage: file && unit === 'page' ? first + (n - a) : null, endPage: file && unit === 'page' ? first + (end - a) : null });
       day = shiftIso(day, 1);
     }
     return out;
@@ -383,7 +398,7 @@ function BookPlan({ onDone, onCancel }: { onDone: (count: number) => void; onCan
       await api('/learning/items/bulk', {
         method: 'POST',
         body: {
-          items: plan.map((p) => ({ date: p.date, kind, title: title.trim(), source: source.trim() || null, portion: p.portion, linkUrl: linkUrl.trim() || null, ...filePayload(file), startPage: p.startPage, minutes: m, points })),
+          items: plan.map((p) => ({ date: p.date, kind, title: title.trim(), source: source.trim() || null, portion: p.portion, linkUrl: linkUrl.trim() || null, ...filePayload(file), startPage: p.startPage, endPage: p.endPage, minutes: m, points })),
         },
       });
       onDone(plan.length);
@@ -744,7 +759,7 @@ export default function LearningManager() {
                             {KINDS[i.kind].label}
                             {i.source && ` · ${i.source}`}
                             {i.portion && ` · ${i.portion}`}
-                            {i.fileUrl && ` · PDF${i.startPage ? ` من ص ${arNumber.format(i.startPage)}` : ""}`} · {arNumber.format(i.points)} نقطة
+                            {i.fileUrl && ` · PDF${i.startPage ? ` من ص ${arNumber.format(i.startPage)}` : ""}${i.endPage ? ` إلى ص ${arNumber.format(i.endPage)}` : ""}`} · {arNumber.format(i.points)} نقطة
                           </p>
                           <p className="text-xs text-fg-2">
                             أتمّه {arNumber.format(i.doneCount)} من {arNumber.format(members)}

@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, BookOpen, Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, BookOpen, Check, GraduationCap, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { Task, TaskRepeat, TaskTime } from '../../lib/types';
 import { fadailFor } from '../../lib/fadail';
@@ -19,6 +19,7 @@ interface Draft {
   timeWindow: TaskTime;
   startTime: string;
   endTime: string;
+  fromLearning: boolean;
 }
 const emptyDraft: Draft = {
   title: '',
@@ -32,6 +33,7 @@ const emptyDraft: Draft = {
   timeWindow: 'anytime',
   startTime: '',
   endTime: '',
+  fromLearning: false,
 };
 const draftOf = (t: Task): Draft => ({
   title: t.title,
@@ -45,6 +47,7 @@ const draftOf = (t: Task): Draft => ({
   timeWindow: t.timeWindow,
   startTime: t.startTime ?? '',
   endTime: t.endTime ?? '',
+  fromLearning: t.fromLearning,
 });
 const payloadOf = (d: Draft) => ({
   title: d.title.trim(),
@@ -58,6 +61,7 @@ const payloadOf = (d: Draft) => ({
   timeWindow: d.timeWindow,
   startTime: d.timeWindow === 'range' ? d.startTime || null : null,
   endTime: d.timeWindow === 'range' ? d.endTime || null : null,
+  fromLearning: d.fromLearning,
 });
 
 const arNumber = new Intl.NumberFormat('ar');
@@ -294,6 +298,23 @@ function TaskForm({
           placeholder="https://youtu.be/…"
         />
       </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-sm border border-line px-3 py-2.5">
+        <input
+          type="checkbox"
+          className="mt-1.5 h-4 w-4 shrink-0 accent-[var(--accent-fill)]"
+          checked={draft.fromLearning}
+          onChange={(e) => set({ fromLearning: e.target.checked })}
+        />
+        <span>
+          <span className="flex items-center gap-1.5 font-display text-[15px] text-fg">
+            <GraduationCap className="h-4 w-4 text-accent" aria-hidden="true" />
+            تُنجَز تلقائيًا من «رحلة العلم»
+          </span>
+          <span className="mt-0.5 block text-xs leading-5 text-muted">
+            متى سجّل العضو شيئًا من دروس الرحلة — أتمّ الدرس أو قرأ بعضه — وُضعت علامة هذه المهمة له في يومه، بلا تقيّد بوقتها. ويبقى له أن يضعها بنفسه إن طلب العلم في غير الرحلة.
+          </span>
+        </span>
+      </label>
       <FadlPreview text={`${draft.title} ${draft.description}`} />
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap justify-end gap-2">
@@ -393,6 +414,7 @@ export default function TaskManager() {
               {scheduleSummary(task)} · {arNumber.format(task.points)} نقطة
               {task.description && ` · ${task.description.slice(0, 80)}${task.description.length > 80 ? '…' : ''}`}
               {task.linkUrl && ' · فيها رابط'}
+              {task.fromLearning && ' · تُنجَز من «رحلة العلم»'}
             </p>
             {rowError?.id === task.id && <p className="mt-1 text-sm text-danger">{rowError.message}</p>}
           </div>

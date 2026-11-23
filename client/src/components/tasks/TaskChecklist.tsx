@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, CalendarClock, Check, ExternalLink, History, ListChecks, Lock, Sparkles, Users, X } from 'lucide-react';
+import { BookOpen, CalendarClock, Check, ExternalLink, GraduationCap, History, ListChecks, Lock, Sparkles, Users, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { MyTask, MyTasks, TaskRepeat } from '../../lib/types';
 import { todayISO } from '../../lib/dates';
@@ -313,6 +313,13 @@ export default function TaskChecklist({ compact = false, onTicked }: { compact?:
                 <Link to={quranLinkFor(task)!} className="inline-flex items-center gap-1 text-accent hover:text-accent-strong">
                   <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
                   افتح المصحف
+                </Link>
+              )}
+              {task.fromLearning && (
+                // «طلب العلم» linked to the journey: any lesson recorded there ticks it.
+                <Link to="/learn" className="inline-flex items-center gap-1 text-accent hover:text-accent-strong">
+                  <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+                  {task.done ? 'من «رحلة العلم»' : 'تُنجَز بدرس من «رحلة العلم» — ولو بعضه'}
                 </Link>
               )}
               {task.linkUrl && (
