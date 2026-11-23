@@ -393,6 +393,13 @@ export interface LearningItem {
   doneCount: number;
 }
 
+/** One «فائدة» a member wrote on a lesson — theirs alone. */
+export interface LearningNote {
+  id: string;
+  text: string;
+  createdAt: string;
+}
+
 /** A lesson as one member sees it. */
 export interface MyLearningItem extends LearningItem {
   /** Finished («أتممت»). */
@@ -404,8 +411,8 @@ export interface MyLearningItem extends LearningItem {
   madeUp: boolean;
   /** Points earned for it. */
   earned: number;
-  /** «فائدتي» — theirs alone. */
-  note: string | null;
+  /** «فوائدي», oldest first — theirs alone. */
+  notes: LearningNote[];
   /** What finishing it now would earn; null when it can't be ticked today. */
   worth: number | null;
 }

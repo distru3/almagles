@@ -29,6 +29,8 @@ const DAY_MS = 86_400_000;
 const MAX_RANGE_DAYS = 62;
 /** Lessons one «خطة كتاب» may lay out at once. */
 export const MAX_BULK_ITEMS = 120;
+/** «فوائدي» one member may keep on one lesson — plenty for a reader, a bound for a script. */
+export const MAX_NOTES_PER_LESSON = 20;
 
 const anyDateSchema = z.string().refine((v) => parseDate(v) !== null, { message: 'تاريخ غير صالح' });
 /** The member's own "today"; only a date near the server's, so nobody fills in the past after the fact. */
@@ -57,6 +59,9 @@ const ITEM_SELECT = {
   order: true,
 } as const;
 const ORDER = [{ date: 'asc' as const }, { order: 'asc' as const }, { createdAt: 'asc' as const }];
+/** A «فائدة» as the member sees it, oldest first. */
+const NOTE_SELECT = { id: true, text: true, createdAt: true } as const;
+const NOTE_ORDER = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
 
 const daysBetween = (a: string, b: string) => Math.round((parseDate(b)!.getTime() - parseDate(a)!.getTime()) / DAY_MS);
 
@@ -71,7 +76,7 @@ const rangeQuery = z
 /**
  * The member's journey: their choice (joined, declined, or not yet asked),
  * the lessons from `from` to `to` (and always the catch-up week and the
- * coming fortnight) with their own ticks and notes and how many members
+ * coming fortnight) with their own ticks and «فوائدي» and how many members
  * finished each, and their progress: lessons done of those due since they
  * joined, of the whole calendar, points and «سلسلة العلم».
  */
@@ -87,7 +92,10 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
       prisma.learningEnrollment.findUnique({ where: { userId }, select: { active: true, startDay: true } }),
       prisma.learningItem.findMany({ where: { date: { gte: lo, lte: hi } }, orderBy: ORDER, select: ITEM_SELECT }),
       prisma.learningItem.findMany({ select: { id: true, date: true } }),
-      prisma.learningCompletion.findMany({ where: { userId }, select: { itemId: true, day: true, points: true, madeUp: true, note: true, progress: true, page: true } }),
+      prisma.learningCompletion.findMany({
+        where: { userId },
+        select: { itemId: true, day: true, points: true, madeUp: true, progress: true, page: true, notes: { orderBy: NOTE_ORDER, select: NOTE_SELECT } },
+      }),
       prisma.taskExcuse.findMany({ where: { userId }, select: { day: true } }),
       prisma.learningEnrollment.count({ where: { active: true } }),
     ]);
@@ -130,7 +138,7 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
           page: c?.page ?? null,
           madeUp: c?.madeUp ?? false,
           earned: c?.points ?? 0,
-          note: c?.note ?? null,
+          notes: c?.notes ?? [],
           doneCount: countOf.get(i.id) ?? 0,
           /** What finishing it now would bring it to in all; null when it can't be ticked today. */
           worth: done ? null : c ? (rest === null ? null : Math.min(i.points, c.points + rest)) : learningPoints(i.points, i.date, today),
@@ -143,7 +151,7 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
         keptDue: due.filter((i) => finishedIds.has(i.id)).length,
         points: mine.reduce((n, c) => n + c.points, 0),
         madeUp: finished.filter((c) => c.madeUp).length,
-        notes: mine.filter((c) => c.note).length,
+        notes: mine.reduce((n, c) => n + c.notes.length, 0),
         streak,
         bestStreak,
         /** The last day with a lesson, so the member can see where the journey ends for now. */
@@ -185,13 +193,16 @@ async function requireJoined(userId: string) {
   if (!e?.active) throw new HttpError(403, 'انضم إلى «رحلة العلم» أولاً');
 }
 
-const noteSchema = z
+const noteText = z.string().trim().min(1, 'اكتب الفائدة أولاً').max(1000, 'الفائدة طويلة — اختصرها في سطور');
+/** With «أتممت الدرس», a first فائدة may come along; empty means none. */
+const doneNote = z
   .string()
   .trim()
   .max(1000, 'الفائدة طويلة — اختصرها في سطور')
   .nullish()
   .transform((v) => v || null);
-const doneSchema = z.object({ date: todaySchema, done: z.boolean(), note: noteSchema.optional() });
+const doneSchema = z.object({ date: todaySchema, done: z.boolean(), note: doneNote.optional() });
+const noteSchema = z.object({ text: noteText });
 const pageSchema = z.number().int().min(1, 'رقم الصفحة غير صالح').max(100000, 'رقم الصفحة غير صالح');
 const progressSchema = z.object({
   date: todaySchema,
@@ -209,10 +220,10 @@ type LessonForRecord = { id: string; date: string; points: number };
  * goes down: reading back over earlier pages takes nothing away. Whatever is
  * recorded also ticks the «طلب العلم» tasks linked to the journey.
  */
-async function recordLesson(item: LessonForRecord, userId: string, date: string, progress: number, extra: { page?: number; note?: string | null }) {
+async function recordLesson(item: LessonForRecord, userId: string, date: string, progress: number, extra: { page?: number }) {
   const key = { itemId: item.id, userId };
   const existing = await prisma.learningCompletion.findUnique({ where: { itemId_userId: key }, select: { points: true, progress: true, madeUp: true } });
-  const keep = { ...(extra.page !== undefined && { page: extra.page }), ...(extra.note !== undefined && { note: extra.note }) };
+  const keep = extra.page !== undefined ? { page: extra.page } : {};
   if (existing && existing.progress >= progress) {
     if (Object.keys(keep).length) await prisma.learningCompletion.update({ where: { itemId_userId: key }, data: keep });
     return { tasks: [] as string[] };
@@ -265,9 +276,10 @@ const findLesson = async (id: string) => {
 
 /**
  * «أتممت الدرس»: on its day (or the next) for the full points, within the
- * week for half — the rest of them, if part was already recorded. Unticking
- * removes the record, part and note with it; a «طلب العلم» task it ticked
- * stays ticked, for the member did give that time to learning.
+ * week for half — the rest of them, if part was already recorded. A `note`
+ * sent with it is added to «فوائدي». Unticking removes the record, part and
+ * notes with it; a «طلب العلم» task it ticked stays ticked, for the member
+ * did give that time to learning.
  */
 router.put('/items/:id/done', requireAuth, validate(doneSchema), async (req, res, next) => {
   try {
@@ -279,7 +291,8 @@ router.put('/items/:id/done', requireAuth, validate(doneSchema), async (req, res
       await prisma.learningCompletion.deleteMany({ where: { itemId: item.id, userId } });
       return res.json(await recordState(item, userId, []));
     }
-    const { tasks } = await recordLesson(item, userId, date, 100, { note });
+    const { tasks } = await recordLesson(item, userId, date, 100, {});
+    if (note) await addNote(item.id, userId, note);
     return res.json(await recordState(item, userId, tasks));
   } catch (err) {
     next(err);
@@ -315,13 +328,58 @@ router.put('/items/:id/progress', requireAuth, validate(progressSchema), async (
   }
 });
 
-/** «فائدتي»: change the note on a lesson already done. */
-router.put('/items/:id/note', requireAuth, validate(z.object({ note: noteSchema })), async (req, res, next) => {
+// ---------------------------------------------------------------- «فوائدي»
+
+/**
+ * Adds a فائدة to the member's record of a lesson. There must be a record —
+ * the lesson finished or begun («أنجزت بعضه») — so a note always belongs to
+ * learning the member actually did.
+ */
+async function addNote(itemId: string, userId: string, text: string) {
+  const completion = await prisma.learningCompletion.findUnique({
+    where: { itemId_userId: { itemId, userId } },
+    select: { id: true, _count: { select: { notes: true } } },
+  });
+  if (!completion) throw new HttpError(404, 'ابدأ الدرس أولاً ثم اكتب فائدتك');
+  if (completion._count.notes >= MAX_NOTES_PER_LESSON) {
+    throw new HttpError(400, `بلغت ${MAX_NOTES_PER_LESSON} فائدة في هذا الدرس — اجمع بعضها في فائدة واحدة`);
+  }
+  return prisma.learningNote.create({ data: { completionId: completion.id, text }, select: NOTE_SELECT });
+}
+
+/** Only the member's own note on this lesson. */
+const ownNote = (params: Record<string, string>, userId: string) => ({
+  id: params.noteId,
+  completion: { itemId: params.id, userId },
+});
+
+/** «أضف فائدة»: one more note on a lesson the member finished or began. Only they see it. */
+router.post('/items/:id/notes', requireAuth, validate(noteSchema), async (req, res, next) => {
   try {
-    const { note } = req.body as { note: string | null };
-    const { count } = await prisma.learningCompletion.updateMany({ where: { itemId: req.params.id, userId: req.user!.id }, data: { note } });
-    if (count === 0) throw new HttpError(404, 'أتمّ الدرس أولاً ثم اكتب فائدتك');
-    return res.json({ id: req.params.id, note });
+    const { text } = req.body as z.infer<typeof noteSchema>;
+    return res.status(201).json({ note: await addNote(req.params.id, req.user!.id, text) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/items/:id/notes/:noteId', requireAuth, validate(noteSchema), async (req, res, next) => {
+  try {
+    const { text } = req.body as z.infer<typeof noteSchema>;
+    const { count } = await prisma.learningNote.updateMany({ where: ownNote(req.params, req.user!.id), data: { text } });
+    if (count === 0) throw new HttpError(404, 'الفائدة غير موجودة');
+    const note = await prisma.learningNote.findUnique({ where: { id: req.params.noteId }, select: NOTE_SELECT });
+    return res.json({ note });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/items/:id/notes/:noteId', requireAuth, async (req, res, next) => {
+  try {
+    const { count } = await prisma.learningNote.deleteMany({ where: ownNote(req.params, req.user!.id) });
+    if (count === 0) throw new HttpError(404, 'الفائدة غير موجودة');
+    return res.json({ ok: true });
   } catch (err) {
     next(err);
   }

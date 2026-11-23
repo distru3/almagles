@@ -3,6 +3,7 @@ import { client, createUser, loginAs, prisma, resetDb } from './helpers.js';
 import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak, pageProgress, progressPoints } from '../src/lib/learning.js';
 import { shiftDate } from '../src/lib/taskSchedule.js';
 import { MAX_LEARNING_FILE_BYTES, learningFileStore } from '../src/lib/learningFiles.js';
+import { MAX_NOTES_PER_LESSON } from '../src/routes/learning.js';
 
 beforeEach(resetDb);
 
@@ -123,7 +124,7 @@ describe('finishing lessons', () => {
     expect(res.status).toBe(400);
   });
 
-  it('keeps «فائدتي» for the member alone', async () => {
+  it('keeps «فوائدي» for the member alone', async () => {
     const a = await joined('a@test.local');
     const b = await joined('b@test.local');
     const item = await lesson(today);
@@ -131,13 +132,62 @@ describe('finishing lessons', () => {
     await b.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
     const mine = (await a.get(`/api/learning?date=${today}`)).body.items[0];
     const theirs = (await b.get(`/api/learning?date=${today}`)).body.items[0];
-    expect(mine.note).toBe('الإخلاص أول العمل');
-    expect(theirs.note).toBeNull();
+    expect(mine.notes.map((n: { text: string }) => n.text)).toEqual(['الإخلاص أول العمل']);
+    expect(theirs.notes).toEqual([]);
     expect(theirs.doneCount).toBe(2);
     const companions = await b.get(`/api/learning/companions?date=${today}`);
     expect(JSON.stringify(companions.body)).not.toContain('الإخلاص');
 
-    expect((await a.put(`/api/learning/items/${item.id}/note`, { note: '' })).body.note).toBeNull();
+    // Another member can neither change nor delete it.
+    const id = mine.notes[0].id;
+    expect((await b.put(`/api/learning/items/${item.id}/notes/${id}`, { text: 'غيره' })).status).toBe(404);
+    expect((await b.del(`/api/learning/items/${item.id}/notes/${id}`)).status).toBe(404);
+    expect((await prisma.learningNote.findUnique({ where: { id } }))!.text).toBe('الإخلاص أول العمل');
+  });
+
+  it('holds several «فوائد» on one lesson, each edited or removed on its own', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const first = await c.post(`/api/learning/items/${item.id}/notes`, { text: ' العلم قبل القول والعمل ' });
+    expect(first.status).toBe(201);
+    expect(first.body.note.text).toBe('العلم قبل القول والعمل');
+    const second = await c.post(`/api/learning/items/${item.id}/notes`, { text: 'أعزم على مراجعة الدرس غدًا' });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: '   ' })).status).toBe(400);
+
+    const edited = await c.put(`/api/learning/items/${item.id}/notes/${second.body.note.id}`, { text: 'راجعه بعد الفجر' });
+    expect(edited.body.note.text).toBe('راجعه بعد الفجر');
+    expect((await c.del(`/api/learning/items/${item.id}/notes/${first.body.note.id}`)).status).toBe(200);
+
+    const journey = (await c.get(`/api/learning?date=${today}`)).body;
+    expect(journey.items[0].notes.map((n: { text: string }) => n.text)).toEqual(['راجعه بعد الفجر']);
+    expect(journey.stats.notes).toBe(1);
+  });
+
+  it('takes «فوائد» on a lesson only begun, but not on one not started', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    const before = await c.post(`/api/learning/items/${item.id}/notes`, { text: 'فائدة' });
+    expect(before.status).toBe(404);
+    await c.put(`/api/learning/items/${item.id}/progress`, { date: today, progress: 50 });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: 'فائدة من نصفه' })).status).toBe(201);
+  });
+
+  it('stops at the most «فوائد» a lesson may hold', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const completion = await prisma.learningCompletion.findFirstOrThrow();
+    await prisma.learningNote.createMany({ data: Array.from({ length: MAX_NOTES_PER_LESSON }, (_, i) => ({ completionId: completion.id, text: `فائدة ${i}` })) });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: 'واحدة أخرى' })).status).toBe(400);
+  });
+
+  it('unticking a lesson removes its «فوائد» with it', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true, note: 'فائدة' });
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: false });
+    expect(await prisma.learningNote.count()).toBe(0);
   });
 
   it('unticking takes the lesson and its points back', async () => {

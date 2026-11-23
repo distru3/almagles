@@ -549,12 +549,28 @@ model LearningCompletion {
   doneAt    DateTime?
   /// Done on a later day («تدارك»).
   madeUp    Boolean      @default(false)
-  /// «فائدتي»: what the member took from it, in their own words; only they see it.
+  /// Superseded by `notes`: the single «فائدتي» kept before a lesson could hold
+  /// several. Copied into LearningNote by 20261123180000_learning_notes; no longer read.
   note      String?
+  /// «فوائدي»: what the member took from it, in their own words; only they see them.
+  notes     LearningNote[]
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
   @@unique([itemId, userId])
   @@index([day])
   @@index([userId, day])
+}
+
+/// One «فائدة» a member wrote on a lesson they finished or began. Goes with
+/// the record of the lesson (unticking it, or deleting the lesson, removes it).
+model LearningNote {
+  id           String             @id @default(cuid())
+  completion   LearningCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
+  completionId String
+  text         String
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([completionId, createdAt])
 }
