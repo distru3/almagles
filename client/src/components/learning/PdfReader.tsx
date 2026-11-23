@@ -114,12 +114,17 @@ function PdfPage({
  * that slips away while the member reads down and returns when they scroll
  * up or reach the end. «ملء الشاشة» hides the top bar and margins too.
  * The ← → keys still jump a page, as in an Arabic book (← is the next one).
+ *
+ * It opens where the member stopped on this device, else where they stopped
+ * on another (`lastPage`, kept on the server), else at the lesson's page, and
+ * hands back the page it was closed on so the lesson can offer «سجّل ما قرأت».
  */
 export default function PdfReader({
   itemId,
   url,
   title,
   startPage,
+  lastPage = null,
   onClose,
   footer,
 }: {
@@ -127,12 +132,13 @@ export default function PdfReader({
   url: string;
   title: string;
   startPage: number | null;
-  onClose: () => void;
+  lastPage?: number | null;
+  onClose: (page: number) => void;
   footer?: ReactNode;
 }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState(false);
-  const [page, setPage] = useState(() => savedPage(itemId) ?? startPage ?? 1);
+  const [page, setPage] = useState(() => savedPage(itemId) ?? lastPage ?? startPage ?? 1);
   const [jumping, setJumping] = useState(false);
   const [typed, setTyped] = useState('');
   const [zoom, setZoom] = useState(1);
@@ -301,7 +307,7 @@ export default function PdfReader({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return full ? leaveFull() : onClose();
+      if (e.key === 'Escape') return full ? leaveFull() : onClose(page);
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
       if (e.key === 'ArrowLeft') go(page + 1);
       if (e.key === 'ArrowRight') go(page - 1);
@@ -320,7 +326,7 @@ export default function PdfReader({
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex flex-col bg-canvas">
       {!full && (
         <header className="flex items-center gap-1 border-b border-line px-2 py-2 sm:gap-2 sm:px-5">
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="إغلاق الكتاب" className={barButton}>
+          <button ref={closeRef} type="button" onClick={() => onClose(page)} aria-label="إغلاق الكتاب" className={barButton}>
             <X className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">

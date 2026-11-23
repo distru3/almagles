@@ -9,7 +9,7 @@ import { ILM_TEXTS, KINDS, LEARN_MAKEUP_DAYS, arNumber, isRestDay, lessonsLabel,
 import { saveAll, useUnsavedGuard } from '../../lib/unsaved';
 import Spinner from '../Spinner';
 import FadlText from '../tasks/FadlText';
-import LessonCard from './LessonCard';
+import LessonCard, { type LessonPart } from './LessonCard';
 import JourneyMap from './JourneyMap';
 import JourneyProgress from './JourneyProgress';
 
@@ -20,9 +20,18 @@ interface Bushra {
   points: number;
   madeUp: boolean;
   dayDone: boolean;
+  /** Only part of the lesson was recorded («أنجزت بعضه»). */
+  partial: boolean;
+  /** «طلب العلم» tasks in «مهامي» this ticked. */
+  tasks: string[];
   text: Text;
   key: number;
 }
+
+type RecordResult = { points: number; madeUp: boolean; dayDone: boolean; tasks: string[] };
+
+/** «ووُضعت علامة «طلب العلم» في مهامي». */
+const tasksNote = (tasks: string[]) => (tasks.length ? ` — ووُضعت علامة ${tasks.map((t) => `«${t}»`).join(' و')} في «مهامي»` : '');
 
 /** The invitation — for a member who hasn't joined, or stepped aside. Never pressed twice. */
 function Invite({ data, onChoose, busy }: { data: LearningJourney; onChoose: (active: boolean) => void; busy: boolean }) {
@@ -173,18 +182,60 @@ export default function MyJourney() {
     setError(null);
     if (!done) setBushra(null);
     try {
-      const res = await api<{ points: number; madeUp: boolean; dayDone: boolean }>(`/learning/items/${item.id}/done`, {
+      const res = await api<RecordResult>(`/learning/items/${item.id}/done`, {
         method: 'PUT',
         body: { date: today, done },
       });
       if (done) {
         const key = ++ticks.current;
-        setBushra({ title: item.title, points: res.points, madeUp: res.madeUp, dayDone: res.dayDone && item.date === today, text: ILM_TEXTS[(key + new Date().getDate()) % ILM_TEXTS.length], key });
+        setBushra({
+          title: item.title,
+          // What this tick added: the rest of the points, if part was already recorded.
+          points: res.points - item.earned,
+          madeUp: res.madeUp,
+          dayDone: res.dayDone && item.date === today,
+          partial: false,
+          tasks: res.tasks,
+          text: ILM_TEXTS[(key + new Date().getDate()) % ILM_TEXTS.length],
+          key,
+        });
       }
       await load();
     } catch (err) {
       patch(item.id, item);
       setError(err instanceof ApiError ? err.message : 'تعذّر الحفظ — حاول مرة أخرى');
+    } finally {
+      setPending((p) => {
+        const next = new Set(p);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  };
+
+  /** «أنجزت بعضه» / «سجّل ما قرأت»: part of a lesson, by how much or by the page reached. */
+  const part = async (item: MyLearningItem, body: LessonPart) => {
+    if (pending.has(item.id)) return false;
+    setPending((p) => new Set(p).add(item.id));
+    setError(null);
+    try {
+      const res = await api<RecordResult & { progress: number }>(`/learning/items/${item.id}/progress`, { method: 'PUT', body: { date: today, ...body } });
+      const key = ++ticks.current;
+      setBushra({
+        title: item.title,
+        points: res.points - item.earned,
+        madeUp: false,
+        dayDone: false,
+        partial: true,
+        tasks: res.tasks,
+        text: ILM_TEXTS[(key + new Date().getDate()) % ILM_TEXTS.length],
+        key,
+      });
+      await load();
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذّر الحفظ — حاول مرة أخرى');
+      return false;
     } finally {
       setPending((p) => {
         const next = new Set(p);
@@ -209,7 +260,7 @@ export default function MyJourney() {
   if (!data.enrollment?.active) return <Invite data={data} onChoose={(a) => void choose(a)} busy={busy} />;
 
   const card = (i: MyLearningItem, showDate = false) => (
-    <LessonCard key={i.id} item={i} today={today} busy={pending.has(i.id)} onToggle={(it, d) => void toggle(it, d)} onNote={saveNote} showDate={showDate} />
+    <LessonCard key={i.id} item={i} today={today} busy={pending.has(i.id)} onToggle={(it, d) => void toggle(it, d)} onPart={part} onNote={saveNote} showDate={showDate} />
   );
   const todays = byDay.get(today) ?? [];
   const catchUp = data.items.filter((i) => i.date < today && !i.done && i.worth !== null);
@@ -241,11 +292,15 @@ export default function MyJourney() {
             <div className="flex items-start justify-between gap-2">
               <p className="flex items-center gap-1.5 font-display text-sm text-accent">
                 <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {bushra.dayDone
-                  ? `أتممت درس اليوم — (+${arNumber.format(bushra.points)} نقطة) زادك الله علمًا`
-                  : bushra.madeUp
-                    ? `تداركت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة) — والعودة خير`
-                    : `بُشراك — أتممت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة)`}
+                {(bushra.partial
+                  ? bushra.points > 0
+                    ? `سُجّل ما أنجزته من «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة) — بارك الله في وقتك`
+                    : `حُفظ موضعك في «${bushra.title}» — أكمله متى تيسّر لك`
+                  : bushra.dayDone
+                    ? `أتممت درس اليوم — (+${arNumber.format(bushra.points)} نقطة) زادك الله علمًا`
+                    : bushra.madeUp
+                      ? `تداركت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة) — والعودة خير`
+                      : `بُشراك — أتممت «${bushra.title}» (+${arNumber.format(bushra.points)} نقطة)`) + tasksNote(bushra.tasks)}
               </p>
               <button type="button" onClick={() => setBushra(null)} aria-label="إغلاق" className="-m-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface">
                 <X className="h-4 w-4" />

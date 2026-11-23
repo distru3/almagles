@@ -7,7 +7,8 @@ import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { linkUrlSchema } from '../lib/linkUrl.js';
 import { parseDate, shiftDate, weekStartIso } from '../lib/taskSchedule.js';
-import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak } from '../lib/learning.js';
+import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak, pageProgress, progressPoints } from '../lib/learning.js';
+import { tickLearningTasks } from '../lib/taskTicks.js';
 import { MAX_LEARNING_FILE_BYTES, isLearningFileId, isPdf, learningFileStore } from '../lib/learningFiles.js';
 import { env } from '../env.js';
 
@@ -50,6 +51,7 @@ const ITEM_SELECT = {
   fileBytes: true,
   filePages: true,
   startPage: true,
+  endPage: true,
   minutes: true,
   points: true,
   order: true,
@@ -85,18 +87,22 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
       prisma.learningEnrollment.findUnique({ where: { userId }, select: { active: true, startDay: true } }),
       prisma.learningItem.findMany({ where: { date: { gte: lo, lte: hi } }, orderBy: ORDER, select: ITEM_SELECT }),
       prisma.learningItem.findMany({ select: { id: true, date: true } }),
-      prisma.learningCompletion.findMany({ where: { userId }, select: { itemId: true, day: true, points: true, madeUp: true, note: true } }),
+      prisma.learningCompletion.findMany({ where: { userId }, select: { itemId: true, day: true, points: true, madeUp: true, note: true, progress: true, page: true } }),
       prisma.taskExcuse.findMany({ where: { userId }, select: { day: true } }),
       prisma.learningEnrollment.count({ where: { active: true } }),
     ]);
     const counts = items.length
-      ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) } }, _count: { _all: true } })
+      ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) }, progress: 100 }, _count: { _all: true } })
       : [];
     const countOf = new Map(counts.map((c) => [c.itemId, c._count._all]));
+    // What the member recorded of each lesson, finished or in part; `finished` only the former.
     const doneOf = new Map(mine.map((c) => [c.itemId, c]));
+    const finished = mine.filter((c) => c.progress >= 100);
+    const finishedIds = new Set(finished.map((c) => c.itemId));
 
     const startDay = enrollment?.startDay ?? null;
     const due = allItems.filter((i) => i.date <= today && (!startDay || i.date >= startDay));
+    // Part of a lesson keeps «سلسلة العلم» going: it was a day of learning.
     const doneDays = new Set(mine.map((c) => c.day));
     const { streak, bestStreak } = learningStreak(
       allItems.map((i) => i.date),
@@ -113,24 +119,30 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
       members,
       items: items.map((i) => {
         const c = doneOf.get(i.id);
+        const done = (c?.progress ?? 0) >= 100;
+        const rest = c && !done ? progressPoints(i.points, i.date, today, c.progress, 100) : null;
         return {
           ...i,
-          done: Boolean(c),
+          done,
+          /** How much is done, 0–100; between, it's «أنجزت بعضه». */
+          progress: c?.progress ?? 0,
+          /** The page of the PDF where the member stopped, from any device. */
+          page: c?.page ?? null,
           madeUp: c?.madeUp ?? false,
           earned: c?.points ?? 0,
           note: c?.note ?? null,
           doneCount: countOf.get(i.id) ?? 0,
-          /** What finishing it now would earn; null when it can't be ticked today. */
-          worth: c ? null : learningPoints(i.points, i.date, today),
+          /** What finishing it now would bring it to in all; null when it can't be ticked today. */
+          worth: done ? null : c ? (rest === null ? null : Math.min(i.points, c.points + rest)) : learningPoints(i.points, i.date, today),
         };
       }),
       stats: {
-        done: mine.length,
+        done: finished.length,
         total: allItems.length,
         due: due.length,
-        keptDue: due.filter((i) => doneOf.has(i.id)).length,
+        keptDue: due.filter((i) => finishedIds.has(i.id)).length,
         points: mine.reduce((n, c) => n + c.points, 0),
-        madeUp: mine.filter((c) => c.madeUp).length,
+        madeUp: finished.filter((c) => c.madeUp).length,
         notes: mine.filter((c) => c.note).length,
         streak,
         bestStreak,
@@ -180,44 +192,124 @@ const noteSchema = z
   .nullish()
   .transform((v) => v || null);
 const doneSchema = z.object({ date: todaySchema, done: z.boolean(), note: noteSchema.optional() });
+const pageSchema = z.number().int().min(1, 'رقم الصفحة غير صالح').max(100000, 'رقم الصفحة غير صالح');
+const progressSchema = z.object({
+  date: todaySchema,
+  /** Where the member stopped in the lesson's PDF. */
+  page: pageSchema.optional(),
+  /** «أنجزت بعضه» for a lesson with no page range: ربعه / نصفه / أكثره. */
+  progress: z.number().int().min(1, 'المقدار غير صالح').max(99, 'المقدار غير صالح').optional(),
+});
+
+type LessonForRecord = { id: string; date: string; points: number };
+
+/**
+ * Raise a member's record of a lesson to `progress`% (100 = finished), with
+ * the points for the stretch just done (see progressPoints). A record never
+ * goes down: reading back over earlier pages takes nothing away. Whatever is
+ * recorded also ticks the «طلب العلم» tasks linked to the journey.
+ */
+async function recordLesson(item: LessonForRecord, userId: string, date: string, progress: number, extra: { page?: number; note?: string | null }) {
+  const key = { itemId: item.id, userId };
+  const existing = await prisma.learningCompletion.findUnique({ where: { itemId_userId: key }, select: { points: true, progress: true, madeUp: true } });
+  const keep = { ...(extra.page !== undefined && { page: extra.page }), ...(extra.note !== undefined && { note: extra.note }) };
+  if (existing && existing.progress >= progress) {
+    if (Object.keys(keep).length) await prisma.learningCompletion.update({ where: { itemId_userId: key }, data: keep });
+    return { tasks: [] as string[] };
+  }
+  if (item.date > date) throw new HttpError(400, 'لم يحن وقت هذا الدرس بعد — تهيّأ له');
+  const gained = progressPoints(item.points, item.date, date, existing?.progress ?? 0, progress);
+  if (gained === null) throw new HttpError(400, `يمكن تدارك دروس آخر ${LEARN_MAKEUP_DAYS} أيام فقط`);
+  const late = item.date !== date;
+  const finishing = progress >= 100;
+  const data = {
+    progress,
+    points: Math.min(item.points, (existing?.points ?? 0) + gained),
+    doneAt: finishing ? new Date() : null,
+    // «تدارك» describes when it was finished; part of a lesson keeps what it began as.
+    madeUp: existing && !finishing ? existing.madeUp : late,
+    ...keep,
+  };
+  // upsert keeps a double-tap from failing on the unique key.
+  await prisma.learningCompletion.upsert({ where: { itemId_userId: key }, create: { ...key, day: item.date, ...data }, update: data });
+  return { tasks: await tickLearningTasks(userId, date) };
+}
+
+/** What the member's card needs back after recording a lesson. */
+async function recordState(item: LessonForRecord, userId: string, tasks: string[]) {
+  const [row, dayItems, dayDone] = await Promise.all([
+    prisma.learningCompletion.findUnique({ where: { itemId_userId: { itemId: item.id, userId } }, select: { points: true, madeUp: true, progress: true, page: true } }),
+    prisma.learningItem.count({ where: { date: item.date } }),
+    prisma.learningCompletion.count({ where: { userId, day: item.date, progress: 100 } }),
+  ]);
+  const progress = row?.progress ?? 0;
+  return {
+    id: item.id,
+    done: progress >= 100,
+    progress,
+    page: row?.page ?? null,
+    points: row?.points ?? 0,
+    madeUp: row?.madeUp ?? false,
+    // «أتممت درس اليوم»: every lesson of that day is finished.
+    dayDone: dayDone >= dayItems,
+    /** «طلب العلم» tasks ticked just now by this lesson. */
+    tasks,
+  };
+}
+
+const findLesson = async (id: string) => {
+  const item = await prisma.learningItem.findUnique({ where: { id }, select: { id: true, date: true, points: true, startPage: true, endPage: true } });
+  if (!item) throw new HttpError(404, 'الدرس غير موجود');
+  return item;
+};
 
 /**
  * «أتممت الدرس»: on its day (or the next) for the full points, within the
- * week for half. Unticking removes it and its note.
+ * week for half — the rest of them, if part was already recorded. Unticking
+ * removes the record, part and note with it; a «طلب العلم» task it ticked
+ * stays ticked, for the member did give that time to learning.
  */
 router.put('/items/:id/done', requireAuth, validate(doneSchema), async (req, res, next) => {
   try {
     const { date, done, note } = req.body as z.infer<typeof doneSchema>;
     const userId = req.user!.id;
     await requireJoined(userId);
-    const item = await prisma.learningItem.findUnique({ where: { id: req.params.id }, select: { id: true, date: true, points: true } });
-    if (!item) throw new HttpError(404, 'الدرس غير موجود');
-    const key = { itemId: item.id, userId };
+    const item = await findLesson(req.params.id);
     if (!done) {
-      await prisma.learningCompletion.deleteMany({ where: key });
-      return res.json({ id: item.id, done, points: 0, madeUp: false, dayDone: false });
+      await prisma.learningCompletion.deleteMany({ where: { itemId: item.id, userId } });
+      return res.json(await recordState(item, userId, []));
     }
-    const existing = await prisma.learningCompletion.findUnique({ where: { itemId_userId: key }, select: { points: true, madeUp: true } });
-    if (!existing) {
-      if (item.date > date) throw new HttpError(400, 'لم يحن وقت هذا الدرس بعد — تهيّأ له');
-      const points = learningPoints(item.points, item.date, date);
-      if (points === null) throw new HttpError(400, `يمكن تدارك دروس آخر ${LEARN_MAKEUP_DAYS} أيام فقط`);
-      // upsert keeps a double-tap from failing on the unique key.
-      await prisma.learningCompletion.upsert({
-        where: { itemId_userId: key },
-        create: { ...key, day: item.date, points, madeUp: item.date !== date, note: note ?? null },
-        update: {},
-      });
-    } else if (note !== undefined) {
-      await prisma.learningCompletion.update({ where: { itemId_userId: key }, data: { note } });
+    const { tasks } = await recordLesson(item, userId, date, 100, { note });
+    return res.json(await recordState(item, userId, tasks));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * «سجّل ما قرأت» / «أنجزت بعضه»: part of a lesson. From the reader it's the
+ * page where the member stopped, measured against the lesson's pages; for a
+ * lesson with no page range it's how much (ربعه / نصفه / أكثره). It earns that
+ * share of the points, keeps «سلسلة العلم», and ticks the linked «طلب العلم»
+ * task — but the lesson counts as finished only with «أتممت الدرس».
+ */
+router.put('/items/:id/progress', requireAuth, validate(progressSchema), async (req, res, next) => {
+  try {
+    const { date, page, progress } = req.body as z.infer<typeof progressSchema>;
+    const userId = req.user!.id;
+    await requireJoined(userId);
+    const item = await findLesson(req.params.id);
+    const fromPage = page === undefined ? null : pageProgress(item.startPage, item.endPage, page);
+    if (fromPage === 0) throw new HttpError(400, `لم تبلغ صفحة الدرس بعد — يبدأ من صفحة ${item.startPage}`);
+    const share = progress ?? fromPage;
+    if (share === null || share === undefined) {
+      // Nothing to measure by: keep only the place, if there's already a record.
+      const kept = page !== undefined ? await prisma.learningCompletion.updateMany({ where: { itemId: item.id, userId }, data: { page } }) : { count: 0 };
+      if (kept.count === 0) throw new HttpError(400, 'حدّد كم أنجزت من الدرس');
+      return res.json(await recordState(item, userId, []));
     }
-    const row = (await prisma.learningCompletion.findUnique({ where: { itemId_userId: key }, select: { points: true, madeUp: true } }))!;
-    // «أتممت درس اليوم»: every lesson of that day is done.
-    const [dayItems, dayDone] = await Promise.all([
-      prisma.learningItem.count({ where: { date: item.date } }),
-      prisma.learningCompletion.count({ where: { userId, day: item.date } }),
-    ]);
-    return res.json({ id: item.id, done, points: row.points, madeUp: row.madeUp, dayDone: dayDone >= dayItems });
+    const { tasks } = await recordLesson(item, userId, date, share, { page });
+    return res.json(await recordState(item, userId, tasks));
   } catch (err) {
     next(err);
   }
@@ -249,7 +341,7 @@ router.get('/companions', requireAuth, validate(z.object({ date: anyDateSchema }
         select: { startDay: true, user: { select: { id: true, name: true, avatarUrl: true } } },
       }),
       prisma.learningItem.findMany({ select: { id: true, date: true } }),
-      prisma.learningCompletion.findMany({ select: { userId: true, itemId: true, day: true, points: true } }),
+      prisma.learningCompletion.findMany({ select: { userId: true, itemId: true, day: true, points: true, progress: true } }),
       prisma.taskExcuse.findMany({ select: { userId: true, day: true } }),
     ]);
     const lessonDays = allItems.map((i) => i.date);
@@ -264,12 +356,13 @@ router.get('/companions', requireAuth, validate(z.object({ date: anyDateSchema }
     const members = enrolled
       .map(({ startDay, user }) => {
         const mine = byUser.get(user.id) ?? [];
-        const ids = new Set(mine.map((c) => c.itemId));
+        // Lessons count when finished; points and the streak take part of one too.
+        const ids = new Set(mine.filter((c) => c.progress >= 100).map((c) => c.itemId));
         const due = allItems.filter((i) => i.date <= date && (!startDay || i.date >= startDay));
         return {
           ...user,
           startDay,
-          done: mine.length,
+          done: ids.size,
           due: due.length,
           keptDue: due.filter((i) => ids.has(i.id)).length,
           points: mine.reduce((n, c) => n + c.points, 0),
@@ -315,10 +408,13 @@ const fileFields = {
   fileName: optionalText(200, 'اسم الملف طويل جداً'),
   fileBytes: z.number().int().min(0).nullish(),
   filePages: z.number().int().min(1).max(100000).nullish(),
-  startPage: z.number().int().min(1, 'رقم الصفحة غير صالح').max(100000, 'رقم الصفحة غير صالح').nullish(),
+  startPage: pageSchema.nullish(),
+  endPage: pageSchema.nullish(),
 };
 /** A file comes with its address, or not at all. */
 const fileComplete = (v: { filePublicId?: string | null; fileUrl?: string | null }) => Boolean(v.filePublicId) === Boolean(v.fileUrl);
+/** «إلى صفحة» can't come before «من صفحة». */
+const pagesInOrder = (v: { startPage?: number | null; endPage?: number | null }) => !v.startPage || !v.endPage || v.endPage >= v.startPage;
 
 const lessonDate = anyDateSchema.refine((v) => !isRestDay(v), { message: 'يوم الجمعة يوم استجمام — لا دروس فيه' });
 
@@ -335,8 +431,9 @@ const itemFields = {
   points: z.number().int().min(1, 'أقل النقاط ١').max(100, 'أكثر النقاط ١٠٠').optional(),
   order: z.number().int().min(0).max(100000).optional(),
 };
-const createSchema = z.object(itemFields).refine(fileComplete, { message: 'الملف غير صالح' });
-const updateSchema = z.object(itemFields).partial().refine(fileComplete, { message: 'الملف غير صالح' });
+const pagesMessage = { message: 'صفحة النهاية قبل صفحة البداية', path: ['endPage'] };
+const createSchema = z.object(itemFields).refine(fileComplete, { message: 'الملف غير صالح' }).refine(pagesInOrder, pagesMessage);
+const updateSchema = z.object(itemFields).partial().refine(fileComplete, { message: 'الملف غير صالح' }).refine(pagesInOrder, pagesMessage);
 const bulkSchema = z.object({
   items: z.array(createSchema).min(1, 'لا دروس في الخطة').max(MAX_BULK_ITEMS, `أكثر الخطة ${MAX_BULK_ITEMS} درسًا`),
 });
@@ -351,7 +448,7 @@ router.get('/manage', ...manage, validate(z.object({ from: anyDateSchema, to: an
       prisma.learningEnrollment.count({ where: { active: true } }),
     ]);
     const counts = items.length
-      ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) } }, _count: { _all: true } })
+      ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) }, progress: 100 }, _count: { _all: true } })
       : [];
     const countOf = new Map(counts.map((c) => [c.itemId, c._count._all]));
     return res.json({ members, items: items.map((i) => ({ ...i, doneCount: countOf.get(i.id) ?? 0 })) });
@@ -413,7 +510,7 @@ router.put('/items/:id', ...manage, validate(updateSchema), async (req, res, nex
       // A patch that doesn't mention the file leaves it alone, address and all.
       for (const k of ['fileUrl', 'fileName', 'fileBytes', 'filePages'] as const) delete patch[k];
     } else if (!patch.filePublicId) {
-      Object.assign(patch, { fileUrl: null, fileName: null, fileBytes: null, filePages: null, startPage: null });
+      Object.assign(patch, { fileUrl: null, fileName: null, fileBytes: null, filePages: null, startPage: null, endPage: null });
     }
     const [item] = await prisma.$transaction([
       prisma.learningItem.update({ where: { id: existing.id }, data: patch, select: ITEM_SELECT }),
@@ -422,7 +519,7 @@ router.put('/items/:id', ...manage, validate(updateSchema), async (req, res, nex
         : []),
     ]);
     if (existing.filePublicId && existing.filePublicId !== item.filePublicId) await removeIfUnused(existing.filePublicId);
-    const doneCount = await prisma.learningCompletion.count({ where: { itemId: existing.id } });
+    const doneCount = await prisma.learningCompletion.count({ where: { itemId: existing.id, progress: 100 } });
     return res.json({ item: { ...item, doneCount } });
   } catch (err) {
     next(err);

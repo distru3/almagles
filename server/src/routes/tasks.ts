@@ -23,6 +23,7 @@ import {
   type TaskSchedule,
 } from '../lib/taskSchedule.js';
 import { learningStreak } from '../lib/learning.js';
+import { isComeback } from '../lib/taskTicks.js';
 import { keepCount, partnersOf, periodsBetween, slotState, taskStreak, type HistoryTask, type MemberLog } from '../lib/taskHistory.js';
 
 export { periodOf };
@@ -67,6 +68,7 @@ const TASK_SELECT = {
   endTime: true,
   order: true,
   active: true,
+  fromLearning: true,
 } as const;
 const ORDER = [{ order: 'asc' as const }, { createdAt: 'asc' as const }];
 
@@ -194,20 +196,6 @@ router.put('/:id/done', requireAuth, validate(tickSchema), async (req, res, next
     next(err);
   }
 });
-
-/**
- * «عودة حميدة»: the first tick of `day` after two or more days with nothing
- * done and no excuse, by a member who had taken part before.
- */
-async function isComeback(userId: string, day: string): Promise<boolean> {
-  const gap = { gte: shiftDate(day, -2), lte: day };
-  const [recent, excused, before] = await Promise.all([
-    prisma.taskCompletion.count({ where: { userId, day: gap } }),
-    prisma.taskExcuse.count({ where: { userId, day: { gte: shiftDate(day, -2), lt: day } } }),
-    prisma.taskCompletion.count({ where: { userId, day: { lt: shiftDate(day, -2) } } }),
-  ]);
-  return recent === 0 && excused === 0 && before > 0;
-}
 
 const makeupSchema = z.object({ date: todaySchema, time: timeSchema, day: anyDateSchema, done: z.boolean(), ...prayerFields });
 
@@ -491,23 +479,34 @@ router.get('/board', requireAuth, validate(boardQuery, 'query'), async (req, res
   }
 });
 
-/** The same sums as «ساحة الهمّة» takes from tasks, from the lessons of «رحلة العلم». */
+/**
+ * The same sums as «ساحة الهمّة» takes from tasks, from the lessons of «رحلة العلم».
+ * Part of a lesson («أنجزت بعضه») earns its points and keeps «سلسلة العلم», but
+ * only a finished lesson is counted as one, is first today, or shows in the feed.
+ */
 async function learningOnBoard(date: string, weekStart: string, weekEnd: string) {
-  const [totals, week, today, days, madeUp, recent, first, items, enrollments] = await Promise.all([
-    prisma.learningCompletion.groupBy({ by: ['userId'], _sum: { points: true }, _count: { _all: true } }),
+  const finished = { progress: 100 };
+  const [points, counts, week, today, days, madeUp, recentRows, firstRow, items, enrollments] = await Promise.all([
+    prisma.learningCompletion.groupBy({ by: ['userId'], _sum: { points: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: finished, _count: { _all: true } }),
     prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: { gte: weekStart, lte: weekEnd } }, _sum: { points: true } }),
-    prisma.learningCompletion.groupBy({ by: ['userId'], where: { day: date }, _count: { _all: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: { ...finished, day: date }, _count: { _all: true } }),
     prisma.learningCompletion.findMany({ distinct: ['userId', 'day'], select: { userId: true, day: true } }),
-    prisma.learningCompletion.groupBy({ by: ['userId'], where: { madeUp: true }, _count: { _all: true } }),
+    prisma.learningCompletion.groupBy({ by: ['userId'], where: { ...finished, madeUp: true }, _count: { _all: true } }),
     prisma.learningCompletion.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: finished,
+      orderBy: { doneAt: 'desc' },
       take: 15,
-      select: { createdAt: true, points: true, madeUp: true, userId: true, item: { select: { title: true } } },
+      select: { doneAt: true, createdAt: true, points: true, madeUp: true, userId: true, item: { select: { title: true } } },
     }),
-    prisma.learningCompletion.findFirst({ where: { day: date, madeUp: false }, orderBy: { createdAt: 'asc' }, select: { userId: true, createdAt: true } }),
+    prisma.learningCompletion.findFirst({ where: { ...finished, day: date, madeUp: false }, orderBy: { doneAt: 'asc' }, select: { userId: true, doneAt: true, createdAt: true } }),
     prisma.learningItem.findMany({ select: { date: true } }),
     prisma.learningEnrollment.findMany({ select: { userId: true, startDay: true } }),
   ]);
+  const countOf = new Map(counts.map((c) => [c.userId, c._count._all]));
+  const totals = points.map((p) => ({ userId: p.userId, _sum: p._sum, _count: { _all: countOf.get(p.userId) ?? 0 } }));
+  const recent = recentRows.map(({ doneAt, createdAt, ...r }) => ({ ...r, createdAt: doneAt ?? createdAt }));
+  const first = firstRow ? { userId: firstRow.userId, createdAt: firstRow.doneAt ?? firstRow.createdAt } : null;
   const startOf = new Map(enrollments.map((e) => [e.userId, e.startDay]));
   return { totals, week, today, days, madeUp, recent, first, items, startOf };
 }
@@ -553,14 +552,14 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
       prisma.learningCompletion.findMany({
         where: { userId },
         orderBy: { createdAt: 'asc' },
-        select: { itemId: true, day: true, points: true, madeUp: true, item: { select: { title: true } } },
+        select: { itemId: true, day: true, points: true, madeUp: true, progress: true, item: { select: { title: true } } },
       }),
       prisma.learningItem.findMany({ select: { date: true } }),
       prisma.learningEnrollment.findUnique({ where: { userId }, select: { active: true, startDay: true } }),
     ]);
 
     const days = new Map<string, { day: string; points: number; count: number; lessons: number; ilmPoints: number }>();
-    const log = new Map<string, { taskId: string; points: number; madeUp: boolean; learning: boolean }[]>();
+    const log = new Map<string, { taskId: string; points: number; madeUp: boolean; learning: boolean; progress?: number }[]>();
     const dayOf = (day: string) => days.get(day) ?? days.set(day, { day, points: 0, count: 0, lessons: 0, ilmPoints: 0 }).get(day)!;
     for (const c of completions) {
       const d = dayOf(c.day);
@@ -570,11 +569,23 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
     }
     for (const l of lessons) {
       const d = dayOf(l.day);
+      const finished = l.progress >= 100;
       d.points += l.points;
-      d.count += 1;
-      d.lessons += 1;
       d.ilmPoints += l.points;
-      if (l.day >= from) (log.get(l.day) ?? log.set(l.day, []).get(l.day)!).push({ taskId: `lesson:${l.itemId}`, points: l.points, madeUp: l.madeUp, learning: true });
+      // Part of a lesson shows in the day's log with how far it got, but isn't counted as a lesson done.
+      if (finished) {
+        d.count += 1;
+        d.lessons += 1;
+      }
+      if (l.day >= from) {
+        (log.get(l.day) ?? log.set(l.day, []).get(l.day)!).push({
+          taskId: `lesson:${l.itemId}`,
+          points: l.points,
+          madeUp: l.madeUp,
+          learning: true,
+          ...(finished ? {} : { progress: l.progress }),
+        });
+      }
     }
     const sortedDays = [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
     const memberLog: MemberLog = {
@@ -638,7 +649,7 @@ router.get('/history', requireAuth, validate(historyQuery, 'query'), async (req,
       },
       learning: {
         enrolled: enrollment?.active ?? false,
-        lessons: lessons.length,
+        lessons: lessons.filter((l) => l.progress >= 100).length,
         points: lessons.reduce((n, l) => n + l.points, 0),
         ...learningStreak(
           lessonDates.map((i) => i.date),
@@ -717,7 +728,12 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
       prisma.taskExcuse.findMany({ where: { day: { gte: since } }, select: { userId: true, day: true } }),
       prisma.task.findMany({ where: { active: true }, orderBy: ORDER, select: HISTORY_TASK_SELECT }),
     ]);
-    const lessons = await prisma.learningCompletion.findMany({ where: { day: { gte: seriesFrom < from ? seriesFrom : from, lte: today } }, select: { userId: true, day: true, points: true } });
+    const lessons = await prisma.learningCompletion.findMany({
+      where: { day: { gte: seriesFrom < from ? seriesFrom : from, lte: today } },
+      select: { userId: true, day: true, points: true, progress: true },
+    });
+    // Lessons are counted when finished; part of one still adds its points.
+    const finishedLessons = lessons.filter((l) => l.progress >= 100);
     // Every kind of task is measured; one whose last day has passed no longer is.
     const tasks = allTasks.filter((t) => !t.endDate || t.endDate >= from);
     const repeating = tasks.filter((t) => t.repeat !== 'once');
@@ -738,7 +754,7 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
     const perDay = new Map<string, number>();
     for (const c of completions) if (c.day >= seriesFrom && c.day <= today) perDay.set(c.day, (perDay.get(c.day) ?? 0) + 1);
     const ilmPerDay = new Map<string, number>();
-    for (const l of lessons) if (l.day >= seriesFrom) ilmPerDay.set(l.day, (ilmPerDay.get(l.day) ?? 0) + 1);
+    for (const l of finishedLessons) if (l.day >= seriesFrom) ilmPerDay.set(l.day, (ilmPerDay.get(l.day) ?? 0) + 1);
     // `count` is everything done that day; `ilm` the lessons among it.
     const series = Array.from({ length: COMMUNITY_SERIES_DAYS }, (_, i) => {
       const day = shiftDate(seriesFrom, i);
@@ -776,7 +792,7 @@ router.get('/community', requireAuth, validate(historyQuery, 'query'), async (re
         nights: inWindow.filter((c) => c.task.timeWindow === 'qiyam').length,
         madeUp: inWindow.filter((c) => c.madeUp).length,
         /** «دروس العلم»: lessons of «رحلة العلم» finished in the window, and by how many brothers. */
-        lessons: lessonsInWindow.length,
+        lessons: lessonsInWindow.filter((l) => l.progress >= 100).length,
         ilmPoints: lessonsInWindow.reduce((n, l) => n + l.points, 0),
         learners: new Set(lessonsInWindow.map((l) => l.userId)).size,
       },
@@ -824,6 +840,7 @@ const taskFields = {
   startTime: optionalTime,
   endTime: optionalTime,
   active: z.boolean().optional(),
+  fromLearning: z.boolean().optional(),
   order: z.number().int().min(0).max(100000).optional(),
 };
 

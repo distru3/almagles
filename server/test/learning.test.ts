@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { client, createUser, loginAs, prisma, resetDb } from './helpers.js';
-import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak } from '../src/lib/learning.js';
+import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak, pageProgress, progressPoints } from '../src/lib/learning.js';
 import { shiftDate } from '../src/lib/taskSchedule.js';
 import { MAX_LEARNING_FILE_BYTES, learningFileStore } from '../src/lib/learningFiles.js';
 
@@ -379,5 +379,97 @@ describe('one race, in worship and in «طلب العلم»', () => {
     await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
     const { body } = await a.get(`/api/learning/companions?date=${today}`);
     expect(body.members[0].week).toBe(20);
+  });
+});
+
+describe('part of a lesson, and «طلب العلم» ticked by the journey', () => {
+  it('measures part of a lesson by its pages, never reaching «finished» by reading alone', () => {
+    expect(pageProgress(12, 20, 16)).toBe(55);
+    expect(pageProgress(12, 20, 11)).toBe(0);
+    expect(pageProgress(12, 20, 20)).toBe(99);
+    expect(pageProgress(12, null, 16)).toBeNull();
+    expect(progressPoints(20, today, today, 0, 50)).toBe(10);
+    expect(progressPoints(20, back(3), today, 50, 100)).toBe(5);
+  });
+
+  it('earns a share of the points for part of a lesson, and the rest on finishing it', async () => {
+    const c = await joined();
+    const item = await lesson(today, { startPage: 11, endPage: 20 });
+    const part = await c.put(`/api/learning/items/${item.id}/progress`, { date: today, page: 15 });
+    expect(part.status).toBe(200);
+    expect(part.body).toMatchObject({ done: false, progress: 50, page: 15, points: 10 });
+    // Reading back over earlier pages takes nothing away, but remembers where they are.
+    const back_ = await c.put(`/api/learning/items/${item.id}/progress`, { date: today, page: 12 });
+    expect(back_.body).toMatchObject({ progress: 50, page: 12, points: 10 });
+
+    const done = await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    expect(done.body).toMatchObject({ done: true, progress: 100, points: 20, dayDone: true });
+    const mine = (await c.get(`/api/learning?date=${today}`)).body;
+    expect(mine.stats).toMatchObject({ done: 1, points: 20 });
+  });
+
+  it('takes «ربعه / نصفه / أكثره» for a lesson with no pages, and won’t record before the lesson starts', async () => {
+    const c = await joined();
+    const video = await lesson(today, { kind: 'video' });
+    expect((await c.put(`/api/learning/items/${video.id}/progress`, { date: today })).status).toBe(400);
+    expect((await c.put(`/api/learning/items/${video.id}/progress`, { date: today, progress: 75 })).body).toMatchObject({ progress: 75, points: 15 });
+    expect((await c.put(`/api/learning/items/${video.id}/progress`, { date: today, progress: 100 })).status).toBe(400);
+
+    const book = await lesson(today, { title: 'كتاب', startPage: 30, endPage: 40 });
+    expect((await c.put(`/api/learning/items/${book.id}/progress`, { date: today, page: 5 })).status).toBe(400);
+  });
+
+  it('counts part of a lesson for points and the streak, but not as a lesson finished', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    const item = await lesson(today, { startPage: 1, endPage: 10 });
+    await a.put(`/api/learning/items/${item.id}/progress`, { date: today, page: 5 });
+
+    const me = (await a.get(`/api/tasks/board?date=${today}`)).body.members.find((m: { name: string }) => m.name === 'أحمد');
+    expect(me).toMatchObject({ ilmWeek: 10, lessons: 0, ilmStreak: 1 });
+    expect((await a.get(`/api/tasks/board?date=${today}`)).body.firstIlm).toBeNull();
+    const journey = (await a.get(`/api/learning?date=${today}`)).body;
+    expect(journey.items[0]).toMatchObject({ done: false, progress: 50, page: 5, earned: 10, doneCount: 0, worth: 20 });
+    expect(journey.stats).toMatchObject({ done: 0, points: 10, streak: 1 });
+    const history = (await a.get(`/api/tasks/history?date=${today}&time=12:00`)).body;
+    expect(history.days.find((d: { day: string }) => d.day === today)).toMatchObject({ points: 10, lessons: 0 });
+    expect(history.log.find((l: { day: string }) => l.day === today).items[0]).toMatchObject({ learning: true, progress: 50 });
+    expect((await a.get(`/api/learning/companions?date=${today}`)).body.members[0]).toMatchObject({ done: 0, todayDone: 0, week: 10 });
+  });
+
+  it('ticks the linked «طلب العلم» task on any part of a lesson, and no other task', async () => {
+    const c = await joined();
+    const linked = await prisma.task.create({ data: { title: 'طلب العلم', repeat: 'daily', points: 10, fromLearning: true } });
+    const other = await prisma.task.create({ data: { title: 'ورد القرآن', repeat: 'daily', points: 10 } });
+    const item = await lesson(today, { kind: 'video' });
+
+    const res = await c.put(`/api/learning/items/${item.id}/progress`, { date: today, progress: 25 });
+    expect(res.body.tasks).toEqual(['طلب العلم']);
+    const tasks = (await c.get(`/api/tasks?date=${today}&time=12:00`)).body.tasks;
+    expect(tasks.find((t: { id: string }) => t.id === linked.id)).toMatchObject({ done: true, fromLearning: true });
+    expect(tasks.find((t: { id: string }) => t.id === other.id).done).toBe(false);
+
+    // Finishing the lesson later doesn't tick it twice; unticking the lesson leaves the task ticked.
+    expect((await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true })).body.tasks).toEqual([]);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: false });
+    expect(await prisma.taskCompletion.count({ where: { taskId: linked.id } })).toBe(1);
+  });
+
+  it('lets only managers link a task to the journey', async () => {
+    await createUser({ email: 'm@test.local', role: 'admin' });
+    const m = await loginAs('m@test.local');
+    const made = await m.post('/api/tasks', { title: 'طلب العلم', repeat: 'daily', fromLearning: true });
+    expect(made.status).toBe(201);
+    expect(made.body.task.fromLearning).toBe(true);
+    const v = await joined('v@test.local');
+    expect((await v.put(`/api/tasks/${made.body.task.id}`, { fromLearning: false })).status).toBe(403);
+  });
+
+  it('keeps a lesson’s page range in order', async () => {
+    await createUser({ email: 'm@test.local', role: 'admin' });
+    const m = await loginAs('m@test.local');
+    const bad = await m.post('/api/learning/items', { date: today, kind: 'reading', title: 'درس', startPage: 20, endPage: 10 });
+    expect(bad.status).toBe(400);
+    const good = await m.post('/api/learning/items', { date: today, kind: 'reading', title: 'درس', startPage: 10, endPage: 20 });
+    expect(good.body.item).toMatchObject({ startPage: 10, endPage: 20 });
   });
 });

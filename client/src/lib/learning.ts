@@ -128,3 +128,28 @@ export function milestone(s: { done: number; total: number; streak: number; due:
   if (s.done >= 1) return 'بدأت الطريق — ثبّت خطوك يومًا بعد يوم.';
   return 'أول الطريق خطوة — ابدأ بدرس اليوم.';
 }
+
+/**
+ * How much of a lesson running from `startPage` to `endPage` is read when the
+ * member stopped at `page` — the same measure as the server's pageProgress:
+ * 0 before it starts, at most 99 (only «أتممت» finishes it), null without a range.
+ */
+export function pageProgress(startPage: number | null, endPage: number | null, page: number): number | null {
+  if (!startPage || !endPage || endPage < startPage) return null;
+  if (page < startPage) return 0;
+  const share = Math.floor(((page - startPage + 1) / (endPage - startPage + 1)) * 100);
+  return Math.min(99, Math.max(1, share));
+}
+
+/** «أنجزت بعضه» for a lesson with no pages to measure by. */
+export const PART_CHOICES = [
+  { progress: 25, label: 'ربعه' },
+  { progress: 50, label: 'نصفه' },
+  { progress: 75, label: 'أكثره' },
+] as const;
+
+/** «أنجزت نصفه» / «أنجزت ٤٠٪ منه»: part of a lesson, in words. */
+export function partLabel(progress: number): string {
+  const named = PART_CHOICES.find((c) => c.progress === progress);
+  return named ? `أنجزت ${named.label}` : `أنجزت ${arNumber.format(progress)}٪ منه`;
+}

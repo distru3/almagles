@@ -230,6 +230,8 @@ export interface Task {
   endTime: string | null;
   order: number;
   active: boolean;
+  /** «طلب العلم»: ticked by itself when the member records any lesson of «رحلة العلم». */
+  fromLearning: boolean;
 }
 
 /** A task as a member sees it: their checkmark for the current day / night / week, and how many members did it. */
@@ -305,7 +307,8 @@ export interface TaskHistory {
   /** Every day with work in it, oldest first; `lessons`/`ilmPoints` are the «رحلة العلم» share of it. */
   days: { day: string; points: number; count: number; lessons: number; ilmPoints: number }[];
   /** What was done on each day since `from`; a lesson's id is "lesson:<id>". */
-  log: { day: string; items: { taskId: string; points: number; madeUp: boolean; learning: boolean }[] }[];
+  /** `progress` is set on a lesson only part done. */
+  log: { day: string; items: { taskId: string; points: number; madeUp: boolean; learning: boolean; progress?: number }[] }[];
   /** «رحلة العلم» in the record. */
   learning: { enrolled: boolean; lessons: number; points: number; streak: number; bestStreak: number };
   titles: Record<string, string>;
@@ -380,8 +383,9 @@ export interface LearningItem {
   fileName: string | null;
   fileBytes: number | null;
   filePages: number | null;
-  /** The page of the file the lesson starts on. */
+  /** The pages of the file the lesson starts and ends on (the end lets part of it be measured). */
   startPage: number | null;
+  endPage: number | null;
   minutes: number | null;
   points: number;
   order: number;
@@ -391,7 +395,12 @@ export interface LearningItem {
 
 /** A lesson as one member sees it. */
 export interface MyLearningItem extends LearningItem {
+  /** Finished («أتممت»). */
   done: boolean;
+  /** How much is recorded, 0–100; between them it's «أنجزت بعضه». */
+  progress: number;
+  /** The page of the PDF where the member stopped, from any device. */
+  page: number | null;
   madeUp: boolean;
   /** Points earned for it. */
   earned: number;

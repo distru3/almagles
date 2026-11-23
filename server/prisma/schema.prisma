@@ -338,6 +338,8 @@ model Task {
   order       Int              @default(0)
   /// Archived tasks are hidden from members but keep their history.
   active      Boolean          @default(true)
+  /// «طلب العلم»: ticked by itself when the member records any lesson of «رحلة العلم» (finished or in part).
+  fromLearning Boolean         @default(false)
   createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById String?
   completions TaskCompletion[]
@@ -494,8 +496,9 @@ model LearningItem {
   fileName     String?
   fileBytes    Int?
   filePages    Int?
-  /// The page of the file the lesson starts on.
+  /// The page of the file the lesson starts on, and the one it ends on (so reading part of it can be measured).
   startPage    Int?
+  endPage      Int?
   /// About how long it takes, so the member can plan their day.
   minutes     Int?
   /// Points it earns on «ساحة الهمّة», like a task.
@@ -535,8 +538,15 @@ model LearningCompletion {
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   day       String
-  /// Points earned, kept as they were when done.
+  /// Points earned so far, kept as they were when earned.
   points    Int
+  /// How much of the lesson is done, 1–100. Below 100 it's «أنجزت بعضه»: it counts for
+  /// points and «سلسلة العلم», but not as a lesson finished.
+  progress  Int          @default(100)
+  /// The page of the PDF where the member stopped.
+  page      Int?
+  /// When it reached 100 (for «السبّاق إلى العلم» and the feed); null while in part.
+  doneAt    DateTime?
   /// Done on a later day («تدارك»).
   madeUp    Boolean      @default(false)
   /// «فائدتي»: what the member took from it, in their own words; only they see it.
