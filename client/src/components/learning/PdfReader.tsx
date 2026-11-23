@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Download, Minus, Plus, X } from 'lucide-react';
+import { Download, Maximize2, Minimize2, Minus, Plus, X } from 'lucide-react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { arNumber } from '../../lib/learning';
 import Spinner from '../Spinner';
@@ -105,12 +105,15 @@ function PdfPage({
 }
 
 /**
- * A lesson's PDF, read inside the site: full screen, every page one under the
- * other drawn with pdf.js (phones that won't show a PDF in a page still can),
- * opening at the lesson's page — or where the member stopped last time.
- * Scrolling reads on; the ‹ › buttons, the page box and the arrow keys jump
- * (as in an Arabic book, the next page is to the left: ←).
- * `footer` carries «أتممت الدرس».
+ * A lesson's PDF, read inside the site: every page one under the other, drawn
+ * with pdf.js (phones that won't show a PDF in a page still can), opening at
+ * the lesson's page — or where the member stopped last time.
+ *
+ * The book comes first: the only controls over it are a small floating row
+ * (the page number, tap to jump; and `footer`, which carries «أتممت الدرس»)
+ * that slips away while the member reads down and returns when they scroll
+ * up or reach the end. «ملء الشاشة» hides the top bar and margins too.
+ * The ← → keys still jump a page, as in an Arabic book (← is the next one).
  */
 export default function PdfReader({
   itemId,
@@ -130,8 +133,11 @@ export default function PdfReader({
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState(false);
   const [page, setPage] = useState(() => savedPage(itemId) ?? startPage ?? 1);
+  const [jumping, setJumping] = useState(false);
   const [typed, setTyped] = useState('');
   const [zoom, setZoom] = useState(1);
+  const [full, setFull] = useState(false);
+  const [barHidden, setBarHidden] = useState(false);
   const [boxWidth, setBoxWidth] = useState(0);
   const [sizes, setSizes] = useState<Record<number, Size>>({});
   const [near, setNear] = useState<Set<number>>(() => new Set());
@@ -173,7 +179,7 @@ export default function PdfReader({
     };
   }, [url]);
 
-  // The reading column: the box's inner width (at most 900px), times the zoom.
+  // The reading column: the box's inner width (at most 900px unless in «ملء الشاشة»), times the zoom.
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -186,15 +192,14 @@ export default function PdfReader({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const width = Math.floor(Math.min(boxWidth, 900) * zoom);
+  const width = Math.floor((full ? boxWidth : Math.min(boxWidth, 900)) * zoom);
 
   const count = doc?.numPages ?? 0;
+  const ready = count > 0 && width > 0;
 
   const onSize = useCallback((n: number, size: Size) => {
     setSizes((s) => (s[n] && s[n][0] === size[0] && s[n][1] === size[1] ? s : { ...s, [n]: size }));
   }, []);
-
-  const ready = count > 0 && width > 0;
 
   // Which pages are near enough to draw.
   useEffect(() => {
@@ -226,16 +231,19 @@ export default function PdfReader({
     if (count && width > 0) scrollToPage(pageRef.current);
   }, [count, width, scrollToPage]);
 
-  // The page counter follows the reading: the page under the upper third of the screen.
+  // While scrolling: the page counter follows the page under the upper third
+  // of the screen, and the floating row steps aside on the way down.
   useEffect(() => {
     const el = box.current;
     if (!el || !count) return;
     let frame = 0;
+    let last = el.scrollTop;
     const onScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
-        const y = el.scrollTop + el.clientHeight / 3;
+        const top = el.scrollTop;
+        const y = top + el.clientHeight / 3;
         let lo = 0;
         let hi = count - 1;
         while (lo < hi) {
@@ -244,6 +252,10 @@ export default function PdfReader({
           else hi = mid - 1;
         }
         setPage(lo + 1);
+        const atEnd = top + el.clientHeight >= el.scrollHeight - 48;
+        if (atEnd || top < last - 6) setBarHidden(false);
+        else if (top > last + 6) setBarHidden(true);
+        last = top;
       });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -267,54 +279,74 @@ export default function PdfReader({
     [count, scrollToPage],
   );
 
+  // «ملء الشاشة»: the browser's own full screen where the device allows it
+  // (iPhones don't), and in every case no top bar and no margins.
+  const enterFull = () => {
+    setFull(true);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+  const leaveFull = useCallback(() => {
+    setFull(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+  useEffect(() => {
+    // Esc (or the phone's back gesture) leaves the browser's full screen on its own.
+    const onChange = () => !document.fullscreenElement && setFull(false);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') return full ? leaveFull() : onClose();
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
       if (e.key === 'ArrowLeft') go(page + 1);
       if (e.key === 'ArrowRight') go(page - 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, onClose, page]);
+  }, [full, go, leaveFull, onClose, page]);
 
   const zoomBy = (step: number) => setZoom((z) => ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, ZOOMS.indexOf(z) + step))]);
 
-  const navButton = 'flex h-11 w-11 items-center justify-center rounded-full border border-line-strong text-fg transition hover:border-accent hover:text-accent disabled:opacity-40';
   const barButton = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-fg-2 hover:bg-surface-2 disabled:opacity-40';
+  const pill = 'pointer-events-auto inline-flex h-11 items-center rounded-full border border-line bg-surface font-display text-sm text-fg shadow-xl';
   const fallback = sizes[1] ?? ([595, 842] as Size);
 
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex flex-col bg-canvas">
-      <header className="flex items-center gap-1 border-b border-line px-2 py-2 sm:gap-2 sm:px-5">
-        <button ref={closeRef} type="button" onClick={onClose} aria-label="إغلاق الكتاب" className={barButton}>
-          <X className="h-5 w-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[16px] text-fg">{title}</p>
-          {count > 0 && (
-            <p className="truncate text-xs text-muted">
-              صفحة {arNumber.format(page)} من {arNumber.format(count)}
-              {startPage && page !== startPage && (
-                <button type="button" onClick={() => go(startPage)} className="ms-2 text-accent hover:text-accent-strong">
-                  عُد إلى صفحة الدرس ({arNumber.format(startPage)})
-                </button>
-              )}
-            </p>
-          )}
-        </div>
-        <button type="button" onClick={() => zoomBy(-1)} disabled={zoom === ZOOMS[0]} aria-label="تصغير" className={barButton}>
-          <Minus className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={() => zoomBy(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]} aria-label="تكبير" className={barButton}>
-          <Plus className="h-4 w-4" />
-        </button>
-        <a href={url} target="_blank" rel="noopener noreferrer" aria-label="تنزيل الملف" title="تنزيل الملف" className={barButton}>
-          <Download className="h-4 w-4" />
-        </a>
-      </header>
+      {!full && (
+        <header className="flex items-center gap-1 border-b border-line px-2 py-2 sm:gap-2 sm:px-5">
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="إغلاق الكتاب" className={barButton}>
+            <X className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-display text-[16px] text-fg">{title}</p>
+            {count > 0 && startPage && page !== startPage && (
+              <button type="button" onClick={() => go(startPage)} className="block truncate text-xs text-accent hover:text-accent-strong">
+                عُد إلى صفحة الدرس ({arNumber.format(startPage)})
+              </button>
+            )}
+          </div>
+          <button type="button" onClick={() => zoomBy(-1)} disabled={zoom === ZOOMS[0]} aria-label="تصغير" className={barButton}>
+            <Minus className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => zoomBy(1)} disabled={zoom === ZOOMS[ZOOMS.length - 1]} aria-label="تكبير" className={barButton}>
+            <Plus className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={enterFull} aria-label="ملء الشاشة" title="ملء الشاشة" className={barButton}>
+            <Maximize2 className="h-4 w-4" />
+          </button>
+          <a href={url} target="_blank" rel="noopener noreferrer" aria-label="تنزيل الملف" title="تنزيل الملف" className={barButton}>
+            <Download className="h-4 w-4" />
+          </a>
+        </header>
+      )}
 
-      <div ref={box} className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-2/60 px-2 py-3 sm:px-4">
+      <div ref={box} className={`relative min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-2/60 pb-24 ${full ? 'px-0 pt-0' : 'px-2 pt-3 sm:px-4'}`}>
         {error ? (
           <div className="mx-auto mt-16 max-w-sm text-center">
             <p className="font-display text-lg text-fg">تعذّر فتح الملف هنا</p>
@@ -348,39 +380,60 @@ export default function PdfReader({
         )}
       </div>
 
-      <footer className="border-t border-line px-3 pb-[max(0.6rem,env(safe-area-inset-bottom))] pt-2.5 sm:px-5">
-        {count > 0 && (
-          <div className="flex items-center justify-center gap-2">
-            <button type="button" onClick={() => go(page - 1)} disabled={page <= 1} aria-label="الصفحة السابقة" className={navButton}>
-              <ChevronRight className="h-5 w-5" />
-            </button>
+      {full && (
+        <button
+          type="button"
+          onClick={leaveFull}
+          aria-label="الخروج من ملء الشاشة"
+          title="الخروج من ملء الشاشة"
+          className="absolute start-3 top-[max(0.75rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-fg-2 shadow-xl hover:text-accent"
+        >
+          <Minimize2 className="h-4 w-4" />
+        </button>
+      )}
+
+      {count > 0 && (
+        <div
+          className={`pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] transition duration-300 motion-reduce:transition-none ${
+            barHidden && !jumping ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+          }`}
+        >
+          {jumping ? (
             <form
+              className={`${pill} gap-2 ps-4 pe-1.5`}
               onSubmit={(e) => {
                 e.preventDefault();
                 const n = Number(typed);
                 if (n > 0) go(n);
                 setTyped('');
+                setJumping(false);
               }}
             >
-              <label className="sr-only" htmlFor={`pdf-page-${itemId}`}>
-                اذهب إلى صفحة
+              <label htmlFor={`pdf-page-${itemId}`} className="text-muted">
+                إلى صفحة
               </label>
               <input
                 id={`pdf-page-${itemId}`}
+                autoFocus
                 inputMode="numeric"
-                className="input !h-11 !w-20 !py-0 text-center font-display"
+                enterKeyHint="go"
+                className="h-8 w-16 rounded-full border border-line-strong bg-canvas text-center text-fg outline-none focus:border-accent"
                 placeholder={arNumber.format(page)}
                 value={typed}
+                onBlur={() => !typed && setJumping(false)}
                 onChange={(e) => setTyped(e.target.value.replace(/[^\d٠-٩]/g, '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))}
               />
             </form>
-            <button type="button" onClick={() => go(page + 1)} disabled={page >= count} aria-label="الصفحة التالية" className={navButton}>
-              <ChevronLeft className="h-5 w-5" />
+          ) : (
+            <button type="button" onClick={() => setJumping(true)} aria-label="اذهب إلى صفحة" className={`${pill} px-4 hover:border-accent`}>
+              {arNumber.format(page)}
+              <span className="mx-1.5 text-muted">/</span>
+              <span className="text-muted">{arNumber.format(count)}</span>
             </button>
-          </div>
-        )}
-        {footer && <div className="mt-2.5 flex justify-center">{footer}</div>}
-      </footer>
+          )}
+          {footer && <div className="pointer-events-auto">{footer}</div>}
+        </div>
+      )}
     </div>
   );
 }

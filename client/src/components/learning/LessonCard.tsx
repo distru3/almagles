@@ -200,7 +200,7 @@ export default function LessonCard({
               <button
                 type="button"
                 disabled={busy}
-                className="btn-primary w-full max-w-sm"
+                className="btn-primary shadow-xl"
                 onClick={() => {
                   onToggle(item, true);
                   setReading(false);
@@ -210,7 +210,7 @@ export default function LessonCard({
                 {late ? 'أتممته تداركًا' : kind.done}
               </button>
             ) : item.done ? (
-              <p className="inline-flex items-center gap-1.5 font-display text-sm text-success">
+              <p className="inline-flex h-11 items-center gap-1.5 rounded-full border border-line bg-surface px-4 font-display text-sm text-success shadow-xl">
                 <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
                 أتممت هذا الدرس
               </p>
