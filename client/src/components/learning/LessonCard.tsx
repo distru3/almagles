@@ -1,14 +1,15 @@
-import { useEffect, useId, useState } from 'react';
-import { BookOpenText, Check, Clock, ExternalLink, NotebookPen, Undo2, Users } from 'lucide-react';
+import { useState } from 'react';
+import { BookOpenText, Check, Clock, ExternalLink, Undo2, Users } from 'lucide-react';
 import type { MyLearningItem } from '../../lib/types';
 import { KINDS, PART_CHOICES, arNumber, minutesLabel, pageProgress, partLabel } from '../../lib/learning';
 import { youtubeId } from '../../lib/links';
 import { isInternalPath, normalizeUrl } from '../../lib/url';
 import { gregorianLong, hijriShort } from '../../lib/dates';
-import { markDirty } from '../../lib/unsaved';
 import { LinkPreviewCard } from '../PostMedia';
 import { formatBytes } from '../../lib/video';
 import PdfReader from './PdfReader';
+import LessonNotes, { type NoteActions } from './LessonNotes';
+import { LessonSharedNotes } from './SharedNotes';
 
 /** «أتمّه ٣ من إخوانك» with Arabic number agreement. */
 function othersLabel(n: number): string {
@@ -16,91 +17,6 @@ function othersLabel(n: number): string {
   if (n === 2) return 'أتمّه أخوان';
   if (n >= 3 && n <= 10) return `أتمّه ${arNumber.format(n)} إخوة`;
   return `أتمّه ${arNumber.format(n)} أخًا`;
-}
-
-/**
- * «فائدتي»: what the member took from the lesson, in their own words. Saved
- * only on «حفظ» (or Ctrl+S via the page's unsaved guard).
- */
-function NoteEditor({ item, onSave }: { item: MyLearningItem; onSave: (note: string | null) => Promise<boolean> }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState(item.note ?? '');
-  const [busy, setBusy] = useState(false);
-  const uid = useId();
-  const dirty = open && text.trim() !== (item.note ?? '');
-
-  const save = async () => {
-    setBusy(true);
-    const ok = await onSave(text.trim() || null);
-    setBusy(false);
-    if (ok) setOpen(false);
-    return ok;
-  };
-
-  useEffect(() => {
-    markDirty(`learning-note-${item.id}`, dirty ? { save } : null);
-    return () => markDirty(`learning-note-${item.id}`, null);
-  });
-
-  if (!open) {
-    return item.note ? (
-      <button type="button" onClick={() => setOpen(true)} className="mt-3 block w-full rounded-xl border-s-2 border-accent bg-surface-2/60 px-3.5 py-2.5 text-start">
-        <span className="flex items-center gap-1.5 font-display text-xs text-accent">
-          <NotebookPen className="h-3.5 w-3.5" aria-hidden="true" />
-          فائدتي
-        </span>
-        <span className="mt-1 block whitespace-pre-line text-[15px] leading-7 text-fg">{item.note}</span>
-      </button>
-    ) : (
-      <button type="button" onClick={() => setOpen(true)} className="mt-2 inline-flex min-h-10 items-center gap-1.5 font-display text-sm text-accent hover:text-accent-strong">
-        <NotebookPen className="h-4 w-4" aria-hidden="true" />
-        اكتب فائدة خرجت بها
-      </button>
-    );
-  }
-  return (
-    <form
-      className="mt-3 rounded-xl border border-line bg-surface-2/50 p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
-      <label htmlFor={`note-${uid}`} className="label">
-        فائدتي — لا يراها غيرك
-      </label>
-      <textarea
-        id={`note-${uid}`}
-        className="input min-h-24 leading-7"
-        value={text}
-        maxLength={1000}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            void save();
-          }
-        }}
-        placeholder="جملة تحفظها، أو معنى استوقفك، أو عمل تعزم عليه…"
-        autoFocus
-      />
-      <div className="mt-2 flex gap-2">
-        <button type="submit" className="btn-primary !min-h-10 !px-5 !text-sm" disabled={busy}>
-          حفظ
-        </button>
-        <button
-          type="button"
-          className="btn-outline !min-h-10 !px-5 !text-sm"
-          onClick={() => {
-            setText(item.note ?? '');
-            setOpen(false);
-          }}
-        >
-          تراجع
-        </button>
-      </div>
-    </form>
-  );
 }
 
 /** What part of a lesson the member records: the page they stopped at, how much, or both. */
@@ -122,7 +38,7 @@ export default function LessonCard({
   busy,
   onToggle,
   onPart,
-  onNote,
+  notes,
   showDate = false,
 }: {
   item: MyLearningItem;
@@ -130,7 +46,8 @@ export default function LessonCard({
   busy: boolean;
   onToggle: (item: MyLearningItem, done: boolean) => void;
   onPart: (item: MyLearningItem, part: LessonPart) => Promise<boolean>;
-  onNote: (item: MyLearningItem, note: string | null) => Promise<boolean>;
+  /** «فوائدي» on this lesson: add, edit, delete. */
+  notes: NoteActions;
   showDate?: boolean;
 }) {
   const [reading, setReading] = useState(false);
@@ -384,7 +301,9 @@ export default function LessonCard({
           {partChips()}
         </div>
       )}
-      {item.done && <NoteEditor key={item.note ?? ''} item={item} onSave={(note) => onNote(item, note)} />}
+      {/* «فوائدي» once the member has finished or begun the lesson — part of one can teach too. */}
+      {(item.done || item.progress > 0) && <LessonNotes item={item} actions={notes} />}
+      <LessonSharedNotes itemId={item.id} count={item.sharedCount} />
     </article>
   );
 }

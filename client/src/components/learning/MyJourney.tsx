@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, CalendarClock, CalendarDays, Coffee, GraduationCap, History, LogOut, RotateCcw, Sparkles, Users, X } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import type { LearningJourney, MyLearningItem } from '../../lib/types';
+import type { LearningJourney, LearningNote, MyLearningItem } from '../../lib/types';
 import { gregorianLong, hijriDate, todayISO } from '../../lib/dates';
 import { FADAIL, LA_YAMALL, type Text } from '../../lib/fadail';
 import { ILM_TEXTS, KINDS, LEARN_MAKEUP_DAYS, arNumber, isRestDay, lessonsLabel, monthOf, monthRange, shiftMonth } from '../../lib/learning';
@@ -245,22 +245,55 @@ export default function MyJourney() {
     }
   };
 
-  const saveNote = async (item: MyLearningItem, note: string | null) => {
-    try {
-      await api(`/learning/items/${item.id}/note`, { method: 'PUT', body: { note } });
-      patch(item.id, { note });
-      return true;
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'تعذّر حفظ الفائدة');
-      return false;
-    }
+  /** «فوائدي»: changes a lesson's notes on the latest state, so quick saves don't undo each other. */
+  const patchNotes = (id: string, change: (notes: LearningNote[]) => LearningNote[]) =>
+    setData((d) => {
+      const item = d?.items.find((i) => i.id === id);
+      if (!d || !item) return d;
+      const notes = change(item.notes);
+      return {
+        ...d,
+        items: d.items.map((i) => (i === item ? { ...i, notes } : i)),
+        stats: { ...d.stats, notes: d.stats.notes + notes.length - item.notes.length },
+      };
+    });
+
+  const noteActions = (item: MyLearningItem) => {
+    const attempt = async (run: () => Promise<void>, failed: string) => {
+      setError(null);
+      try {
+        await run();
+        return true;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : failed);
+        return false;
+      }
+    };
+    const base = `/learning/items/${item.id}/notes`;
+    return {
+      onAdd: (text: string, shared: boolean) =>
+        attempt(async () => {
+          const { note } = await api<{ note: LearningNote }>(base, { method: 'POST', body: { text, shared } });
+          patchNotes(item.id, (ns) => [...ns, note]);
+        }, 'تعذّر حفظ الفائدة'),
+      onEdit: (noteId: string, change: { text?: string; shared?: boolean }) =>
+        attempt(async () => {
+          const { note } = await api<{ note: LearningNote }>(`${base}/${noteId}`, { method: 'PUT', body: change });
+          patchNotes(item.id, (ns) => ns.map((n) => (n.id === noteId ? note : n)));
+        }, 'تعذّر حفظ الفائدة'),
+      onDelete: (noteId: string) =>
+        attempt(async () => {
+          await api(`${base}/${noteId}`, { method: 'DELETE' });
+          patchNotes(item.id, (ns) => ns.filter((n) => n.id !== noteId));
+        }, 'تعذّر حذف الفائدة'),
+    };
   };
 
   if (!data) return error ? <p className="text-sm text-danger">{error}</p> : <Spinner full />;
   if (!data.enrollment?.active) return <Invite data={data} onChoose={(a) => void choose(a)} busy={busy} />;
 
   const card = (i: MyLearningItem, showDate = false) => (
-    <LessonCard key={i.id} item={i} today={today} busy={pending.has(i.id)} onToggle={(it, d) => void toggle(it, d)} onPart={part} onNote={saveNote} showDate={showDate} />
+    <LessonCard key={i.id} item={i} today={today} busy={pending.has(i.id)} onToggle={(it, d) => void toggle(it, d)} onPart={part} notes={noteActions(i)} showDate={showDate} />
   );
   const todays = byDay.get(today) ?? [];
   const catchUp = data.items.filter((i) => i.date < today && !i.done && i.worth !== null);

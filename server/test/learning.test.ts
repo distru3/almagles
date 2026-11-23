@@ -3,6 +3,7 @@ import { client, createUser, loginAs, prisma, resetDb } from './helpers.js';
 import { LEARN_MAKEUP_DAYS, isRestDay, learningPoints, learningStreak, pageProgress, progressPoints } from '../src/lib/learning.js';
 import { shiftDate } from '../src/lib/taskSchedule.js';
 import { MAX_LEARNING_FILE_BYTES, learningFileStore } from '../src/lib/learningFiles.js';
+import { MAX_NOTES_PER_LESSON } from '../src/routes/learning.js';
 
 beforeEach(resetDb);
 
@@ -123,7 +124,7 @@ describe('finishing lessons', () => {
     expect(res.status).toBe(400);
   });
 
-  it('keeps «فائدتي» for the member alone', async () => {
+  it('keeps «فوائدي» for the member alone', async () => {
     const a = await joined('a@test.local');
     const b = await joined('b@test.local');
     const item = await lesson(today);
@@ -131,13 +132,62 @@ describe('finishing lessons', () => {
     await b.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
     const mine = (await a.get(`/api/learning?date=${today}`)).body.items[0];
     const theirs = (await b.get(`/api/learning?date=${today}`)).body.items[0];
-    expect(mine.note).toBe('الإخلاص أول العمل');
-    expect(theirs.note).toBeNull();
+    expect(mine.notes.map((n: { text: string }) => n.text)).toEqual(['الإخلاص أول العمل']);
+    expect(theirs.notes).toEqual([]);
     expect(theirs.doneCount).toBe(2);
     const companions = await b.get(`/api/learning/companions?date=${today}`);
     expect(JSON.stringify(companions.body)).not.toContain('الإخلاص');
 
-    expect((await a.put(`/api/learning/items/${item.id}/note`, { note: '' })).body.note).toBeNull();
+    // Another member can neither change nor delete it.
+    const id = mine.notes[0].id;
+    expect((await b.put(`/api/learning/items/${item.id}/notes/${id}`, { text: 'غيره' })).status).toBe(404);
+    expect((await b.del(`/api/learning/items/${item.id}/notes/${id}`)).status).toBe(404);
+    expect((await prisma.learningNote.findUnique({ where: { id } }))!.text).toBe('الإخلاص أول العمل');
+  });
+
+  it('holds several «فوائد» on one lesson, each edited or removed on its own', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const first = await c.post(`/api/learning/items/${item.id}/notes`, { text: ' العلم قبل القول والعمل ' });
+    expect(first.status).toBe(201);
+    expect(first.body.note.text).toBe('العلم قبل القول والعمل');
+    const second = await c.post(`/api/learning/items/${item.id}/notes`, { text: 'أعزم على مراجعة الدرس غدًا' });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: '   ' })).status).toBe(400);
+
+    const edited = await c.put(`/api/learning/items/${item.id}/notes/${second.body.note.id}`, { text: 'راجعه بعد الفجر' });
+    expect(edited.body.note.text).toBe('راجعه بعد الفجر');
+    expect((await c.del(`/api/learning/items/${item.id}/notes/${first.body.note.id}`)).status).toBe(200);
+
+    const journey = (await c.get(`/api/learning?date=${today}`)).body;
+    expect(journey.items[0].notes.map((n: { text: string }) => n.text)).toEqual(['راجعه بعد الفجر']);
+    expect(journey.stats.notes).toBe(1);
+  });
+
+  it('takes «فوائد» on a lesson only begun, but not on one not started', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    const before = await c.post(`/api/learning/items/${item.id}/notes`, { text: 'فائدة' });
+    expect(before.status).toBe(404);
+    await c.put(`/api/learning/items/${item.id}/progress`, { date: today, progress: 50 });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: 'فائدة من نصفه' })).status).toBe(201);
+  });
+
+  it('stops at the most «فوائد» a lesson may hold', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    const completion = await prisma.learningCompletion.findFirstOrThrow();
+    await prisma.learningNote.createMany({ data: Array.from({ length: MAX_NOTES_PER_LESSON }, (_, i) => ({ completionId: completion.id, text: `فائدة ${i}` })) });
+    expect((await c.post(`/api/learning/items/${item.id}/notes`, { text: 'واحدة أخرى' })).status).toBe(400);
+  });
+
+  it('unticking a lesson removes its «فوائد» with it', async () => {
+    const c = await joined();
+    const item = await lesson(today);
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: true, note: 'فائدة' });
+    await c.put(`/api/learning/items/${item.id}/done`, { date: today, done: false });
+    expect(await prisma.learningNote.count()).toBe(0);
   });
 
   it('unticking takes the lesson and its points back', async () => {
@@ -471,5 +521,130 @@ describe('part of a lesson, and «طلب العلم» ticked by the journey', ()
     expect(bad.status).toBe(400);
     const good = await m.post('/api/learning/items', { date: today, kind: 'reading', title: 'درس', startPage: 10, endPage: 20 });
     expect(good.body.item).toMatchObject({ startPage: 10, endPage: 20 });
+  });
+});
+
+describe('«فوائد الإخوة»', () => {
+  async function sharedNote(c: Awaited<ReturnType<typeof joined>>, itemId: string, text: string, shared = true) {
+    await c.put(`/api/learning/items/${itemId}/done`, { date: today, done: true });
+    return (await c.post(`/api/learning/items/${itemId}/notes`, { text, shared })).body.note;
+  }
+
+  it('keeps a note private unless the member shares it', async () => {
+    const a = await joined('a@test.local');
+    const b = await joined('b@test.local');
+    const item = await lesson(today);
+    const secret = await sharedNote(a, item.id, 'بيني وبين نفسي', false);
+    expect(secret.shared).toBe(false);
+    const open = (await a.post(`/api/learning/items/${item.id}/notes`, { text: 'العلم رحم بين أهله', shared: true })).body.note;
+
+    const feed = (await b.get('/api/learning/notes')).body.notes;
+    expect(feed.map((n: { text: string }) => n.text)).toEqual(['العلم رحم بين أهله']);
+    expect(feed[0]).toMatchObject({ id: open.id, author: { name: expect.any(String) }, lesson: { id: item.id }, replyCount: 0 });
+    expect((await b.get(`/api/learning/notes/${secret.id}`)).status).toBe(404);
+    expect((await b.get(`/api/learning?date=${today}`)).body.items[0].sharedCount).toBe(1);
+    expect((await a.get(`/api/learning?date=${today}`)).body.items[0].sharedCount).toBe(0);
+
+    // Sharing an older note later, and taking it back.
+    await a.put(`/api/learning/items/${item.id}/notes/${secret.id}`, { shared: true });
+    expect((await b.get(`/api/learning/notes?itemId=${item.id}`)).body.notes).toHaveLength(2);
+    await a.put(`/api/learning/items/${item.id}/notes/${secret.id}`, { shared: false });
+    expect((await b.get(`/api/learning/notes?itemId=${item.id}`)).body.notes).toHaveLength(1);
+  });
+
+  it('lets the brothers discuss a shared note, and tells its writer and those already in it', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    const b = await joined('b@test.local', 'بلال');
+    const c = await joined('c@test.local', 'خالد');
+    const item = await lesson(today);
+    const note = await sharedNote(a, item.id, 'الصبر على الطلب');
+
+    expect((await b.post(`/api/learning/notes/${note.id}/replies`, { text: 'جزاك الله خيرًا' })).status).toBe(201);
+    expect((await c.post(`/api/learning/notes/${note.id}/replies`, { text: 'وفيها قول الشافعي' })).status).toBe(201);
+    expect((await c.post(`/api/learning/notes/${note.id}/replies`, { text: '  ' })).status).toBe(400);
+
+    const thread = (await c.get(`/api/learning/notes/${note.id}`)).body;
+    expect(thread.replies.map((r: { text: string }) => r.text)).toEqual(['جزاك الله خيرًا', 'وفيها قول الشافعي']);
+    expect(thread.note.replyCount).toBe(2);
+
+    const notified = await prisma.notification.findMany({ where: { type: 'learning_note_reply' }, include: { user: { select: { name: true } } } });
+    expect(notified.map((n) => n.user.name).sort()).toEqual(['أحمد', 'أحمد', 'بلال'].sort());
+    const latest = (await a.get('/api/notifications')).body.notifications[0];
+    expect(latest).toMatchObject({ type: 'learning_note_reply', learningNote: { id: note.id, mine: true, lessonTitle: item.title }, message: 'وفيها قول الشافعي' });
+    expect((await b.get('/api/notifications')).body.notifications[0].learningNote.mine).toBe(false);
+  });
+
+  it('takes no replies on a private note', async () => {
+    const a = await joined('a@test.local');
+    const b = await joined('b@test.local');
+    const item = await lesson(today);
+    const note = await sharedNote(a, item.id, 'خاصة', false);
+    expect((await b.post(`/api/learning/notes/${note.id}/replies`, { text: 'ردّ' })).status).toBe(404);
+  });
+
+  it('lets a reply go by its writer or a moderator, and a moderator hide a note', async () => {
+    const a = await joined('a@test.local');
+    const b = await joined('b@test.local');
+    await createUser({ email: 'm@test.local', canManageSchedule: true });
+    const m = await loginAs('m@test.local');
+    const item = await lesson(today);
+    const note = await sharedNote(a, item.id, 'فائدة');
+    const r1 = (await b.post(`/api/learning/notes/${note.id}/replies`, { text: 'أول' })).body.reply;
+    const r2 = (await b.post(`/api/learning/notes/${note.id}/replies`, { text: 'ثان' })).body.reply;
+
+    expect((await a.del(`/api/learning/notes/${note.id}/replies/${r1.id}`)).status).toBe(404);
+    expect((await b.del(`/api/learning/notes/${note.id}/replies/${r1.id}`)).status).toBe(200);
+    expect((await m.del(`/api/learning/notes/${note.id}/replies/${r2.id}`)).status).toBe(200);
+
+    expect((await b.post(`/api/learning/notes/${note.id}/unshare`)).status).toBe(403);
+    expect((await m.post(`/api/learning/notes/${note.id}/unshare`)).status).toBe(200);
+    expect((await b.get('/api/learning/notes')).body.notes).toHaveLength(0);
+    // Still the writer's own.
+    expect((await a.get(`/api/learning?date=${today}`)).body.items[0].notes[0]).toMatchObject({ text: 'فائدة', shared: false });
+  });
+});
+
+describe('«تذكير الإخوة»', () => {
+  async function manager() {
+    await createUser({ email: 'm@test.local', name: 'المشرف', canManageSchedule: true });
+    return loginAs('m@test.local');
+  }
+
+  it('shows each learner where they stand today', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    await joined('b@test.local', 'بلال');
+    const c = await joined('c@test.local', 'خالد');
+    const m = await manager();
+    const item = await lesson(today);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+    await c.put(`/api/learning/items/${item.id}/progress`, { date: today, progress: 50 });
+    const res = await m.get(`/api/learning/manage/learners?date=${today}`);
+    const byName = Object.fromEntries(res.body.learners.map((l: { name: string; state: string }) => [l.name, l.state]));
+    expect(byName).toEqual({ أحمد: 'done', بلال: 'not_started', خالد: 'partial' });
+    expect(res.body.todayCount).toBe(1);
+  });
+
+  it('reminds those who have not finished the lesson of the day, once a day, with the supervisor word', async () => {
+    const a = await joined('a@test.local', 'أحمد');
+    await joined('b@test.local', 'بلال');
+    const m = await manager();
+    const item = await lesson(today);
+    await a.put(`/api/learning/items/${item.id}/done`, { date: today, done: true });
+
+    const res = await m.post('/api/learning/manage/remind', { date: today, message: 'لا تفوّتوا درس اليوم' });
+    expect(res.body).toEqual({ sent: 1, skipped: 0 });
+    const sent = await prisma.notification.findMany({ where: { type: 'learning_reminder' }, include: { user: { select: { name: true } } } });
+    expect(sent.map((n) => [n.user.name, n.message])).toEqual([['بلال', 'لا تفوّتوا درس اليوم']]);
+
+    expect((await m.post('/api/learning/manage/remind', { date: today })).body).toEqual({ sent: 0, skipped: 1 });
+    // One by one too: the brother who finished can still be reminded, the reminded one not again.
+    const ids = (await m.get(`/api/learning/manage/learners?date=${today}`)).body.learners.map((l: { id: string }) => l.id);
+    expect((await m.post('/api/learning/manage/remind', { date: today, userIds: ids })).body).toEqual({ sent: 1, skipped: 1 });
+  });
+
+  it('has nothing to remind of on a day without a lesson', async () => {
+    await joined('a@test.local');
+    const m = await manager();
+    expect((await m.post('/api/learning/manage/remind', { date: today })).status).toBe(400);
   });
 });

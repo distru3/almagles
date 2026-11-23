@@ -165,7 +165,9 @@ export type NotificationType =
   | 'task_nudge'
   | 'adhkar_morning'
   | 'adhkar_evening'
-  | 'adhkar_sleep';
+  | 'adhkar_sleep'
+  | 'learning_reminder'
+  | 'learning_note_reply';
 
 /** «أذكار الصباح» / «أذكار المساء»: minutes after Fajr / Asr where the member is, or a fixed clock time. */
 export interface AdhkarPrayerWard {
@@ -200,6 +202,10 @@ export interface NotificationItem {
   scheduleItem: { id: string; date: string; title: string; section: string | null; timeLabel: string; reminderMessage: string | null } | null;
   /** schedule_change: the days whose sessions changed. */
   scheduleDates: string[];
+  /** learning_note_reply: the فائدة discussed, and whether the reader wrote it. */
+  learningNote: { id: string; mine: boolean; lessonTitle: string } | null;
+  /** learning_reminder: the supervisor's word; learning_note_reply: the start of the reply. */
+  message: string | null;
 }
 
 export interface NotificationsResponse {
@@ -393,6 +399,46 @@ export interface LearningItem {
   doneCount: number;
 }
 
+/** One «فائدة» a member wrote on a lesson, as its writer sees it. */
+export interface LearningNote {
+  id: string;
+  text: string;
+  /** «شاركها مع إخوانك»: shown in «فوائد الإخوة» and open to replies. */
+  shared: boolean;
+  replyCount: number;
+  createdAt: string;
+}
+
+type Person = { id: string; name: string; avatarUrl: string | null };
+
+/** A فائدة a brother shared, as everyone sees it in «فوائد الإخوة». */
+export interface SharedNote {
+  id: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+  author: Person;
+  lesson: { id: string; title: string; portion: string | null; date: string; kind: LearningKind };
+  replyCount: number;
+}
+
+export interface NoteReply {
+  id: string;
+  text: string;
+  createdAt: string;
+  author: Person;
+}
+
+/** «تذكير الإخوة»: where a member on the journey stands today. */
+export interface Learner extends Person {
+  state: 'done' | 'partial' | 'not_started' | 'no_lesson';
+  /** Lessons of the past week they can still catch up. */
+  behind: number;
+  lastActiveAt: string | null;
+  /** Reminded within the day already (by any supervisor). */
+  remindedAt: string | null;
+}
+
 /** A lesson as one member sees it. */
 export interface MyLearningItem extends LearningItem {
   /** Finished («أتممت»). */
@@ -404,8 +450,10 @@ export interface MyLearningItem extends LearningItem {
   madeUp: boolean;
   /** Points earned for it. */
   earned: number;
-  /** «فائدتي» — theirs alone. */
-  note: string | null;
+  /** «فوائدي», oldest first. */
+  notes: LearningNote[];
+  /** «فوائد إخوانك»: how many the brothers shared on this lesson. */
+  sharedCount: number;
   /** What finishing it now would earn; null when it can't be ticked today. */
   worth: number | null;
 }

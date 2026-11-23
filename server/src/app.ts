@@ -23,6 +23,7 @@ import pushRoutes from './routes/push.js';
 import adhkarRoutes from './routes/adhkar.js';
 import quranRoutes from './routes/quran.js';
 import learningRoutes from './routes/learning.js';
+import learningNotesRoutes from './routes/learningNotes.js';
 import { metaForPath, renderShell } from './lib/shareMeta.js';
 import { LOCAL_UPLOADS_DIR } from './lib/postImages.js';
 
@@ -115,6 +116,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/adhkar', adhkarRoutes);
 app.use('/api/quran', quranRoutes);
+app.use('/api/learning/notes', learningNotesRoutes);
 app.use('/api/learning', learningRoutes);
 
 app.use('/api', notFoundApi);

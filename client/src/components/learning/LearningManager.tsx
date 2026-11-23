@@ -7,6 +7,7 @@ import { KINDS, KIND_ORDER, WEEK_HEAD, arNumber, dayNumber, hijriMonthLabel, isR
 import { confirmDiscard, markDirty, saveAll, useUnsavedGuard } from '../../lib/unsaved';
 import { formatBytes } from '../../lib/video';
 import Spinner from '../Spinner';
+import LearnerReminders from './LearnerReminders';
 
 const POINT_PRESETS = [5, 10, 15, 20, 30];
 /** Mirrors MAX_BULK_ITEMS in server/src/routes/learning.ts. */
@@ -644,6 +645,8 @@ export default function LearningManager() {
           </button>
         )}
       </div>
+
+      <LearnerReminders today={today} />
 
       {notice && (
         <p role="status" className="rounded-xl bg-success-soft px-4 py-2.5 text-sm text-success">
