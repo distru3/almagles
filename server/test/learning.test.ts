@@ -657,6 +657,28 @@ describe('«فوائد الإخوة»', () => {
     expect((await b.get('/api/learning/notes/mine')).body.notes).toHaveLength(0);
   });
 
+  it('offers «فوائدي» the lessons the member began, to write a فائدة on any of them', async () => {
+    const a = await joined('a@test.local');
+    const b = await joined('b@test.local');
+    const older = await lesson(back(2), { title: 'الأول' });
+    const newer = await lesson(today, { title: 'الثاني', portion: 'ص ١٠' });
+    await lesson(today, { title: 'لم يبدأ' });
+    await a.put(`/api/learning/items/${older.id}/done`, { date: today, done: true });
+    await a.put(`/api/learning/items/${newer.id}/progress`, { date: today, progress: 50 });
+    await a.post(`/api/learning/items/${older.id}/notes`, { text: 'قديمة' });
+
+    const { lessons } = (await a.get('/api/learning/notes/lessons')).body;
+    expect(lessons).toEqual([
+      { id: newer.id, title: 'الثاني', portion: 'ص ١٠', kind: 'reading', date: today, progress: 50, noteCount: 0 },
+      { id: older.id, title: 'الأول', portion: null, kind: 'reading', date: older.date, progress: 100, noteCount: 1 },
+    ]);
+    expect((await b.get('/api/learning/notes/lessons')).body.lessons).toEqual([]);
+
+    // Written from «فوائدي» on the lesson picked, and found there at once.
+    expect((await a.post(`/api/learning/items/${newer.id}/notes`, { text: 'من فوائدي', shared: false })).status).toBe(201);
+    expect((await a.get('/api/learning/notes/mine')).body.notes[0]).toMatchObject({ text: 'من فوائدي', lesson: { id: newer.id, title: 'الثاني' } });
+  });
+
   it('lets only its writer edit or delete a فائدة, from anywhere', async () => {
     const a = await joined('a@test.local');
     const b = await joined('b@test.local');
