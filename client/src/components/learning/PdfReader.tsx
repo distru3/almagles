@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Download, Maximize2, Minimize2, Minus, Plus, X } from 'lucide-react';
+import { BookCheck, Download, Maximize2, Minimize2, Minus, Plus, X } from 'lucide-react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { arNumber } from '../../lib/learning';
 import Spinner from '../Spinner';
@@ -118,6 +118,10 @@ function PdfPage({
  * It opens where the member stopped on this device, else where they stopped
  * on another (`lastPage`, kept on the server), else at the lesson's page, and
  * hands back the page it was closed on so the lesson can offer «سجّل ما قرأت».
+ *
+ * «بلغت آخر الدرس»: once the member scrolls to the foot of the lesson's last
+ * page (`endPage`), it asks — once per opening — whether they finished it,
+ * with `endPrompt` (the lesson's «نعم، أتممته») beside «أكمل القراءة».
  */
 export default function PdfReader({
   itemId,
@@ -125,16 +129,22 @@ export default function PdfReader({
   title,
   startPage,
   lastPage = null,
+  endPage = null,
   onClose,
   footer,
+  endPrompt,
 }: {
   itemId: string;
   url: string;
   title: string;
   startPage: number | null;
   lastPage?: number | null;
+  /** The lesson's last page: reaching its foot asks whether the lesson is done. */
+  endPage?: number | null;
   onClose: (page: number) => void;
   footer?: ReactNode;
+  /** The answer that finishes the lesson, shown when the end is reached. */
+  endPrompt?: ReactNode;
 }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState(false);
@@ -152,6 +162,12 @@ export default function PdfReader({
   const pageRef = useRef(page);
   pageRef.current = page;
   const closeRef = useRef<HTMLButtonElement>(null);
+  // Asked at most once per opening, and not when the book opens already past the lesson's end.
+  const [askEnd, setAskEnd] = useState(false);
+  const askedRef = useRef(!endPage || !endPrompt || page > endPage);
+  const endRef = useRef(endPage);
+  endRef.current = endPage;
+  const keepReadingRef = useRef<HTMLButtonElement>(null);
 
   // Keep the page behind still while the book is open.
   useEffect(() => {
@@ -258,6 +274,11 @@ export default function PdfReader({
           else hi = mid - 1;
         }
         setPage(lo + 1);
+        const endSlot = endRef.current ? slots.current[endRef.current - 1] : null;
+        if (!askedRef.current && endSlot && endSlot.offsetTop + endSlot.offsetHeight <= top + el.clientHeight + GAP) {
+          askedRef.current = true;
+          setAskEnd(true);
+        }
         const atEnd = top + el.clientHeight >= el.scrollHeight - 48;
         if (atEnd || top < last - 6) setBarHidden(false);
         else if (top > last + 6) setBarHidden(true);
@@ -307,6 +328,7 @@ export default function PdfReader({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (askEnd) return e.key === 'Escape' && setAskEnd(false);
       if (e.key === 'Escape') return full ? leaveFull() : onClose(page);
       if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
       if (e.key === 'ArrowLeft') go(page + 1);
@@ -314,7 +336,11 @@ export default function PdfReader({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [full, go, leaveFull, onClose, page]);
+  }, [askEnd, full, go, leaveFull, onClose, page]);
+
+  useEffect(() => {
+    if (askEnd) keepReadingRef.current?.focus();
+  }, [askEnd]);
 
   const zoomBy = (step: number) => setZoom((z) => ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, ZOOMS.indexOf(z) + step))]);
 
@@ -438,6 +464,36 @@ export default function PdfReader({
             </button>
           )}
           {footer && <div className="pointer-events-auto">{footer}</div>}
+        </div>
+      )}
+
+      {askEnd && endPage && (
+        <div
+          className="sheet-backdrop absolute inset-0 z-10 flex items-end justify-center bg-black/55 sm:items-center sm:p-6"
+          onClick={(e) => e.target === e.currentTarget && setAskEnd(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`pdf-end-${itemId}`}
+            className="sheet-panel w-full rounded-t-2xl border border-line bg-canvas px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 text-center shadow-2xl sm:max-w-sm sm:rounded-2xl sm:pb-5"
+          >
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden="true">
+              <BookCheck className="h-6 w-6" />
+            </span>
+            <p id={`pdf-end-${itemId}`} className="mt-3 font-display text-lg text-fg">
+              بلغت آخر الدرس
+            </p>
+            <p className="mt-1 text-[15px] leading-7 text-fg-2">
+              هذه صفحة {arNumber.format(endPage)}، آخر صفحات الدرس. هل أتممت قراءته؟
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              {endPrompt}
+              <button ref={keepReadingRef} type="button" onClick={() => setAskEnd(false)} className="btn-outline">
+                لا، أكمل القراءة
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
