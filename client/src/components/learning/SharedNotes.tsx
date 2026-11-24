@@ -2,7 +2,9 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { EyeOff, Heart, Lock, MessagesSquare, PenLine, Send, Trash2, Users } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import type { NoteReply, SharedNote } from '../../lib/types';
+import type { Mention, NoteReply, SharedNote } from '../../lib/types';
+import { mentionIdsIn } from '../../lib/mentions';
+import MentionTextarea from '../MentionTextarea';
 import { dateTime, dateTimeTitle, hijriShort } from '../../lib/dates';
 import { KINDS, arNumber } from '../../lib/learning';
 import { markDirty } from '../../lib/unsaved';
@@ -53,8 +55,17 @@ function Byline({ person, at, edited = false }: { person: { id: string; name: st
  * One's own reply, set right in place: «حفظ» / «تراجع», Ctrl+Enter, or Ctrl+S
  * through the unsaved guard.
  */
-function ReplyEditor({ reply, onSave, onCancel }: { reply: NoteReply; onSave: (text: string) => Promise<boolean>; onCancel: () => void }) {
+function ReplyEditor({
+  reply,
+  onSave,
+  onCancel,
+}: {
+  reply: NoteReply;
+  onSave: (text: string, mentions: string[]) => Promise<boolean>;
+  onCancel: () => void;
+}) {
   const [text, setText] = useState(reply.text);
+  const [mentions, setMentions] = useState<Mention[]>(reply.mentions);
   const [busy, setBusy] = useState(false);
   const uid = useId();
   const dirty = text.trim() !== '' && text.trim() !== reply.text;
@@ -65,7 +76,7 @@ function ReplyEditor({ reply, onSave, onCancel }: { reply: NoteReply; onSave: (t
       return true;
     }
     setBusy(true);
-    const ok = await onSave(text.trim());
+    const ok = await onSave(text.trim(), mentionIdsIn(text.trim(), mentions));
     setBusy(false);
     return ok;
   };
@@ -87,13 +98,14 @@ function ReplyEditor({ reply, onSave, onCancel }: { reply: NoteReply; onSave: (t
       <label htmlFor={`reply-edit-${uid}`} className="sr-only">
         عدّل ردّك
       </label>
-      <textarea
+      <MentionTextarea
         id={`reply-edit-${uid}`}
         className="input min-h-20 leading-7"
         value={text}
         maxLength={1000}
         autoFocus
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
+        onMention={(m) => setMentions((ms) => (ms.some((x) => x.id === m.id) ? ms : [...ms, m]))}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
@@ -122,6 +134,8 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
   const { user, moderator } = useModerator();
   const [replies, setReplies] = useState<NoteReply[] | null>(null);
   const [text, setText] = useState('');
+  /** «@الاسم»: the brothers picked while writing. */
+  const [mentions, setMentions] = useState<Mention[]>([]);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -143,11 +157,13 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
     setBusy(true);
     setError(null);
     try {
-      const { reply } = await api<{ reply: NoteReply }>(`/learning/notes/${noteId}/replies`, { method: 'POST', body: { text: text.trim() } });
+      const body = { text: text.trim(), mentions: mentionIdsIn(text.trim(), mentions) };
+      const { reply } = await api<{ reply: NoteReply }>(`/learning/notes/${noteId}/replies`, { method: 'POST', body });
       const next = [...(replies ?? []), reply];
       setReplies(next);
       onCount?.(next.length);
       setText('');
+      setMentions([]);
       return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر إرسال الردّ');
@@ -163,10 +179,10 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
     return () => markDirty(key, null);
   });
 
-  const edit = async (id: string, next: string) => {
+  const edit = async (id: string, next: string, tagged: string[]) => {
     setError(null);
     try {
-      const { reply } = await api<{ reply: NoteReply }>(`/learning/notes/${noteId}/replies/${id}`, { method: 'PUT', body: { text: next } });
+      const { reply } = await api<{ reply: NoteReply }>(`/learning/notes/${noteId}/replies/${id}`, { method: 'PUT', body: { text: next, mentions: tagged } });
       setReplies((rs) => rs?.map((r) => (r.id === id ? reply : r)) ?? null);
       setEditing(null);
       return true;
@@ -233,10 +249,10 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
                   ))}
               </div>
               {editing === r.id ? (
-                <ReplyEditor reply={r} onSave={(t) => edit(r.id, t)} onCancel={() => setEditing(null)} />
+                <ReplyEditor reply={r} onSave={(t, tagged) => edit(r.id, t, tagged)} onCancel={() => setEditing(null)} />
               ) : (
                 <p className="mt-1 whitespace-pre-line text-[15px] leading-8 text-fg-2">
-                  <RichText text={r.text} ugc />
+                  <RichText text={r.text} ugc mentions={r.mentions} />
                 </p>
               )}
             </li>
@@ -258,13 +274,15 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
         <label htmlFor={`reply-${uid}`} className="sr-only">
           ردّك
         </label>
-        <textarea
+        <MentionTextarea
           id={`reply-${uid}`}
-          className="input min-h-11 flex-1 leading-7"
+          className="input min-h-11 leading-7"
+          wrapperClassName="min-w-0 flex-1"
           rows={1}
           value={text}
           maxLength={1000}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
+          onMention={(m) => setMentions((ms) => (ms.some((x) => x.id === m.id) ? ms : [...ms, m]))}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
               e.preventDefault();
