@@ -406,26 +406,39 @@ export interface LearningNote {
   /** «شاركها مع إخوانك»: shown in «فوائد الإخوة» and open to replies. */
   shared: boolean;
   replyCount: number;
+  /** «أعجبني» from the brothers, while it's shared. */
+  likeCount: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 type Person = { id: string; name: string; avatarUrl: string | null };
 
-/** A فائدة a brother shared, as everyone sees it in «فوائد الإخوة». */
+/**
+ * A فائدة with its writer and lesson: as the brothers see a shared one in
+ * «فوائد الإخوة», and as its writer sees any of theirs in «فوائدي».
+ */
 export interface SharedNote {
   id: string;
   text: string;
+  /** Always true in «فوائد الإخوة»; in «فوائدي» it may be the writer's alone. */
+  shared: boolean;
   createdAt: string;
   updatedAt: string;
   author: Person;
-  lesson: { id: string; title: string; portion: string | null; date: string; kind: LearningKind };
+  /** As the lesson was; `id` is null once a manager deleted it. */
+  lesson: { id: string | null; title: string; portion: string | null; date: string; kind: LearningKind };
   replyCount: number;
+  likeCount: number;
+  /** This reader said «أعجبني». */
+  liked: boolean;
 }
 
 export interface NoteReply {
   id: string;
   text: string;
   createdAt: string;
+  updatedAt: string;
   author: Person;
 }
 

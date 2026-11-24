@@ -780,7 +780,7 @@ export default function LearningManager() {
                       {confirming === i.id && (
                         <div className="mt-3 rounded-xl border border-danger/40 bg-danger-soft px-3.5 py-2.5 text-sm">
                           <p className="text-danger">
-                            يُحذف الدرس{i.doneCount ? ` ومعه علامات ${arNumber.format(i.doneCount)} من الإخوة وفوائدهم عليه` : ''}. هل أنت متأكد؟
+                            يُحذف الدرس{i.doneCount ? ` ومعه علامات ${arNumber.format(i.doneCount)} من الإخوة عليه، وتبقى فوائدهم لهم` : ''}. هل أنت متأكد؟
                           </p>
                           <div className="mt-2 flex gap-2">
                             <button type="button" className="btn-danger !min-h-10 !text-sm" onClick={() => void remove(i.id)}>

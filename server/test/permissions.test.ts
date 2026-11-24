@@ -111,6 +111,13 @@ describe('schedule editing', () => {
     expect((await (await loginAs('ws@test.local')).get(`/api/learning/manage/learners?date=${date}`)).status).toBe(200);
   });
 
+  it('«فوائدي» and likes need a signed-in member', async () => {
+    const anon = await client();
+    expect((await anon.get('/api/learning/notes/mine')).status).toBe(401);
+    expect((await anon.put('/api/learning/notes/x/like', { liked: true })).status).toBe(401);
+    expect((await anon.put('/api/learning/notes/x', { text: 'x' })).status).toBe(401);
+  });
+
   it('anyone can read the schedule', async () => {
     await prisma.scheduleItem.create({ data: { date: '2026-10-17', weekdayKey: 'sat', timeLabel: 'فجر', title: 'درس' } });
     const res = await (await client()).get('/api/schedule');

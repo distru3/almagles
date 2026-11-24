@@ -61,9 +61,9 @@ const ITEM_SELECT = {
 } as const;
 const ORDER = [{ date: 'asc' as const }, { order: 'asc' as const }, { createdAt: 'asc' as const }];
 /** A «فائدة» as its writer sees it, oldest first. */
-const NOTE_SELECT = { id: true, text: true, shared: true, createdAt: true, _count: { select: { replies: true } } } as const;
-type NoteRow = { id: string; text: string; shared: boolean; createdAt: Date; _count: { replies: number } };
-const noteOut = ({ _count, ...n }: NoteRow) => ({ ...n, replyCount: _count.replies });
+const NOTE_SELECT = { id: true, itemId: true, text: true, shared: true, createdAt: true, updatedAt: true, _count: { select: { replies: true, likes: true } } } as const;
+type NoteRow = { id: string; itemId: string | null; text: string; shared: boolean; createdAt: Date; updatedAt: Date; _count: { replies: number; likes: number } };
+const noteOut = ({ _count, itemId: _item, ...n }: NoteRow) => ({ ...n, replyCount: _count.replies, likeCount: _count.likes });
 const NOTE_ORDER = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
 
 const daysBetween = (a: string, b: string) => Math.round((parseDate(b)!.getTime() - parseDate(a)!.getTime()) / DAY_MS);
@@ -97,23 +97,32 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
       prisma.learningItem.findMany({ select: { id: true, date: true } }),
       prisma.learningCompletion.findMany({
         where: { userId },
-        select: { itemId: true, day: true, points: true, madeUp: true, progress: true, page: true, notes: { orderBy: NOTE_ORDER, select: NOTE_SELECT } },
+        select: { itemId: true, day: true, points: true, madeUp: true, progress: true, page: true },
       }),
       prisma.taskExcuse.findMany({ where: { userId }, select: { day: true } }),
       prisma.learningEnrollment.count({ where: { active: true } }),
     ]);
+    // «فوائدي» are the member's own, kept whether or not the lesson is still ticked.
+    const [myNotes, noteTotal] = await Promise.all([
+      items.length
+        ? prisma.learningNote.findMany({ where: { userId, itemId: { in: items.map((i) => i.id) } }, orderBy: NOTE_ORDER, select: NOTE_SELECT })
+        : [],
+      prisma.learningNote.count({ where: { userId } }),
+    ]);
+    const notesOf = new Map<string, NoteRow[]>();
+    for (const n of myNotes) notesOf.set(n.itemId!, [...(notesOf.get(n.itemId!) ?? []), n]);
     const counts = items.length
       ? await prisma.learningCompletion.groupBy({ by: ['itemId'], where: { itemId: { in: items.map((i) => i.id) }, progress: 100 }, _count: { _all: true } })
       : [];
     const countOf = new Map(counts.map((c) => [c.itemId, c._count._all]));
     const shared = items.length
       ? await prisma.learningNote.findMany({
-          where: { shared: true, completion: { itemId: { in: items.map((i) => i.id) }, userId: { not: userId } } },
-          select: { completion: { select: { itemId: true } } },
+          where: { shared: true, itemId: { in: items.map((i) => i.id) }, userId: { not: userId } },
+          select: { itemId: true },
         })
       : [];
     const sharedOf = new Map<string, number>();
-    for (const n of shared) sharedOf.set(n.completion.itemId, (sharedOf.get(n.completion.itemId) ?? 0) + 1);
+    for (const n of shared) sharedOf.set(n.itemId!, (sharedOf.get(n.itemId!) ?? 0) + 1);
     // What the member recorded of each lesson, finished or in part; `finished` only the former.
     const doneOf = new Map(mine.map((c) => [c.itemId, c]));
     const finished = mine.filter((c) => c.progress >= 100);
@@ -149,7 +158,7 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
           page: c?.page ?? null,
           madeUp: c?.madeUp ?? false,
           earned: c?.points ?? 0,
-          notes: (c?.notes ?? []).map(noteOut),
+          notes: (notesOf.get(i.id) ?? []).map(noteOut),
           /** «فوائد إخوانك»: notes the brothers shared on this lesson. */
           sharedCount: sharedOf.get(i.id) ?? 0,
           doneCount: countOf.get(i.id) ?? 0,
@@ -164,7 +173,7 @@ router.get('/', requireAuth, validate(rangeQuery, 'query'), async (req, res, nex
         keptDue: due.filter((i) => finishedIds.has(i.id)).length,
         points: mine.reduce((n, c) => n + c.points, 0),
         madeUp: finished.filter((c) => c.madeUp).length,
-        notes: mine.reduce((n, c) => n + c.notes.length, 0),
+        notes: noteTotal,
         streak,
         bestStreak,
         /** The last day with a lesson, so the member can see where the journey ends for now. */
@@ -294,9 +303,9 @@ const findLesson = async (id: string) => {
 /**
  * «أتممت الدرس»: on its day (or the next) for the full points, within the
  * week for half — the rest of them, if part was already recorded. A `note`
- * sent with it is added to «فوائدي». Unticking removes the record, part and
- * notes with it; a «طلب العلم» task it ticked stays ticked, for the member
- * did give that time to learning.
+ * sent with it is added to «فوائدي». Unticking removes the record and its
+ * points, but never the member's fawa'id; a «طلب العلم» task it ticked stays
+ * ticked, for the member did give that time to learning.
  */
 router.put('/items/:id/done', requireAuth, validate(doneSchema), async (req, res, next) => {
   try {
@@ -348,27 +357,27 @@ router.put('/items/:id/progress', requireAuth, validate(progressSchema), async (
 // ---------------------------------------------------------------- «فوائدي»
 
 /**
- * Adds a فائدة to the member's record of a lesson. There must be a record —
- * the lesson finished or begun («أنجزت بعضه») — so a note always belongs to
- * learning the member actually did.
+ * Adds a فائدة to «فوائدي». A new one needs the lesson finished or begun
+ * («أنجزت بعضه»), so a note always comes from learning the member did; once
+ * written it is theirs to keep, whatever becomes of the tick.
  */
 async function addNote(itemId: string, userId: string, text: string, shared = false) {
-  const completion = await prisma.learningCompletion.findUnique({
-    where: { itemId_userId: { itemId, userId } },
-    select: { id: true, _count: { select: { notes: true } } },
-  });
-  if (!completion) throw new HttpError(404, 'ابدأ الدرس أولاً ثم اكتب فائدتك');
-  if (completion._count.notes >= MAX_NOTES_PER_LESSON) {
+  const [item, started, count] = await Promise.all([
+    prisma.learningItem.findUnique({ where: { id: itemId }, select: { title: true, portion: true, kind: true, date: true } }),
+    prisma.learningCompletion.count({ where: { itemId, userId } }),
+    prisma.learningNote.count({ where: { itemId, userId } }),
+  ]);
+  if (!item) throw new HttpError(404, 'الدرس غير موجود');
+  if (!started) throw new HttpError(404, 'ابدأ الدرس أولاً ثم اكتب فائدتك');
+  if (count >= MAX_NOTES_PER_LESSON) {
     throw new HttpError(400, `بلغت ${MAX_NOTES_PER_LESSON} فائدة في هذا الدرس — اجمع بعضها في فائدة واحدة`);
   }
-  return noteOut(await prisma.learningNote.create({ data: { completionId: completion.id, text, shared }, select: NOTE_SELECT }));
+  const lesson = { lessonTitle: item.title, lessonPortion: item.portion, lessonKind: item.kind, lessonDate: item.date };
+  return noteOut(await prisma.learningNote.create({ data: { userId, itemId, ...lesson, text, shared }, select: NOTE_SELECT }));
 }
 
 /** Only the member's own note on this lesson. */
-const ownNoteWhere = (params: Record<string, string>, userId: string) => ({
-  id: params.noteId,
-  completion: { itemId: params.id, userId },
-});
+const ownNoteWhere = (params: Record<string, string>, userId: string) => ({ id: params.noteId, itemId: params.id, userId });
 
 /**
  * «أضف فائدة»: one more note on a lesson the member finished or began —
@@ -597,6 +606,11 @@ router.put('/items/:id', ...manage, validate(updateSchema), async (req, res, nex
         ? [prisma.learningCompletion.updateMany({ where: { itemId: existing.id }, data: { day: patch.date } })]
         : []),
     ]);
+    // The fawa'id keep the lesson's name as it now is, for the day it's gone.
+    await prisma.learningNote.updateMany({
+      where: { itemId: existing.id },
+      data: { lessonTitle: item.title, lessonPortion: item.portion, lessonKind: item.kind, lessonDate: item.date },
+    });
     if (existing.filePublicId && existing.filePublicId !== item.filePublicId) await removeIfUnused(existing.filePublicId);
     const doneCount = await prisma.learningCompletion.count({ where: { itemId: existing.id, progress: 100 } });
     return res.json({ item: { ...item, doneCount } });
@@ -605,7 +619,7 @@ router.put('/items/:id', ...manage, validate(updateSchema), async (req, res, nex
   }
 });
 
-/** Deletes the lesson, and with it the members' ticks and notes on it. */
+/** Deletes the lesson and the members' ticks on it; their fawa'id stay, under the lesson's name. */
 router.delete('/items/:id', ...manage, async (req, res, next) => {
   try {
     const item = await prisma.learningItem.findUnique({ where: { id: req.params.id }, select: { filePublicId: true } });
