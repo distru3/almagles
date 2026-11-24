@@ -100,7 +100,7 @@ function LessonCard({
           </CardBody>
           <div className="shrink-0 pt-4">
             <button type="button" onClick={onOpenSchedule} className="btn-primary">
-              الجدول كاملاً
+              كل المجالس
             </button>
           </div>
         </>
@@ -148,7 +148,7 @@ function LessonCard({
               </a>
             ) : (
               <button type="button" onClick={onOpenSchedule} className="btn-primary">
-                الجدول كاملاً
+                كل المجالس
               </button>
             )}
           </div>
@@ -171,7 +171,7 @@ function ScheduleFab({ schedule, visible, onOpen }: { schedule: ScheduleItem[]; 
     <button
       type="button"
       onClick={onOpen}
-      aria-label={lead ? `الجدول — ${when}: ${lead.title}` : 'الجدول'}
+      aria-label={lead ? `المجالس — ${when}: ${lead.title}` : 'المجالس'}
       tabIndex={visible ? 0 : -1}
       aria-hidden={!visible}
       className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] end-4 z-30 flex max-w-[calc(100vw-2rem)] items-center gap-2.5 rounded-full border border-line bg-surface py-2 pe-4 ps-2 text-start shadow-lg transition duration-300 hover:border-accent sm:end-6 ${
@@ -182,7 +182,7 @@ function ScheduleFab({ schedule, visible, onOpen }: { schedule: ScheduleItem[]; 
         <CalendarDays className="h-5 w-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 leading-tight">
-        <span className="block font-display text-[15px] font-semibold text-fg">الجدول</span>
+        <span className="block font-display text-[15px] font-semibold text-fg">المجالس</span>
         {lead && (
           <span className="block max-w-[14rem] truncate text-[13px] text-muted">
             <span className="text-accent">{when}</span> · {lead.title}
@@ -248,7 +248,7 @@ function WeekTimeline({
         onClick={onOpenSchedule}
         className="mt-5 inline-flex items-center gap-1.5 font-display text-accent hover:text-accent-strong"
       >
-        الجدول كاملاً
+        كل المجالس
         <ArrowLeft className="h-4 w-4" />
       </button>
       {signedIn && (

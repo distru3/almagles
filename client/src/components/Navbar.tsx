@@ -67,9 +67,9 @@ export default function Navbar() {
           </NavLink>
         )}
         {user && user.role !== 'admin' && user.canManageSchedule && (
-          <NavLink to="/manage/schedule" className={navLinkClass} onClick={onClick} title={compact ? 'إدارة الجدول' : undefined}>
+          <NavLink to="/manage/schedule" className={navLinkClass} onClick={onClick} title={compact ? 'إدارة المجالس' : undefined}>
             <CalendarDays className="h-4 w-4" />
-            {label('إدارة الجدول')}
+            {label('إدارة المجالس')}
           </NavLink>
         )}
       </>
@@ -89,7 +89,7 @@ export default function Navbar() {
               الرئيسية
             </NavLink>
             <a href="/#schedule" className="whitespace-nowrap font-display text-[16px] text-fg-2 transition hover:text-fg">
-              الجدول
+              المجالس
             </a>
             <NavLink to="/adhkar" className={navLinkClass}>
               الأذكار
@@ -192,7 +192,7 @@ export default function Navbar() {
               الرئيسية
             </NavLink>
             <a href="/#schedule" className="py-2 font-display text-[16px] text-fg-2" onClick={() => setOpen(false)}>
-              الجدول
+              المجالس
             </a>
             <NavLink to="/adhkar" className={navLinkClass} onClick={() => setOpen(false)}>
               الأذكار

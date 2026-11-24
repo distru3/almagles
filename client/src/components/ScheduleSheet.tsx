@@ -55,7 +55,7 @@ export default function ScheduleSheet({ items, columns, notes, loading, onClose 
             ref={closeRef}
             type="button"
             onClick={onClose}
-            aria-label="إغلاق الجدول"
+            aria-label="إغلاق نافذة المجالس"
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-surface-2 hover:text-fg"
           >
             <X className="h-5 w-5" aria-hidden="true" />
