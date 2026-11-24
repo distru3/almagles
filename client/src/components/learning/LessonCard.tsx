@@ -180,6 +180,21 @@ export default function LessonCard({
           title={item.portion ? `${item.title} — ${item.portion}` : item.title}
           startPage={item.startPage}
           lastPage={item.page}
+          endPage={canTick && hasRange ? item.endPage : null}
+          endPrompt={
+            <button
+              type="button"
+              disabled={busy}
+              className="btn-primary"
+              onClick={() => {
+                onToggle(item, true);
+                setReading(false);
+              }}
+            >
+              <Check className="h-4 w-4" aria-hidden="true" />
+              {late ? 'نعم، أتممته تداركًا' : 'نعم، أتممته'}
+            </button>
+          }
           onClose={closeBook}
           footer={
             canTick ? (
