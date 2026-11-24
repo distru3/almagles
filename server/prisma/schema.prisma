@@ -42,7 +42,9 @@ model User {
   learningItems     LearningItem[]
   learning          LearningEnrollment?
   learningDone      LearningCompletion[]
+  learningNotes     LearningNote[]
   learningReplies   LearningNoteReply[]
+  learningLikes     LearningNoteLike[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 }
@@ -517,6 +519,7 @@ model LearningItem {
   createdBy   User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdById String?
   completions LearningCompletion[]
+  notes       LearningNote[]
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
@@ -562,7 +565,8 @@ model LearningCompletion {
   /// Superseded by `notes`: the single «فائدتي» kept before a lesson could hold
   /// several. Copied into LearningNote by 20261123180000_learning_notes; no longer read.
   note      String?
-  /// «فوائدي»: what the member took from it, in their own words; only they see them.
+  /// Superseded by LearningNote.userId / itemId: notes no longer hang on the
+  /// record, so unticking the lesson keeps them.
   notes     LearningNote[]
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -572,23 +576,51 @@ model LearningCompletion {
   @@index([userId, day])
 }
 
-/// One «فائدة» a member wrote on a lesson they finished or began. Goes with
-/// the record of the lesson (unticking it, or deleting the lesson, removes it).
+/// One «فائدة» a member wrote on a lesson they finished or began. It is the
+/// member's own and stands by itself: unticking the lesson, or a manager
+/// deleting it, leaves it in «فوائدي» under the lesson as it was.
 model LearningNote {
   id            String              @id @default(cuid())
-  completion    LearningCompletion  @relation(fields: [completionId], references: [id], onDelete: Cascade)
-  completionId  String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  /// The lesson it came from; null once a manager deletes the lesson.
+  item          LearningItem?       @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  itemId        String?
+  /// The lesson as it was, kept in step when it's edited, so the note still
+  /// says where it came from after the lesson is gone.
+  lessonTitle   String
+  lessonPortion String?
+  lessonKind    LearningKind        @default(reading)
+  lessonDate    String
+  /// Superseded by userId / itemId (20261124120000_learning_notes_standalone); no longer read.
+  completion    LearningCompletion? @relation(fields: [completionId], references: [id], onDelete: SetNull)
+  completionId  String?
   text          String
   /// «شاركها مع إخوانك»: shown in «فوائد الإخوة», open to replies. Off for every
   /// note written before sharing existed — those were written as private.
   shared        Boolean             @default(false)
   replies       LearningNoteReply[]
+  likes         LearningNoteLike[]
   notifications Notification[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
   @@index([completionId, createdAt])
   @@index([shared, createdAt])
+  @@index([userId, createdAt])
+  @@index([itemId])
+}
+
+/// «أعجبني» on a shared فائدة: one per brother per note.
+model LearningNoteLike {
+  note      LearningNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime     @default(now())
+
+  @@id([noteId, userId])
+  @@index([userId])
 }
 
 /// A brother's reply on a shared «فائدة» — the discussion under it.

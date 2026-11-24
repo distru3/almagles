@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { EyeOff, MessagesSquare, Send, Trash2, Users } from 'lucide-react';
+import { EyeOff, Heart, Lock, MessagesSquare, PenLine, Send, Trash2, Users } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import type { NoteReply, SharedNote } from '../../lib/types';
-import { dateTime, dateTimeTitle } from '../../lib/dates';
+import { dateTime, dateTimeTitle, hijriShort } from '../../lib/dates';
 import { KINDS, arNumber } from '../../lib/learning';
 import { markDirty } from '../../lib/unsaved';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,7 @@ import Avatar from '../Avatar';
 import RichText from '../RichText';
 import Spinner from '../Spinner';
 import EmptyState from '../EmptyState';
+import NoteForm, { DeleteNoteButton } from './NoteForm';
 
 /** «٣ ردود» with Arabic number agreement. */
 export function repliesLabel(n: number): string {
@@ -27,7 +28,10 @@ function useModerator() {
   return { user, moderator: user?.role === 'admin' || (user?.canManageSchedule ?? false) };
 }
 
-function Byline({ person, at }: { person: { id: string; name: string; avatarUrl: string | null }; at: string }) {
+/** Edited a while after it was written — a minute's grace for a quick fix. */
+const wasEdited = (createdAt: string, updatedAt: string) => new Date(updatedAt).getTime() - new Date(createdAt).getTime() > 60_000;
+
+function Byline({ person, at, edited = false }: { person: { id: string; name: string; avatarUrl: string | null }; at: string; edited?: boolean }) {
   const { user } = useAuth();
   return (
     <div className="flex items-center gap-2">
@@ -40,14 +44,79 @@ function Byline({ person, at }: { person: { id: string; name: string; avatarUrl:
       <time dateTime={at} title={dateTimeTitle(at)} className="text-xs text-muted">
         {dateTime(at)}
       </time>
+      {edited && <span className="text-xs text-muted">· عُدّلت</span>}
     </div>
+  );
+}
+
+/**
+ * One's own reply, set right in place: «حفظ» / «تراجع», Ctrl+Enter, or Ctrl+S
+ * through the unsaved guard.
+ */
+function ReplyEditor({ reply, onSave, onCancel }: { reply: NoteReply; onSave: (text: string) => Promise<boolean>; onCancel: () => void }) {
+  const [text, setText] = useState(reply.text);
+  const [busy, setBusy] = useState(false);
+  const uid = useId();
+  const dirty = text.trim() !== '' && text.trim() !== reply.text;
+
+  const save = async () => {
+    if (!dirty) {
+      onCancel();
+      return true;
+    }
+    setBusy(true);
+    const ok = await onSave(text.trim());
+    setBusy(false);
+    return ok;
+  };
+
+  useEffect(() => {
+    const key = `learning-reply-edit-${reply.id}`;
+    markDirty(key, dirty ? { save } : null);
+    return () => markDirty(key, null);
+  });
+
+  return (
+    <form
+      className="mt-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <label htmlFor={`reply-edit-${uid}`} className="sr-only">
+        عدّل ردّك
+      </label>
+      <textarea
+        id={`reply-edit-${uid}`}
+        className="input min-h-20 leading-7"
+        value={text}
+        maxLength={1000}
+        autoFocus
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            void save();
+          }
+        }}
+      />
+      <div className="mt-2 flex gap-2">
+        <button type="submit" className="btn-primary !min-h-10 !px-5 !text-sm" disabled={busy || !text.trim()}>
+          حفظ
+        </button>
+        <button type="button" className="btn-outline !min-h-10 !px-5 !text-sm" onClick={onCancel}>
+          تراجع
+        </button>
+      </div>
+    </form>
   );
 }
 
 /**
  * The discussion under a shared فائدة: the replies, oldest first, and a box
  * to add one. A reply is written and sent on «أرسل» (or Ctrl+Enter); its
- * writer, or a moderator, may delete it.
+ * writer may edit it, and its writer or a moderator delete it.
  */
 export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: number) => void }) {
   const { user, moderator } = useModerator();
@@ -55,6 +124,7 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const uid = useId();
 
@@ -93,6 +163,19 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
     return () => markDirty(key, null);
   });
 
+  const edit = async (id: string, next: string) => {
+    setError(null);
+    try {
+      const { reply } = await api<{ reply: NoteReply }>(`/learning/notes/${noteId}/replies/${id}`, { method: 'PUT', body: { text: next } });
+      setReplies((rs) => rs?.map((r) => (r.id === id ? reply : r)) ?? null);
+      setEditing(null);
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذّر حفظ الردّ');
+      return false;
+    }
+  };
+
   const remove = async (id: string) => {
     try {
       await api(`/learning/notes/${noteId}/replies/${id}`, { method: 'DELETE' });
@@ -114,8 +197,9 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
           {replies.map((r) => (
             <li key={r.id} className="border-s-2 border-line ps-3">
               <div className="flex items-center justify-between gap-2">
-                <Byline person={r.author} at={r.createdAt} />
+                <Byline person={r.author} at={r.createdAt} edited={wasEdited(r.createdAt, r.updatedAt)} />
                 {(r.author.id === user?.id || moderator) &&
+                  editing !== r.id &&
                   (confirming === r.id ? (
                     <span className="inline-flex items-center gap-1">
                       <button type="button" onClick={() => void remove(r.id)} className="min-h-9 rounded-full px-3 font-display text-xs text-danger hover:bg-danger-soft">
@@ -126,19 +210,35 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
                       </button>
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirming(r.id)}
-                      aria-label="حذف الردّ"
-                      className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <span className="inline-flex items-center">
+                      {r.author.id === user?.id && (
+                        <button
+                          type="button"
+                          onClick={() => setEditing(r.id)}
+                          aria-label="عدّل الردّ"
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-accent"
+                        >
+                          <PenLine className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(r.id)}
+                        aria-label="حذف الردّ"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-surface-2 hover:text-danger"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
                   ))}
               </div>
-              <p className="mt-1 whitespace-pre-line text-[15px] leading-8 text-fg-2">
-                <RichText text={r.text} ugc />
-              </p>
+              {editing === r.id ? (
+                <ReplyEditor reply={r} onSave={(t) => edit(r.id, t)} onCancel={() => setEditing(null)} />
+              ) : (
+                <p className="mt-1 whitespace-pre-line text-[15px] leading-8 text-fg-2">
+                  <RichText text={r.text} ugc />
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -181,28 +281,75 @@ export function NoteThread({ noteId, onCount }: { noteId: string; onCount?: (n: 
   );
 }
 
+/** «أعجبني»: a quiet word of thanks for a shared فائدة, saved at once and undone on failure. */
+function LikeButton({ note, onError }: { note: SharedNote; onError: (msg: string) => void }) {
+  const [liked, setLiked] = useState(note.liked);
+  const [count, setCount] = useState(note.likeCount);
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async () => {
+    if (busy) return;
+    const next = !liked;
+    setBusy(true);
+    setLiked(next);
+    setCount((c) => c + (next ? 1 : -1));
+    try {
+      const res = await api<{ liked: boolean; likeCount: number }>(`/learning/notes/${note.id}/like`, { method: 'PUT', body: { liked: next } });
+      setLiked(res.liked);
+      setCount(res.likeCount);
+    } catch (err) {
+      setLiked(!next);
+      setCount((c) => c + (next ? -1 : 1));
+      onError(err instanceof ApiError ? err.message : 'تعذّر الحفظ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void toggle()}
+      aria-pressed={liked}
+      aria-label={count > 0 ? `أعجبني (${arNumber.format(count)})` : 'أعجبني'}
+      className={`inline-flex min-h-10 items-center gap-1.5 font-display text-sm transition ${liked ? 'text-accent' : 'text-fg-2 hover:text-accent'}`}
+    >
+      <Heart className={`h-4 w-4 ${liked ? 'fill-current' : ''}`} aria-hidden="true" />
+      {count > 0 ? arNumber.format(count) : 'أعجبني'}
+    </button>
+  );
+}
+
 /**
- * A فائدة a brother shared: who, from which lesson, what he wrote, and the
- * discussion under it, folded until opened.
+ * A فائدة with its writer and lesson, and the discussion under it, folded
+ * until opened. The brothers like a shared one and reply to it; its writer
+ * may also edit it, share or unshare it, or delete it, wherever it shows.
  */
 export function SharedNoteCard({
-  note,
+  note: initial,
   showLesson = true,
   open: startOpen = false,
   highlight = false,
   onHidden,
+  onChanged,
 }: {
   note: SharedNote;
   showLesson?: boolean;
   open?: boolean;
   highlight?: boolean;
+  /** Gone from this list: hidden by a moderator, or deleted by its writer. */
   onHidden?: (id: string) => void;
+  /** Its writer edited it (the text, or whether it's shared). */
+  onChanged?: (note: SharedNote) => void;
 }) {
-  const { moderator } = useModerator();
+  const { user, moderator } = useModerator();
+  const [note, setNote] = useState(initial);
   const [open, setOpen] = useState(startOpen);
   const [count, setCount] = useState(note.replyCount);
+  const [editing, setEditing] = useState(false);
   const [hiding, setHiding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mine = note.author.id === user?.id;
   const Icon = KINDS[note.lesson.kind].icon;
 
   const hide = async () => {
@@ -215,54 +362,119 @@ export function SharedNoteCard({
     }
   };
 
+  const save = async (text: string, shared: boolean) => {
+    const change = { ...(text !== note.text && { text }), ...(shared !== note.shared && { shared }) };
+    if (!Object.keys(change).length) {
+      setEditing(false);
+      return true;
+    }
+    setError(null);
+    try {
+      const res = await api<{ note: SharedNote }>(`/learning/notes/${note.id}`, { method: 'PUT', body: change });
+      setNote(res.note);
+      setEditing(false);
+      onChanged?.(res.note);
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذّر حفظ الفائدة');
+      return false;
+    }
+  };
+
+  const remove = async () => {
+    setError(null);
+    try {
+      await api(`/learning/notes/${note.id}`, { method: 'DELETE' });
+      onHidden?.(note.id);
+      return true;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'تعذّر حذف الفائدة');
+      return false;
+    }
+  };
+
   return (
     <article id={`note-${note.id}`} className={`card p-4 sm:p-5 ${highlight ? '!border-accent/60' : ''}`}>
-      <Byline person={note.author} at={note.createdAt} />
+      <Byline person={note.author} at={note.createdAt} edited={wasEdited(note.createdAt, note.updatedAt)} />
       {showLesson && (
         <p className="mt-2 flex items-start gap-1.5 text-sm text-fg-2">
           <Icon className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
           <span>
             من درس «{note.lesson.title}»{note.lesson.portion && <span className="text-accent"> ({note.lesson.portion})</span>}
+            <span className="text-muted"> · {hijriShort(note.lesson.date)}</span>
           </span>
         </p>
       )}
-      <p className="mt-2 whitespace-pre-line border-s-2 border-accent ps-3 text-[16px] leading-8 text-fg">
-        <RichText text={note.text} ugc />
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          className="inline-flex min-h-10 items-center gap-1.5 font-display text-sm text-accent hover:text-accent-strong"
-        >
-          <MessagesSquare className="h-4 w-4" aria-hidden="true" />
-          {open ? 'طيّ النقاش' : count ? repliesLabel(count) : 'علّق عليها'}
-        </button>
-        {moderator &&
-          (hiding ? (
-            <span className="ms-auto inline-flex items-center gap-1 text-xs">
-              <span className="text-fg-2">تُخفى من «فوائد الإخوة» وتبقى لصاحبها؟</span>
-              <button type="button" onClick={() => void hide()} className="min-h-9 rounded-full px-3 font-display text-danger hover:bg-danger-soft">
-                أخفِها
+      {editing ? (
+        <div className="mt-3">
+          <NoteForm
+            dirtyKey={`learning-note-card-${note.id}`}
+            initial={note.text}
+            initialShared={note.shared}
+            onSave={save}
+            onCancel={() => setEditing(false)}
+            extra={<DeleteNoteButton replies={count} onDelete={remove} />}
+          />
+        </div>
+      ) : (
+        <p className="mt-2 whitespace-pre-line border-s-2 border-accent ps-3 text-[16px] leading-8 text-fg">
+          <RichText text={note.text} ugc />
+        </p>
+      )}
+      {!editing && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {note.shared ? (
+            <>
+              <LikeButton key={`${note.id}-${note.updatedAt}`} note={note} onError={setError} />
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                className="inline-flex min-h-10 items-center gap-1.5 font-display text-sm text-accent hover:text-accent-strong"
+              >
+                <MessagesSquare className="h-4 w-4" aria-hidden="true" />
+                {open ? 'طيّ النقاش' : count ? repliesLabel(count) : 'علّق عليها'}
               </button>
-              <button type="button" onClick={() => setHiding(false)} className="min-h-9 rounded-full px-3 text-muted hover:text-fg">
-                تراجع
-              </button>
-            </span>
+            </>
           ) : (
-            <button type="button" onClick={() => setHiding(true)} className="ms-auto inline-flex min-h-10 items-center gap-1 text-xs text-muted hover:text-danger">
-              <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-              إخفاء
+            <span className="inline-flex min-h-10 items-center gap-1 text-sm text-muted">
+              <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+              خاصة بك
+            </span>
+          )}
+          {mine ? (
+            <button type="button" onClick={() => setEditing(true)} className="ms-auto inline-flex min-h-10 items-center gap-1 text-sm text-muted hover:text-accent">
+              <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+              تعديل
             </button>
-          ))}
-      </div>
+          ) : (
+            moderator &&
+            note.shared &&
+            (hiding ? (
+              <span className="ms-auto inline-flex items-center gap-1 text-xs">
+                <span className="text-fg-2">تُخفى من «فوائد الإخوة» وتبقى لصاحبها؟</span>
+                <button type="button" onClick={() => void hide()} className="min-h-9 rounded-full px-3 font-display text-danger hover:bg-danger-soft">
+                  أخفِها
+                </button>
+                <button type="button" onClick={() => setHiding(false)} className="min-h-9 rounded-full px-3 text-muted hover:text-fg">
+                  تراجع
+                </button>
+              </span>
+            ) : (
+              <button type="button" onClick={() => setHiding(true)} className="ms-auto inline-flex min-h-10 items-center gap-1 text-xs text-muted hover:text-danger">
+                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                إخفاء
+              </button>
+            ))
+          )}
+        </div>
+      )}
       {error && (
         <p role="alert" className="mt-1 text-sm text-danger">
           {error}
         </p>
       )}
-      {open && <NoteThread noteId={note.id} onCount={setCount} />}
+      {open && note.shared && !editing && <NoteThread noteId={note.id} onCount={setCount} />}
     </article>
   );
 }
@@ -388,9 +600,9 @@ export default function SharedNotesFeed() {
           {error}
         </p>
       )}
-      {focus && <SharedNoteCard key={`focus-${focus.id}`} note={focus} open highlight onHidden={drop} />}
+      {focus && <SharedNoteCard key={`focus-${focus.id}`} note={focus} open highlight onHidden={drop} onChanged={(n) => !n.shared && drop(n.id)} />}
       {rest.map((n) => (
-        <SharedNoteCard key={n.id} note={n} onHidden={drop} />
+        <SharedNoteCard key={n.id} note={n} onHidden={drop} onChanged={(c) => !c.shared && drop(c.id)} />
       ))}
       {cursor && (
         <div className="text-center">

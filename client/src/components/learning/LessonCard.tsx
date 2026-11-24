@@ -301,8 +301,9 @@ export default function LessonCard({
           {partChips()}
         </div>
       )}
-      {/* «فوائدي» once the member has finished or begun the lesson — part of one can teach too. */}
-      {(item.done || item.progress > 0) && <LessonNotes item={item} actions={notes} />}
+      {/* «فوائدي» once the member has finished or begun the lesson — part of one can teach too —
+          and always while any are kept, even after unticking it. */}
+      {(item.done || item.progress > 0 || item.notes.length > 0) && <LessonNotes item={item} actions={notes} canAdd={item.done || item.progress > 0} />}
       <LessonSharedNotes itemId={item.id} count={item.sharedCount} />
     </article>
   );

@@ -33,7 +33,7 @@ router.get('/', validate(listSchema, 'query'), async (req, res, next) => {
         post: { select: { id: true, title: true } },
         comment: { select: { content: true } },
         scheduleItem: { select: { id: true, date: true, title: true, section: true, timeLabel: true, reminderMessage: true } },
-        learningNote: { select: { id: true, completion: { select: { userId: true, item: { select: { title: true } } } } } },
+        learningNote: { select: { id: true, userId: true, lessonTitle: true } },
       },
     });
     const page = rows.slice(0, limit);
@@ -52,7 +52,7 @@ router.get('/', validate(listSchema, 'query'), async (req, res, next) => {
         scheduleDates: n.scheduleDates,
         /** learning_note_reply: the فائدة discussed, and whether the reader wrote it. */
         learningNote: n.learningNote
-          ? { id: n.learningNote.id, mine: n.learningNote.completion.userId === userId, lessonTitle: n.learningNote.completion.item.title }
+          ? { id: n.learningNote.id, mine: n.learningNote.userId === userId, lessonTitle: n.learningNote.lessonTitle }
           : null,
         /** learning_reminder: the supervisor's word; learning_note_reply: the start of the reply. */
         message: n.message,

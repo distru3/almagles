@@ -6,9 +6,11 @@ import MyJourney from '../components/learning/MyJourney';
 import Companions from '../components/learning/Companions';
 import LearningManager from '../components/learning/LearningManager';
 import SharedNotesFeed from '../components/learning/SharedNotes';
+import MyNotes from '../components/learning/MyNotes';
 
 const TABS = [
   ['mine', 'رحلتي', false],
+  ['notes', 'فوائدي', false],
   ['companions', 'رفقاء الرحلة', false],
   ['fawaid', 'فوائد الإخوة', false],
   ['manage', 'إدارة الرحلة', true],
@@ -17,6 +19,7 @@ type Tab = (typeof TABS)[number][0];
 
 const HINTS: Record<Tab, string> = {
   mine: 'درس كل يوم مع إخوانك — قراءة أو استماع أو مشاهدة — والجمعة استجمام.',
+  notes: 'كل فائدة كتبتها من دروسك، محفوظة لك — تعود إليها، وتهذّبها، وتشاركها متى شئت.',
   companions: 'إخوانك على الطريق نفسه، وأين بلغ كلٌّ منهم — ليشدّ بعضنا بعضًا.',
   fawaid: 'ما شاركه الإخوة من فوائد دروسهم — تدارسوها، وزيدوا عليها، وادعوا لأصحابها.',
   manage: 'تقويم الرحلة: ما يُدرس كل يوم، ومن أتمّه من الإخوة، وتذكير من تأخّر.',
@@ -63,7 +66,17 @@ export default function LearnPage() {
         ))}
       </div>
 
-      {tab === 'manage' ? <LearningManager /> : tab === 'companions' ? <Companions /> : tab === 'fawaid' ? <SharedNotesFeed /> : <MyJourney />}
+      {tab === 'manage' ? (
+        <LearningManager />
+      ) : tab === 'companions' ? (
+        <Companions />
+      ) : tab === 'fawaid' ? (
+        <SharedNotesFeed />
+      ) : tab === 'notes' ? (
+        <MyNotes />
+      ) : (
+        <MyJourney />
+      )}
     </div>
   );
 }
