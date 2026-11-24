@@ -434,6 +434,19 @@ export interface SharedNote {
   liked: boolean;
 }
 
+/** A lesson «أضف فائدة» in «فوائدي» may offer: one the member finished or began. */
+export interface NoteLesson {
+  id: string;
+  title: string;
+  portion: string | null;
+  kind: LearningKind;
+  date: string;
+  /** 100 finished; below, «أنجزت بعضه». */
+  progress: number;
+  /** The member's fawa'id on it already. */
+  noteCount: number;
+}
+
 export interface NoteReply {
   id: string;
   text: string;

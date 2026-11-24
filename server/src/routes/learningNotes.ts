@@ -136,6 +136,36 @@ router.get('/mine', validate(mineSchema, 'query'), async (req, res, next) => {
   }
 });
 
+/** Lessons one «أضف فائدة» from «فوائدي» may offer — plenty for a picker, a bound for a script. */
+export const MAX_PICKER_LESSONS = 300;
+
+/**
+ * «أضف فائدة» from «فوائدي»: the lessons the member may write on — those they
+ * finished or began, most recent first — and how many fawa'id each already
+ * holds, so a full one can be shown as such. Writing goes through
+ * POST /learning/items/:id/notes, which checks the same.
+ */
+router.get('/lessons', async (req, res, next) => {
+  try {
+    const userId = req.user!.id;
+    const rows = await prisma.learningCompletion.findMany({
+      where: { userId },
+      orderBy: [{ day: 'desc' }, { updatedAt: 'desc' }],
+      take: MAX_PICKER_LESSONS,
+      select: { progress: true, item: { select: { id: true, title: true, portion: true, kind: true, date: true } } },
+    });
+    const counts = rows.length
+      ? await prisma.learningNote.groupBy({ by: ['itemId'], where: { userId, itemId: { in: rows.map((r) => r.item.id) } }, _count: { _all: true } })
+      : [];
+    const countOf = new Map(counts.map((c) => [c.itemId, c._count._all]));
+    return res.json({
+      lessons: rows.map((r) => ({ ...r.item, progress: r.progress, noteCount: countOf.get(r.item.id) ?? 0 })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** One فائدة with its discussion, oldest reply first. */
 router.get('/:noteId', async (req, res, next) => {
   try {

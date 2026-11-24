@@ -114,6 +114,7 @@ describe('schedule editing', () => {
   it('«فوائدي» and likes need a signed-in member', async () => {
     const anon = await client();
     expect((await anon.get('/api/learning/notes/mine')).status).toBe(401);
+    expect((await anon.get('/api/learning/notes/lessons')).status).toBe(401);
     expect((await anon.put('/api/learning/notes/x/like', { liked: true })).status).toBe(401);
     expect((await anon.put('/api/learning/notes/x', { text: 'x' })).status).toBe(401);
   });
