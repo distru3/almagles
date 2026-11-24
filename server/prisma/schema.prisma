@@ -136,6 +136,8 @@ model Comment {
   parent        Comment?          @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
   parentId      String?
   replies       Comment[]         @relation("Replies")
+  /// Members tagged with «@الاسم» in the text, checked against it on every save.
+  mentionIds    String[]          @default([])
   notifications Notification[]
   reactions     CommentReaction[]
   createdAt     DateTime          @default(now())
@@ -265,6 +267,9 @@ enum NotificationType {
   learning_reminder
   /// Someone replied on a shared «فائدة» the member wrote or took part in.
   learning_note_reply
+  /// Someone tagged the member with @ in a comment (postId + commentId) or in a
+  /// reply on a shared فائدة (learningNoteId; message: the start of the reply).
+  mention
 }
 
 /// One row per recipient. Deleting the post, comment, session or recipient removes it.
@@ -631,6 +636,8 @@ model LearningNoteReply {
   author    User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
   authorId  String
   text      String
+  /// Members tagged with «@الاسم» in the text, checked against it on every save.
+  mentionIds String[]    @default([])
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { HttpError } from '../middleware/error.js';
 import { pushToUsers } from '../lib/push.js';
+import { mentionNames, mentionsSchema, resolveMentions } from '../lib/mentions.js';
 
 /**
  * «فوائد الإخوة» and «فوائدي»: the fawa'id of «رحلة العلم». A note is first
@@ -37,7 +38,13 @@ const noteSelect = (viewerId: string) =>
     likes: { where: { userId: viewerId }, select: { userId: true } },
     _count: { select: { replies: true, likes: true } },
   }) as const;
-const REPLY_SELECT = { id: true, text: true, createdAt: true, updatedAt: true, author: AUTHOR } as const;
+const REPLY_SELECT = { id: true, text: true, mentionIds: true, createdAt: true, updatedAt: true, author: AUTHOR } as const;
+type ReplyRow = { mentionIds: string[] } & Record<string, unknown>;
+/** Replies as the client shows them: «@الاسم» with who it is. */
+async function repliesOut<T extends ReplyRow>(rows: T[]) {
+  const namesOf = await mentionNames(rows.map((r) => r.mentionIds));
+  return rows.map(({ mentionIds, ...r }) => ({ ...r, mentions: namesOf(mentionIds) }));
+}
 
 type NoteRow = {
   id: string;
@@ -171,7 +178,7 @@ router.get('/:noteId', async (req, res, next) => {
   try {
     const note = await visibleNote(req.params.noteId, req.user!.id);
     const replies = await prisma.learningNoteReply.findMany({ where: { noteId: note.id }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: REPLY_SELECT });
-    return res.json({ note: noteOut(note), replies });
+    return res.json({ note: noteOut(note), replies: await repliesOut(replies) });
   } catch (err) {
     next(err);
   }
@@ -236,43 +243,69 @@ router.put('/:noteId/like', validate(likeSchema), async (req, res, next) => {
   }
 });
 
-const replySchema = z.object({ text: z.string().trim().min(1, 'اكتب ردّك أولاً').max(1000, 'الردّ طويل — اختصره') });
+const replySchema = z.object({
+  text: z.string().trim().min(1, 'اكتب ردّك أولاً').max(1000, 'الردّ طويل — اختصره'),
+  /** «@الاسم»: the members picked while writing. */
+  mentions: mentionsSchema,
+});
+
+/** Tells the brothers a reply concerns: in-app, and on the phone. */
+async function notifyReply(
+  note: { id: string; lessonTitle: string; user: { id: string } },
+  actor: { id: string; name: string },
+  text: string,
+  recipients: Map<string, 'learning_note_reply' | 'mention'>,
+) {
+  recipients.delete(actor.id);
+  if (!recipients.size) return;
+  const excerpt = text.slice(0, EXCERPT_LENGTH);
+  const rows = await prisma.notification.createManyAndReturn({
+    data: [...recipients].map(([userId, type]) => ({ type, userId, actorId: actor.id, learningNoteId: note.id, message: excerpt })),
+    select: { id: true, userId: true, type: true },
+  });
+  const lesson = `«${note.lessonTitle}»`;
+  const sentence = (n: { userId: string; type: string }) =>
+    n.type === 'mention'
+      ? `${actor.name} ذكرك في نقاش فائدة على ${lesson}`
+      : n.userId === note.user.id
+        ? `${actor.name} ردّ على فائدتك في ${lesson}`
+        : `${actor.name} ردّ في نقاش فائدة على ${lesson}`;
+  pushToUsers(
+    rows.map((n) => ({
+      userId: n.userId,
+      payload: {
+        title: 'رجال الأمة',
+        body: `${sentence(n)}\n${excerpt}`,
+        url: `/learn?tab=fawaid&note=${note.id}&n=${n.id}`,
+        tag: `learning-note:${note.id}`,
+      },
+    })),
+  );
+}
 
 /**
  * A reply under a shared فائدة. Its writer and everyone already in the
- * discussion hear of it, as with replies on a post.
+ * discussion hear of it, as with replies on a post, and whoever it tags with
+ * «@الاسم» is told they were named — each once.
  */
 router.post('/:noteId/replies', validate(replySchema), async (req, res, next) => {
   try {
-    const { text } = req.body as z.infer<typeof replySchema>;
+    const { text, mentions } = req.body as z.infer<typeof replySchema>;
     const actor = req.user!;
     const note = await visibleNote(req.params.noteId, actor.id);
     if (!note.shared) throw new HttpError(400, 'شارك الفائدة أولاً ليتحاور فيها إخوانك');
-    const reply = await prisma.learningNoteReply.create({ data: { noteId: note.id, authorId: actor.id, text }, select: REPLY_SELECT });
+    const tagged = await resolveMentions(text, mentions, actor.id);
+    const row = await prisma.learningNoteReply.create({
+      data: { noteId: note.id, authorId: actor.id, text, mentionIds: tagged.map((m) => m.id) },
+      select: REPLY_SELECT,
+    });
+    const [reply] = await repliesOut([row]);
 
     const earlier = await prisma.learningNoteReply.findMany({ where: { noteId: note.id }, distinct: ['authorId'], select: { authorId: true } });
-    const writerId = note.user.id;
-    const recipients = new Set([writerId, ...earlier.map((r) => r.authorId)]);
-    recipients.delete(actor.id);
-    if (recipients.size) {
-      const excerpt = text.slice(0, EXCERPT_LENGTH);
-      const rows = await prisma.notification.createManyAndReturn({
-        data: [...recipients].map((userId) => ({ type: 'learning_note_reply' as const, userId, actorId: actor.id, learningNoteId: note.id, message: excerpt })),
-        select: { id: true, userId: true },
-      });
-      const lesson = `«${note.lessonTitle}»`;
-      pushToUsers(
-        rows.map((n) => ({
-          userId: n.userId,
-          payload: {
-            title: 'رجال الأمة',
-            body: `${n.userId === writerId ? `${actor.name} ردّ على فائدتك في ${lesson}` : `${actor.name} ردّ في نقاش فائدة على ${lesson}`}\n${excerpt}`,
-            url: `/learn?tab=fawaid&note=${note.id}&n=${n.id}`,
-            tag: `learning-note:${note.id}`,
-          },
-        })),
-      );
-    }
+    const recipients = new Map<string, 'learning_note_reply' | 'mention'>();
+    for (const id of [note.user.id, ...earlier.map((r) => r.authorId)]) recipients.set(id, 'learning_note_reply');
+    for (const m of tagged) if (!recipients.has(m.id)) recipients.set(m.id, 'mention');
+    await notifyReply(note, actor, text, recipients);
     return res.status(201).json({ reply });
   } catch (err) {
     next(err);
@@ -282,11 +315,20 @@ router.post('/:noteId/replies', validate(replySchema), async (req, res, next) =>
 /** A reply's writer may set it right — only they: a moderator removes, never rewrites. */
 router.put('/:noteId/replies/:replyId', validate(replySchema), async (req, res, next) => {
   try {
-    const { text } = req.body as z.infer<typeof replySchema>;
-    const where = { id: req.params.replyId, noteId: req.params.noteId, authorId: req.user!.id };
-    const { count } = await prisma.learningNoteReply.updateMany({ where, data: { text } });
-    if (count === 0) throw new HttpError(404, 'الردّ غير موجود');
-    const reply = await prisma.learningNoteReply.findUniqueOrThrow({ where: { id: req.params.replyId }, select: REPLY_SELECT });
+    const { text, mentions } = req.body as z.infer<typeof replySchema>;
+    const actor = req.user!;
+    const where = { id: req.params.replyId, noteId: req.params.noteId, authorId: actor.id };
+    const before = await prisma.learningNoteReply.findFirst({ where, select: { mentionIds: true } });
+    if (!before) throw new HttpError(404, 'الردّ غير موجود');
+    // Tags still in the text stay; names deleted from it drop theirs; only new ones are told.
+    const tagged = await resolveMentions(text, mentions, actor.id, before.mentionIds);
+    const row = await prisma.learningNoteReply.update({ where: { id: req.params.replyId }, data: { text, mentionIds: tagged.map((m) => m.id) }, select: REPLY_SELECT });
+    const fresh = tagged.filter((m) => !before.mentionIds.includes(m.id));
+    if (fresh.length) {
+      const note = await visibleNote(req.params.noteId, actor.id);
+      if (note.shared) await notifyReply(note, actor, text, new Map(fresh.map((m) => [m.id, 'mention' as const])));
+    }
+    const [reply] = await repliesOut([row]);
     return res.json({ reply });
   } catch (err) {
     next(err);

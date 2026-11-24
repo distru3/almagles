@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquare, Send, Pencil, Trash2, Reply, X, Check, ShieldCheck, PenTool } from 'lucide-react';
-import type { CommentItem } from '../lib/types';
+import type { CommentItem, Mention } from '../lib/types';
+import { mentionIdsIn } from '../lib/mentions';
+import MentionTextarea from './MentionTextarea';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import RichText from './RichText';
@@ -28,6 +30,12 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // «@الاسم»: the brothers picked in each box, sent with it while their name is still in the text.
+  const [newMentions, setNewMentions] = useState<Mention[]>([]);
+  const [replyMentions, setReplyMentions] = useState<Mention[]>([]);
+  const [editMentions, setEditMentions] = useState<Mention[]>([]);
+  const picked = (set: React.Dispatch<React.SetStateAction<Mention[]>>) => (m: Mention) =>
+    set((ms) => (ms.some((x) => x.id === m.id) ? ms : [...ms, m]));
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -54,13 +62,15 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
     try {
       await api(`/comments/${postId}`, {
         method: 'POST',
-        body: { content, ...(replyingTo ? { parentId: replyingTo } : {}) },
+        body: { content, mentions: mentionIdsIn(content, isReply ? replyMentions : newMentions), ...(replyingTo ? { parentId: replyingTo } : {}) },
       });
       if (isReply) {
         setReplyContent('');
+        setReplyMentions([]);
         setReplyingTo(null);
       } else {
         setNewContent('');
+        setNewMentions([]);
       }
       showToast('تم إرسال التعليق بنجاح');
       onChanged();
@@ -74,6 +84,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
   const startEdit = (c: CommentItem) => {
     setEditingId(c.id);
     setEditContent(c.content);
+    setEditMentions(c.mentions ?? []);
   };
 
   const saveEdit = async (id: string) => {
@@ -81,7 +92,8 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
     setBusy(true);
     setError(null);
     try {
-      await api(`/comments/${id}`, { method: 'PUT', body: { content: editContent.trim() } });
+      const content = editContent.trim();
+      await api(`/comments/${id}`, { method: 'PUT', body: { content, mentions: mentionIdsIn(content, editMentions) } });
       setEditingId(null);
       showToast('تم تعديل التعليق بنجاح');
       onChanged();
@@ -169,10 +181,11 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
 
         {editingId === c.id ? (
           <div className="mt-2.5 space-y-2">
-            <textarea
+            <MentionTextarea
               className="input min-h-[64px] w-full resize-y py-2 text-sm leading-6"
               value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
+              onChange={setEditContent}
+              onMention={picked(setEditMentions)}
               maxLength={2000}
               rows={2}
               autoFocus
@@ -203,7 +216,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
           </div>
         ) : (
           <p className="mt-2 whitespace-pre-line text-[16px] leading-[1.9] text-fg-2">
-            <RichText text={c.content} ugc />
+            <RichText text={c.content} ugc mentions={c.mentions} />
           </p>
         )}
 
@@ -215,6 +228,7 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
                 onClick={() => {
                   setReplyingTo(replyingTo === c.id ? null : c.id);
                   setReplyContent('');
+                  setReplyMentions([]);
                 }}
                 className="inline-flex min-h-10 items-center gap-1 font-display text-sm text-accent hover:text-accent-strong"
               >
@@ -228,11 +242,12 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
 
       {replyingTo === c.id && (
         <form onSubmit={submit} className="mt-2.5 space-y-2">
-          <textarea
+          <MentionTextarea
             className="input min-h-[64px] w-full resize-y py-2 text-sm leading-6"
-            placeholder="اكتب ردّك…"
+            placeholder="اكتب ردّك… واذكر أخًا بـ @"
             value={replyContent}
-            onChange={(e) => setReplyContent(e.target.value)}
+            onChange={setReplyContent}
+            onMention={picked(setReplyMentions)}
             maxLength={2000}
             rows={2}
             autoFocus
@@ -288,11 +303,12 @@ export default function CommentSection({ postId, postCategoryId, postAuthorId, c
 
       {user ? (
         <form onSubmit={submit} className="mb-6 space-y-2">
-          <textarea
+          <MentionTextarea
             className="input min-h-[88px] w-full resize-y py-2.5 text-sm leading-6"
-            placeholder="اكتب تعليقك أو استفسارك هنا…"
+            placeholder="اكتب تعليقك أو استفسارك هنا… واذكر أخًا بـ @"
             value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
+            onChange={setNewContent}
+            onMention={picked(setNewMentions)}
             maxLength={2000}
             rows={3}
           />

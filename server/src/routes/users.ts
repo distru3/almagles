@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { hashPassword } from '../lib/password.js';
 
@@ -30,6 +30,32 @@ function mapUser(user: any): AdminUser {
     createdAt: user.createdAt,
   };
 }
+
+/** How many names the «@» list offers at once. */
+export const MENTION_SUGGESTIONS = 8;
+const mentionableSchema = z.object({ q: z.string().trim().max(60).optional() });
+
+/**
+ * «@»: the members a signed-in member may tag in a comment or reply, by name —
+ * names and photos only, as on their profiles; never an email.
+ */
+router.get('/mentionable', requireAuth, validate(mentionableSchema, 'query'), async (req, res, next) => {
+  try {
+    const { q } = req.query as z.infer<typeof mentionableSchema>;
+    const users = await prisma.user.findMany({
+      where: { id: { not: req.user!.id }, ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}) },
+      orderBy: { name: 'asc' },
+      take: q ? MENTION_SUGGESTIONS * 3 : MENTION_SUGGESTIONS,
+      select: { id: true, name: true, avatarUrl: true },
+    });
+    // Names that begin with what was typed come first.
+    const starts = (n: string) => (q && n.startsWith(q) ? 0 : 1);
+    users.sort((a, b) => starts(a.name) - starts(b.name));
+    return res.json({ users: users.slice(0, MENTION_SUGGESTIONS) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 const listSchema = z.object({
   q: z.string().trim().max(100).optional(),

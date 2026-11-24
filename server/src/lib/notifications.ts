@@ -30,6 +30,8 @@ function sentence(type: NotificationType, actorName: string | null, postTitle: s
       return `${who} تفاعل مع منشورك ${title}`;
     case 'comment_reaction':
       return `${who} تفاعل مع تعليقك في ${title}`;
+    case 'mention':
+      return `${who} ذكرك في تعليق على ${title}`;
     case 'new_post':
       return `منشور جديد: ${title}`;
     default:
@@ -81,9 +83,11 @@ async function notify(
 }
 
 /**
- * A new comment notifies whoever it replies to ("reply") and the post's author
- * ("comment"). `repliedToId` is the comment the user pressed «رد» on: replies
- * are stored one level deep, so that can differ from the stored parent.
+ * A new comment notifies whoever it replies to ("reply"), the post's author
+ * ("comment") and the members it tags with «@الاسم» ("mention") — each once,
+ * the first of those that applies. `repliedToId` is the comment the user
+ * pressed «رد» on: replies are stored one level deep, so that can differ
+ * from the stored parent.
  */
 export function notifyComment(comment: {
   id: string;
@@ -91,6 +95,7 @@ export function notifyComment(comment: {
   authorId: string;
   parentId: string | null;
   repliedToId?: string | null;
+  mentionIds?: string[];
 }) {
   return safely('comment', async () => {
     const recipients = new Map<string, NotificationType>();
@@ -103,8 +108,17 @@ export function notifyComment(comment: {
 
     const post = await prisma.post.findUnique({ where: { id: comment.postId }, select: { authorId: true } });
     if (post && !recipients.has(post.authorId)) recipients.set(post.authorId, 'comment');
+    for (const id of comment.mentionIds ?? []) if (!recipients.has(id)) recipients.set(id, 'mention');
 
     await notify(recipients, { actorId: comment.authorId, postId: comment.postId, commentId: comment.id });
+  });
+}
+
+/** An edited comment tells only the members it tags for the first time. */
+export function notifyNewMentions(comment: { id: string; postId: string; authorId: string }, userIds: string[]) {
+  return safely('mention', async () => {
+    if (!userIds.length) return;
+    await notify(new Map(userIds.map((id) => [id, 'mention' as const])), { actorId: comment.authorId, postId: comment.postId, commentId: comment.id });
   });
 }
 

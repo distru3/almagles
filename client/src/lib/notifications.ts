@@ -41,6 +41,12 @@ export function notificationText(n: NotificationItem): string {
     const lesson = `«${n.learningNote?.lessonTitle ?? ''}»`;
     return n.learningNote?.mine ? `${who} ردّ على فائدتك في ${lesson}` : `${who} ردّ في نقاش فائدة على ${lesson}`;
   }
+  if (n.type === 'mention') {
+    const who = n.actor?.name ?? SOMEONE;
+    return n.learningNote
+      ? `${who} ذكرك في نقاش فائدة على «${n.learningNote.lessonTitle}»`
+      : `${who} ذكرك في تعليق على «${n.post?.title ?? ''}»`;
+  }
 
   const who = n.actor?.name ?? SOMEONE;
   const title = `«${n.post?.title ?? ''}»`;
@@ -69,6 +75,8 @@ export function notificationExcerpt(n: NotificationItem): string | null {
   if (n.type === 'adhkar_evening') return 'أمسينا وأمسى الملك لله — أذكار المساء';
   if (n.type === 'adhkar_sleep') return 'باسمك ربي وضعت جنبي وبك أرفعه — أذكار النوم';
   if (n.type === 'learning_reminder' || n.type === 'learning_note_reply') return n.message;
+  // «@الاسم» in a فائدة's discussion keeps the reply's start in `message`; in a comment, the comment itself.
+  if (n.type === 'mention') return n.message ?? n.excerpt;
   return n.excerpt;
 }
 
@@ -79,7 +87,9 @@ export function notificationLink(n: NotificationItem): string {
   if (n.type === 'adhkar_evening') return '/adhkar?type=evening';
   if (n.type === 'adhkar_sleep') return '/adhkar?type=sleep';
   if (n.type === 'learning_reminder') return '/learn';
-  if (n.type === 'learning_note_reply') return n.learningNote ? `/learn?tab=fawaid&note=${n.learningNote.id}` : '/learn?tab=fawaid';
+  if (n.type === 'learning_note_reply' || (n.type === 'mention' && n.learningNote)) {
+    return n.learningNote ? `/learn?tab=fawaid&note=${n.learningNote.id}` : '/learn?tab=fawaid';
+  }
   const scheduleDate = n.scheduleItem?.date ?? n.scheduleDates[0];
   if (!n.post) return scheduleDate ? `/?date=${scheduleDate}#schedule` : '/#schedule';
   return n.commentId ? `/post/${n.post.id}#comment-${n.commentId}` : `/post/${n.post.id}`;

@@ -1,12 +1,16 @@
 import { Fragment } from 'react';
+import { Link } from 'react-router-dom';
 import { displayUrl, splitRich, type OpenMark } from '../lib/richText';
+import { splitMentions } from '../lib/mentions';
+import type { Mention } from '../lib/types';
 
 /**
  * Text with ﴿ verses ﴾ in gold, (( hadith )) in blue and links made clickable.
  * `open` continues a verse/hadith from a previous line (see NoteText).
  * `ugc` marks links as user-submitted (comments) for search engines.
+ * `mentions`: the members a comment or reply tags; their «@الاسم» links to them.
  */
-export default function RichText({ text, open = null, ugc = false }: { text: string; open?: OpenMark; ugc?: boolean }) {
+export default function RichText({ text, open = null, ugc = false, mentions }: { text: string; open?: OpenMark; ugc?: boolean; mentions?: Mention[] }) {
   return (
     <>
       {splitRich(text, open).parts.map((part, i) => {
@@ -32,7 +36,20 @@ export default function RichText({ text, open = null, ugc = false }: { text: str
             </a>
           );
         }
-        return <Fragment key={i}>{part.text}</Fragment>;
+        if (!mentions?.length) return <Fragment key={i}>{part.text}</Fragment>;
+        return (
+          <Fragment key={i}>
+            {splitMentions(part.text, mentions).map((m, j) =>
+              m.mention ? (
+                <Link key={j} to={`/u/${m.mention.id}`} className="font-display text-accent hover:text-accent-strong hover:underline">
+                  {m.text}
+                </Link>
+              ) : (
+                <Fragment key={j}>{m.text}</Fragment>
+              ),
+            )}
+          </Fragment>
+        );
       })}
     </>
   );

@@ -85,6 +85,14 @@ export interface CommentItem {
   /** Missing on comments that come from places other than a post's comment list. */
   reactionCounts?: Record<string, number>;
   myReaction?: string | null;
+  /** Members tagged with «@الاسم» in it. */
+  mentions?: Mention[];
+}
+
+/** A member tagged with «@الاسم» in a comment or reply. */
+export interface Mention {
+  id: string;
+  name: string;
 }
 
 export interface ScheduleItem {
@@ -167,7 +175,8 @@ export type NotificationType =
   | 'adhkar_evening'
   | 'adhkar_sleep'
   | 'learning_reminder'
-  | 'learning_note_reply';
+  | 'learning_note_reply'
+  | 'mention';
 
 /** «أذكار الصباح» / «أذكار المساء»: minutes after Fajr / Asr where the member is, or a fixed clock time. */
 export interface AdhkarPrayerWard {
@@ -453,6 +462,8 @@ export interface NoteReply {
   createdAt: string;
   updatedAt: string;
   author: Person;
+  /** Members tagged with «@الاسم» in it. */
+  mentions: Mention[];
 }
 
 /** «تذكير الإخوة»: where a member on the journey stands today. */

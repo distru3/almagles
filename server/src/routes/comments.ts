@@ -4,7 +4,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth, requireAdmin, canManageCategory } from '../middleware/auth.js';
-import { notifyComment, notifyCommentReaction } from '../lib/notifications.js';
+import { notifyComment, notifyCommentReaction, notifyNewMentions } from '../lib/notifications.js';
+import { mentionNames, mentionsSchema, resolveMentions } from '../lib/mentions.js';
 import { commentReactors, reactorsQuery, type ReactorsQuery } from '../lib/reactors.js';
 
 const router = Router();
@@ -12,6 +13,8 @@ const router = Router();
 const createSchema = z.object({
   content: z.string().trim().min(1, 'التعليق فارغ').max(2000, 'التعليق طويل جداً'),
   parentId: z.string().min(1).max(64).optional(),
+  /** «@الاسم»: the members picked while writing. */
+  mentions: mentionsSchema,
 });
 
 const adminListSchema = z.object({
@@ -86,6 +89,7 @@ router.get('/post/:postId', async (req, res, next) => {
     });
 
     const ids = comments.map((c) => c.id);
+    const namesOf = await mentionNames(comments.map((c) => c.mentionIds));
     const [grouped, mine] = await Promise.all([
       prisma.commentReaction.groupBy({ by: ['commentId', 'type'], where: { commentId: { in: ids } }, _count: { _all: true } }),
       req.user
@@ -114,6 +118,7 @@ router.get('/post/:postId', async (req, res, next) => {
         repliesCount: c._count.replies,
         reactionCounts: counts.get(c.id) ?? {},
         myReaction: myReaction.get(c.id) ?? null,
+        mentions: namesOf(c.mentionIds),
       })),
     });
   } catch (err) {
@@ -168,7 +173,7 @@ router.put('/:id/reactions', requireAuth, validate(reactSchema), async (req, res
 router.post('/:postId', requireAuth, validate(createSchema), async (req, res, next) => {
   try {
     const { postId } = req.params;
-    const { content, parentId } = req.body as z.infer<typeof createSchema>;
+    const { content, parentId, mentions } = req.body as z.infer<typeof createSchema>;
 
     const post = await prisma.post.findUnique({ where: { id: postId }, select: { id: true } });
     if (!post) return res.status(404).json({ message: 'المنشور غير موجود' });
@@ -183,12 +188,14 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
       finalParent = parent.parentId ?? parent.id;
     }
 
+    const tagged = await resolveMentions(content, mentions, req.user!.id);
     const comment = await prisma.comment.create({
       data: {
         content,
         postId,
         authorId: req.user!.id,
         parentId: finalParent,
+        mentionIds: tagged.map((m) => m.id),
       },
       include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
     });
@@ -205,6 +212,7 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
         authorAvatarUrl: comment.author.avatarUrl,
         createdAt: comment.createdAt,
         repliesCount: 0,
+        mentions: tagged,
       },
     });
   } catch (err) {
@@ -214,12 +222,13 @@ router.post('/:postId', requireAuth, validate(createSchema), async (req, res, ne
 
 const updateSchema = z.object({
   content: z.string().trim().min(1, 'التعليق فارغ').max(2000, 'التعليق طويل جداً'),
+  mentions: mentionsSchema,
 });
 
 router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { content } = req.body as z.infer<typeof updateSchema>;
+    const { content, mentions } = req.body as z.infer<typeof updateSchema>;
     const comment = await prisma.comment.findUnique({ where: { id } });
     if (!comment) return res.status(404).json({ message: 'التعليق غير موجود' });
 
@@ -227,14 +236,18 @@ router.put('/:id', requireAuth, validate(updateSchema), async (req, res, next) =
       return res.status(403).json({ message: 'لا يمكنك تعديل هذا التعليق' });
     }
 
+    // Tags still in the text stay; names deleted from it drop theirs; only new ones are told.
+    const tagged = await resolveMentions(content, mentions, comment.authorId, comment.mentionIds);
     const updated = await prisma.comment.update({
       where: { id },
-      data: { content },
+      data: { content, mentionIds: tagged.map((m) => m.id) },
       include: { author: { select: { id: true, name: true, role: true, avatarUrl: true } } },
     });
+    await notifyNewMentions(updated, tagged.map((m) => m.id).filter((m) => !comment.mentionIds.includes(m)));
     return res.json({
       comment: {
         ...updated,
+        mentions: tagged,
         authorName: updated.author.name,
         authorRole: updated.author.role,
         authorAvatarUrl: updated.author.avatarUrl,
