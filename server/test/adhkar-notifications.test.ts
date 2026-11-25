@@ -3,6 +3,7 @@ import { createUser, loginAs, prisma, resetDb } from './helpers.js';
 import { flushPushes, pushTransport } from '../src/lib/push.js';
 import {
   ADHKAR_REMINDER_GRACE_MS,
+  runAdhkarReminders,
   sendDueAdhkarReminders,
   todayInTz,
 } from '../src/lib/adhkarNotifications.js';
@@ -114,6 +115,26 @@ describe('adhkar reminders endpoints', () => {
 });
 
 describe('sendDueAdhkarReminders worker', () => {
+  it('says when the next reminder falls — later today, then tomorrow morning', async () => {
+    const c = await member('next@test.local');
+    await c.put('/api/adhkar/reminders', {
+      enabled: true,
+      timeZone: 'UTC',
+      morning: { enabled: true, time: '06:00', mode: 'fixed' },
+      evening: { enabled: true, time: '16:30', mode: 'fixed' },
+      sleep: { enabled: false, time: '22:30' },
+    });
+
+    expect(await runAdhkarReminders(new Date('2026-12-01T05:00:00Z'))).toEqual({ sent: 0, next: new Date('2026-12-01T06:00:00Z') });
+    expect(await runAdhkarReminders(new Date('2026-12-01T06:00:10Z'))).toEqual({ sent: 1, next: new Date('2026-12-01T16:30:00Z') });
+    expect(await runAdhkarReminders(new Date('2026-12-01T16:30:10Z'))).toEqual({ sent: 1, next: new Date('2026-12-02T06:00:00Z') });
+  });
+
+  it('waits for nothing when no member has reminders on', async () => {
+    await member('off@test.local');
+    expect(await runAdhkarReminders(new Date('2026-12-01T05:00:00Z'))).toEqual({ sent: 0, next: null });
+  });
+
   it('sends morning adhkar when due, creates in-app notification and web push', async () => {
     const c = await member('user4@test.local');
     await c.put('/api/adhkar/reminders', {

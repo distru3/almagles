@@ -1,13 +1,15 @@
 import { prisma } from '../db.js';
 import { pushToUsers } from './push.js';
+import { wakeTimer } from './wakeTimer.js';
 
 /**
  * Two kinds of schedule notification:
  * - «تحديث الجدول»: sessions were added, changed or removed. A manager usually
  *   edits many rows in a row, so changes are gathered and sent once the edits
  *   have been quiet for a moment — one popup per burst, not one per row.
- * - «حان وقت المجلس»: a session with a start time has begun. A timer checks
- *   every half minute for sessions whose remindAt has passed.
+ * - «حان وقت المجلس»: a session with a start time has begun. The job sleeps
+ *   until the next session's remindAt (see wakeTimer), and every schedule
+ *   edit wakes it to look again.
  * Like every notification, failures are logged and never fail the request.
  */
 
@@ -15,8 +17,6 @@ const SITE_NAME = 'رجال الأمة';
 
 /** How long edits must stop before the change notification goes out. */
 export const CHANGE_QUIET_MS = 2 * 60 * 1000;
-/** How often due reminders are looked for. */
-const REMINDER_TICK_MS = 30 * 1000;
 /**
  * A reminder found later than this (the server was asleep or restarting) is
  * dropped: «حان وقت المجلس» an hour late is noise, not help.
@@ -88,6 +88,8 @@ let changeJob: Promise<void> = Promise.resolve();
  * past are left out: nobody needs a popup because last week was tidied up.
  */
 export function noteScheduleChange(actorId: string, dates: Iterable<string>): void {
+  // Any edit may add, move or remove a «حان وقت المجلس», past days included.
+  reminderJob.poke();
   // Yesterday in UTC, so "today" is kept wherever the members live.
   const cutoff = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   const upcoming = [...dates].filter((d) => d >= cutoff);
@@ -184,10 +186,18 @@ ${s.reminderMessage}` : line;
 
 /** Sends every reminder that has come due. Each session is claimed first, so it is never sent twice. */
 export async function sendDueReminders(now = new Date()): Promise<number> {
+  return (await runReminders(now)).sent;
+}
+
+/** At most this many sessions are rung per run; more due at once are picked up straight after. */
+const REMINDER_BATCH = 50;
+
+/** Sends what is due, and says when the next session's reminder falls, so the job can sleep until then. */
+export async function runReminders(now = new Date()): Promise<{ sent: number; next: Date | null }> {
   const due = await prisma.scheduleItem.findMany({
     where: { remindedAt: null, remindAt: { lte: now, gte: new Date(now.getTime() - REMINDER_GRACE_MS) } },
     orderBy: { remindAt: 'asc' },
-    take: 50,
+    take: REMINDER_BATCH,
   });
   let sent = 0;
   for (const item of due) {
@@ -217,12 +227,18 @@ export async function sendDueReminders(now = new Date()): Promise<number> {
     );
     sent += 1;
   }
-  return sent;
+  if (due.length === REMINDER_BATCH) return { sent, next: now };
+  const upcoming = await prisma.scheduleItem.findFirst({
+    where: { remindedAt: null, remindAt: { gt: now } },
+    orderBy: { remindAt: 'asc' },
+    select: { remindAt: true },
+  });
+  return { sent, next: upcoming?.remindAt ?? null };
 }
 
-/** Starts the reminder timer (from index.ts, so tests drive sendDueReminders themselves). */
+const reminderJob = wakeTimer('schedule_reminder', async (now) => (await runReminders(now)).next);
+
+/** Starts the reminder job (from index.ts, so tests drive sendDueReminders themselves). */
 export function startScheduleReminders(): void {
-  const tick = () => sendDueReminders().catch((err) => console.error('[notifications] schedule_reminder', err));
-  void tick();
-  setInterval(tick, REMINDER_TICK_MS).unref?.();
+  reminderJob.start();
 }

@@ -3,15 +3,16 @@ import { pushToUsers } from './push.js';
 import { zonedTime, isTimeZone } from './scheduleNotifications.js';
 import { isMethodId, prayerTimes, type PrayerPlace } from './prayerTimes.js';
 import type { AdhkarTiming } from '@prisma/client';
+import { wakeTimer } from './wakeTimer.js';
 
 /**
  * Adhkar reminders:
  * Daily push notifications for morning, evening, and sleep adhkar.
- * Checked every 30s. Each member's local date comes from their time zone, and
- * morning/evening follow the prayer times at their place (see reminderTimes).
+ * The job sleeps until the next one is due (see wakeTimer) rather than
+ * querying every few seconds. Each member's local date comes from their time
+ * zone, and morning/evening follow the prayer times at their place (see reminderTimes).
  */
 
-export const ADHKAR_REMINDER_TICK_MS = 30 * 1000;
 export const ADHKAR_REMINDER_GRACE_MS = 30 * 60 * 1000;
 
 export const ADHKAR_NOTIFICATIONS = {
@@ -112,8 +113,19 @@ const ENABLED = {
   sleep: 'sleepEnabled',
 } as const;
 
+/** The member's next local date after `day` (YYYY-MM-DD). */
+const nextDay = (day: string) => new Date(Date.parse(`${day}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+
 /** Sends all due adhkar reminders across all subscribed members. */
 export async function sendDueAdhkarReminders(now = new Date()): Promise<number> {
+  return (await runAdhkarReminders(now)).sent;
+}
+
+/**
+ * Sends what is due, and says when the next reminder falls — today's or
+ * tomorrow's, in each member's own zone — so the job can sleep until then.
+ */
+export async function runAdhkarReminders(now = new Date()): Promise<{ sent: number; next: Date | null }> {
   const active = await prisma.adhkarReminder.findMany({
     where: { enabled: true },
   });
@@ -143,6 +155,7 @@ export async function sendDueAdhkarReminders(now = new Date()): Promise<number> 
         data: { [lastSent]: userToday },
       });
       if (claimed.count === 0) continue;
+      item[lastSent] = userToday;
 
       const config = ADHKAR_NOTIFICATIONS[kind];
       const notif = await prisma.notification.create({
@@ -165,12 +178,31 @@ export async function sendDueAdhkarReminders(now = new Date()): Promise<number> 
     }
   }
 
-  return sent;
+  let next: Date | null = null;
+  for (const item of active) {
+    const tz = isTimeZone(item.timeZone) ? item.timeZone : 'Asia/Riyadh';
+    const userToday = todayInTz(tz, now);
+    for (const day of [userToday, nextDay(userToday)]) {
+      const times = reminderTimes(item, day, tz);
+      for (const kind of Object.keys(ADHKAR_NOTIFICATIONS) as AdhkarKind[]) {
+        const at = times[kind];
+        if (!at || at <= now || item[LAST_SENT[kind]] === day) continue;
+        if (!next || at < next) next = at;
+      }
+    }
+  }
+
+  return { sent, next };
 }
 
-/** Starts the reminder timer (from index.ts). */
+const adhkarJob = wakeTimer('adhkar_reminder', async (now) => (await runAdhkarReminders(now)).next);
+
+/** Starts the reminder job (from index.ts). */
 export function startAdhkarReminders(): void {
-  const tick = () => sendDueAdhkarReminders().catch((err) => console.error('[notifications] adhkar_reminder', err));
-  void tick();
-  setInterval(tick, ADHKAR_REMINDER_TICK_MS).unref?.();
+  adhkarJob.start();
+}
+
+/** A member changed their adhkar reminders (times, place, zone): look again for the next one due. */
+export function wakeAdhkarReminders(): void {
+  adhkarJob.poke();
 }
