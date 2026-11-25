@@ -5,7 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { isTimeZone } from '../lib/scheduleNotifications.js';
 import { pushConfigured, pushToUserNow } from '../lib/push.js';
-import { reminderPlace } from '../lib/adhkarNotifications.js';
+import { reminderPlace, wakeAdhkarReminders } from '../lib/adhkarNotifications.js';
 import { METHOD_IDS } from '../lib/prayerTimes.js';
 import type { AdhkarTiming, Prisma } from '@prisma/client';
 
@@ -121,6 +121,8 @@ router.get('/reminders', requireAuth, async (req, res, next) => {
         if (p.lat !== row.lat || p.lng !== row.lng || p.method !== row.method || p.placeLabel !== row.placeLabel) Object.assign(data, p);
       }
       const current = Object.keys(data).length ? await prisma.adhkarReminder.update({ where: { userId }, data }) : row;
+      // A new zone or place moves the prayer-based times.
+      if (current !== row) wakeAdhkarReminders();
       return res.json(serialize(current, pushCount > 0));
     }
 
@@ -167,6 +169,7 @@ router.put('/reminders', requireAuth, validate(reminderPrefsSchema), async (req,
       update: data,
       create: { ...DEFAULT_SETTINGS, ...data, userId },
     });
+    wakeAdhkarReminders();
 
     const pushCount = await prisma.pushSubscription.count({ where: { userId } });
     return res.json(serialize(row, pushCount > 0));

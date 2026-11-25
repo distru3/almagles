@@ -149,6 +149,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     let stopped = false;
     const check = async () => {
+      // A hidden tab (a forgotten one, an installed app in the background) doesn't ask:
+      // each ask wakes the database, and coming back to the tab checks at once.
+      if (document.hidden) return;
       try {
         const { count } = await api<{ count: number }>('/notifications/unread-count');
         if (!stopped && count !== unreadRef.current) await reload();

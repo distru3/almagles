@@ -5,6 +5,7 @@ import {
   changeSentence,
   flushScheduleChanges,
   REMINDER_GRACE_MS,
+  runReminders,
   sendDueReminders,
   zonedTime,
 } from '../src/lib/scheduleNotifications.js';
@@ -175,6 +176,18 @@ ${message}`, ring: true, tag: `reminder:${item.id}` });
     await m.post('/api/schedule', { date: '2026-12-01', title: 'درس', startTime: '20:30', timeZone: 'UTC' });
     const late = new Date(new Date('2026-12-01T20:30:00Z').getTime() + REMINDER_GRACE_MS + 60_000);
     expect(await sendDueReminders(late)).toBe(0);
+  });
+
+  it('says when the next reminder falls, so the job can sleep until then', async () => {
+    const m = await manager();
+    await m.post('/api/schedule', { date: '2026-12-01', title: 'درس الفجر', startTime: '05:00', timeZone: 'UTC' });
+    await m.post('/api/schedule', { date: '2026-12-01', title: 'درس العشاء', startTime: '20:30', timeZone: 'UTC' });
+    await m.post('/api/schedule', { date: '2026-12-02', title: 'بلا وقت' });
+
+    expect(await runReminders(new Date('2026-12-01T04:00:00Z'))).toEqual({ sent: 0, next: new Date('2026-12-01T05:00:00Z') });
+    // Once the dawn one rings, the evening one is next; once both have, there is nothing to wait for.
+    expect(await runReminders(new Date('2026-12-01T05:00:30Z'))).toEqual({ sent: 1, next: new Date('2026-12-01T20:30:00Z') });
+    expect(await runReminders(new Date('2026-12-01T20:30:30Z'))).toEqual({ sent: 1, next: null });
   });
 
   it('copying a week carries the time to the new days', async () => {
